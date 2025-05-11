@@ -62,16 +62,13 @@ try:
         Returns:
             Tupla com (distâncias, tempos de recuperação)
         """
-        log_debug(f"GPU: get_dist_gpu - Entrada: N={N}, edges.shape={edges.shape}, sources.shape={sources.shape}")
-        log_debug(f"GPU: get_dist_gpu - Tipos: edges={type(edges)}, sources={type(sources)}")
+        import time
+        start_time = time.time()
         
-        # 1. Transferência das arestas para GPU
-        log_debug(f"GPU: get_dist_gpu - Convertendo edges para GPU")
+        # 1. Transferência das arestas para GPU - uma única vez
         edges_gpu = cp.asarray(edges, dtype=cp.int32)
-        log_debug(f"GPU: get_dist_gpu - edges_gpu={type(edges_gpu)}, shape={edges_gpu.shape}")
-
+        
         # 2. Amostragem de tempos de recuperação e infecção na GPU
-        log_debug(f"GPU: get_dist_gpu - Amostrando tempos de recuperação e infecção")
         if params['distribution'] == 'gamma':
             recovery_times = cp.random.gamma(
                 params['shape'], params['scale'], size=N
@@ -86,60 +83,38 @@ try:
             times = cp.random.exponential(
                 params['lambda'], size=edges_gpu.shape[0]
             )
-        log_debug(f"GPU: get_dist_gpu - recovery_times={type(recovery_times)}, times={type(times)}")
-
+        
         # 3. Condição de infecção vs. recuperação
-        log_debug(f"GPU: get_dist_gpu - Calculando condição de infecção vs. recuperação")
         u = edges_gpu[:, 0]
-        log_debug(f"GPU: get_dist_gpu - u={type(u)}, shape={u.shape}")
         infection_times = cp.where(times >= recovery_times[u], cp.inf, times)
-        log_debug(f"GPU: get_dist_gpu - infection_times={type(infection_times)}")
-
+        
         # 4. Super-nó para múltiplas fontes
-        log_debug(f"GPU: get_dist_gpu - Criando super-nó para múltiplas fontes")
         super_node = N
-        # Converter sources para GPU se ainda não for um array CuPy
-        if not isinstance(sources, cp.ndarray):
-            log_debug(f"GPU: get_dist_gpu - Convertendo sources de {type(sources)} para cp.ndarray")
-            sources_gpu = cp.asarray(sources, dtype=cp.int32)
-        else:
-            sources_gpu = sources
+        sources_gpu = cp.asarray(sources, dtype=cp.int32)
         super_src = cp.full_like(sources_gpu, super_node, dtype=cp.int32)
-        log_debug(f"GPU: get_dist_gpu - super_src={type(super_src)}")
         dummy_edges = cp.stack([super_src, sources_gpu], axis=1)
-        log_debug(f"GPU: get_dist_gpu - dummy_edges={type(dummy_edges)}")
         dummy_weights = cp.zeros_like(sources_gpu, dtype=cp.float32)
-        log_debug(f"GPU: get_dist_gpu - dummy_weights={type(dummy_weights)}")
-
+        
         # 5. Concatenação das arestas originais + super-nó
-        log_debug(f"GPU: get_dist_gpu - Concatenando arestas")
         src = cp.concatenate([edges_gpu[:, 0], dummy_edges[:, 0]])
         dst = cp.concatenate([edges_gpu[:, 1], dummy_edges[:, 1]])
         weight = cp.concatenate([infection_times.astype(cp.float32), dummy_weights])
-        log_debug(f"GPU: get_dist_gpu - src={type(src)}, dst={type(dst)}, weight={type(weight)}")
-
+        
         # 6. Construção do DataFrame cuDF diretamente na GPU
-        log_debug(f"GPU: get_dist_gpu - Construindo DataFrame cuDF")
         df = cudf.DataFrame({'src': src, 'dst': dst, 'weight': weight})
-        log_debug(f"GPU: get_dist_gpu - df={type(df)}")
-
+        
         # 7. Criação do grafo e execução de SSSP em GPU
-        log_debug(f"GPU: get_dist_gpu - Criando grafo e executando SSSP")
         G = cugraph.Graph(directed=True)
         G.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight')
-        log_debug(f"GPU: get_dist_gpu - Executando SSSP com super_node={super_node}")
-        # Usar o parâmetro correto edge_attr em vez de weight
         result = cugraph.sssp(G, source=super_node, edge_attr='weight')
-        log_debug(f"GPU: get_dist_gpu - result={type(result)}")
-
-        # 8. Extração das distâncias
-        # Manter os dados na GPU como arrays CuPy
-        log_debug(f"GPU: get_dist_gpu - Extraindo distâncias do resultado")
-        log_debug(f"GPU: get_dist_gpu - Colunas disponíveis no resultado: {result.columns.to_list()}")
         
-        # Converter a Series do cuDF para um array CuPy usando .values
-        dist_gpu = result['distance'].values[:N]
-        log_debug(f"GPU: get_dist_gpu - Saída: dist_gpu={type(dist_gpu)}, recovery_times={type(recovery_times)}")
+        # 8. Extração das distâncias - manter na GPU
+        dist_gpu = result['distance'].to_cupy()[:N]
+        
+        end_time = time.time()
+        log_debug(f"GPU: Tempo total get_dist_gpu: {(end_time-start_time)*1000:.2f}ms")
+        
+        # Retornar sem converter para CPU
         return dist_gpu, recovery_times
     
     def get_states_gpu(time_to_infect, recovery_times, t):
@@ -154,22 +129,11 @@ try:
         Returns:
             Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó
         """
-        log_debug(f"GPU: get_states_gpu - Entrada: t={t}")
-        log_debug(f"GPU: get_states_gpu - Tipos: time_to_infect={type(time_to_infect)}, recovery_times={type(recovery_times)}")
-        
-        # Verificar se os arrays são do tipo CuPy
-        if not isinstance(time_to_infect, cp.ndarray):
-            log_debug(f"GPU: get_states_gpu - Convertendo time_to_infect de {type(time_to_infect)} para cp.ndarray")
-            time_to_infect = cp.asarray(time_to_infect)
-        if not isinstance(recovery_times, cp.ndarray):
-            log_debug(f"GPU: get_states_gpu - Convertendo recovery_times de {type(recovery_times)} para cp.ndarray")
-            recovery_times = cp.asarray(recovery_times)
-            
+        # Assumimos que os arrays já são CuPy - sem verificações ou conversões
         S = time_to_infect > t
         I = (~S) & (time_to_infect + recovery_times > t)
         R = (~S) & (~I)
         
-        log_debug(f"GPU: get_states_gpu - Saída: S={type(S)}, I={type(I)}, R={type(R)}")
         return S, I, R
     
     def calculate_gpu(N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray, time_steps: np.ndarray, steps: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -186,45 +150,37 @@ try:
         Returns:
             Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado
         """
-        log_debug(f"GPU: calculate_gpu - Entrada: N={N}, steps={steps}")
-        log_debug(f"GPU: calculate_gpu - Tipos: time_to_infect={type(time_to_infect)}, recovery_times={type(recovery_times)}, time_steps={type(time_steps)}")
-        if isinstance(time_to_infect, np.ndarray):
-            log_debug(f"GPU: calculate_gpu - time_to_infect.shape={time_to_infect.shape}")
-        if isinstance(recovery_times, np.ndarray):
-            log_debug(f"GPU: calculate_gpu - recovery_times.shape={recovery_times.shape}")
+        import time
+        start_time = time.time()
         
-        S_time = cp.zeros(steps)
-        I_time = cp.zeros(steps)
-        R_time = cp.zeros(steps)
-        
-        # Verificar se os arrays já são CuPy, caso contrário, converter
-        if not isinstance(time_to_infect, cp.ndarray):
-            log_debug(f"GPU: calculate_gpu - Convertendo time_to_infect de {type(time_to_infect)} para cp.ndarray")
-            time_to_infect_gpu = cp.asarray(time_to_infect)
-        else:
-            time_to_infect_gpu = time_to_infect
-            
-        if not isinstance(recovery_times, cp.ndarray):
-            log_debug(f"GPU: calculate_gpu - Convertendo recovery_times de {type(recovery_times)} para cp.ndarray")
-            recovery_times_gpu = cp.asarray(recovery_times)
-        else:
-            recovery_times_gpu = recovery_times
-            
-        # Converter time_steps para CuPy
-        log_debug(f"GPU: calculate_gpu - Convertendo time_steps de {type(time_steps)} para cp.ndarray")
+        # Converter arrays para GPU uma única vez
+        time_to_infect_gpu = cp.asarray(time_to_infect)
+        recovery_times_gpu = cp.asarray(recovery_times)
         time_steps_gpu = cp.asarray(time_steps)
         
-        for idx, t in enumerate(time_steps_gpu):
-            S, I, R = get_states_gpu(
-                time_to_infect_gpu, recovery_times_gpu, t
-            )
-            S_time[idx] = cp.sum(S) / N
-            I_time[idx] = cp.sum(I) / N
-            R_time[idx] = cp.sum(R) / N
-            
+        # Implementação vetorizada: processa todos os passos de tempo de uma vez
+        # Reshape time_steps para permitir broadcasting com arrays de nós
+        t_reshaped = time_steps_gpu.reshape(-1, 1)  # [steps, 1]
+        
+        # Calcular estados para todos os passos de tempo de uma vez
+        # time_to_infect_gpu tem shape [N]
+        # Resultado terá shape [steps, N]
+        S_matrix = time_to_infect_gpu > t_reshaped  # [steps, N]
+        I_matrix = (~S_matrix) & ((time_to_infect_gpu + recovery_times_gpu) > t_reshaped)  # [steps, N]
+        R_matrix = (~S_matrix) & (~I_matrix)  # [steps, N]
+        
+        # Calcular proporções para cada passo de tempo
+        S_time = cp.sum(S_matrix, axis=1) / N  # [steps]
+        I_time = cp.sum(I_matrix, axis=1) / N  # [steps]
+        R_time = cp.sum(R_matrix, axis=1) / N  # [steps]
+        
         # Converter de volta para NumPy apenas no final
-        log_debug(f"GPU: calculate_gpu - Saída: convertendo resultados de CuPy para NumPy")
-        return S_time.get(), I_time.get(), R_time.get()
+        result = S_time.get(), I_time.get(), R_time.get()
+        
+        end_time = time.time()
+        log_debug(f"GPU: Tempo total calculate_gpu: {(end_time-start_time)*1000:.2f}ms")
+        
+        return result
     
 except ImportError:
     # Funções stub para quando as dependências não estão disponíveis

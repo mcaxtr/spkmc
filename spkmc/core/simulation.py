@@ -54,6 +54,9 @@ class SPKMC:
         """
         if self.use_gpu:
             # Versão GPU
+            from spkmc.cli.formatting import log_debug
+            log_debug("SPKMC: Usando GPU para cálculo de distâncias")
+            
             params = {
                 'distribution': self.distribution.get_distribution_name(),
                 'shape': getattr(self.distribution, 'shape', 2.0),
@@ -102,18 +105,13 @@ class SPKMC:
         # Calcula os tempos de infecção e recuperação
         time_to_infect, recovery_times = self.get_dist_sparse(N, edges, sources)
         
-        log_debug(f"run_single_simulation - Após get_dist_sparse: time_to_infect={type(time_to_infect)}, recovery_times={type(recovery_times)}")
-        if isinstance(time_to_infect, np.ndarray):
-            log_debug(f"run_single_simulation - time_to_infect.shape={time_to_infect.shape}")
-        if isinstance(recovery_times, np.ndarray):
-            log_debug(f"run_single_simulation - recovery_times.shape={recovery_times.shape}")
-        
         # Calcula os estados para cada passo de tempo
         steps = time_steps.shape[0]
         
         if self.use_gpu:
             # Versão GPU
-            log_debug(f"run_single_simulation - Usando GPU")
+            from spkmc.cli.formatting import log_debug
+            log_debug(f"SPKMC: Usando GPU para cálculo de estados")
             return calculate_gpu(N, time_to_infect, recovery_times, time_steps, steps)
         else:
             # Versão CPU original
