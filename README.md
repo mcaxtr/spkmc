@@ -13,6 +13,7 @@ O algoritmo SPKMC utiliza o conceito de caminhos mais curtos para calcular os te
 - Simulação de epidemias em diferentes tipos de redes
 - Suporte a diferentes distribuições de probabilidade
 - Cálculo eficiente de caminhos mais curtos usando algoritmos otimizados
+- Aceleração GPU para simulações de alta performance
 - Interface de linha de comando (CLI) completa
 - Visualização de resultados com gráficos informativos
 - Comparação entre diferentes simulações
@@ -56,6 +57,17 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+### Instalação com Suporte a GPU
+
+Para instalar o SPKMC com suporte a aceleração GPU:
+
+```bash
+# Instalar o pacote com suporte a GPU
+pip install -e ".[gpu]"
+```
+
+Isso instalará as dependências adicionais necessárias para aceleração GPU (cupy-cuda12x, cudf-cu12, cugraph-cu12). Note que essas dependências requerem uma GPU NVIDIA compatível com CUDA 12.x.
+
 ## Uso Básico
 
 ### Interface de Linha de Comando (CLI)
@@ -72,6 +84,12 @@ ou usando o script principal:
 
 ```bash
 python spkmc_cli.py run --network-type er --dist-type gamma --nodes 1000 --k-avg 10 --samples 50
+```
+
+Para usar a aceleração GPU:
+
+```bash
+python spkmc_cli.py --gpu run --network-type er --dist-type gamma --nodes 1000 --k-avg 10 --samples 50
 ```
 
 #### Visualizar resultados
@@ -109,8 +127,11 @@ from spkmc import SPKMC, GammaDistribution, NetworkFactory
 # Criar distribuição
 gamma_dist = GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
 
-# Criar simulador
+# Criar simulador (sem GPU)
 simulator = SPKMC(gamma_dist)
+
+# Ou com aceleração GPU
+# simulator = SPKMC(gamma_dist, use_gpu=True)
 
 # Configurar parâmetros
 N = 1000
@@ -154,6 +175,9 @@ python -m spkmc.cli run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.
 
 ```bash
 python -m spkmc.cli run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -i 0.01 --t-max 10.0 --steps 100
+
+# Simulação com aceleração GPU para redes grandes
+python -m spkmc.cli --gpu run -n er -d gamma --shape 2.0 --scale 1.0 -N 5000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
 ```
 
 Para exemplos mais detalhados, consulte o diretório `examples/`:
@@ -187,7 +211,8 @@ spkmc/
 │   └── results.py      # Gerenciamento de resultados
 ├── utils/              # Utilitários
 │   ├── __init__.py
-│   └── numba_utils.py  # Funções otimizadas com Numba
+│   ├── numba_utils.py  # Funções otimizadas com Numba
+│   └── gpu_utils.py    # Funções para aceleração GPU
 └── visualization/      # Módulo de visualização
     ├── __init__.py
     └── plots.py        # Funções de visualização

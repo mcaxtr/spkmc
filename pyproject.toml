@@ -45,6 +45,12 @@ dev = [
     "flake8>=3.9.0",
 ]
 
+gpu = [
+    "cupy-cuda12x",
+    "cudf-cu12",
+    "cugraph-cu12",
+]
+
 [project.scripts]
 spkmc = "spkmc.cli.commands:cli"
 

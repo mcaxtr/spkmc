@@ -38,8 +38,20 @@ Algumas funcionalidades do SPKMC dependem de pacotes específicos:
 - **Exportação de dados**: Requer `pandas` e `openpyxl` para exportação para CSV e Excel
 - **Interface de linha de comando avançada**: Requer `colorama` e `rich` para formatação e coloração da saída
 - **Paralelização**: Requer `joblib` para execução paralela de simulações
+- **Aceleração GPU**: Requer `cupy-cuda12x`, `cudf-cu12` e `cugraph-cu12` para aceleração de cálculos usando GPU NVIDIA
 
 Se alguma dessas dependências não estiver disponível, o SPKMC continuará funcionando, mas com funcionalidades reduzidas. Mensagens de aviso serão exibidas quando uma funcionalidade não estiver disponível devido à falta de uma dependência.
+
+### Instalação com Suporte a GPU
+
+Para instalar o SPKMC com suporte a GPU, use o seguinte comando:
+
+```bash
+# Instalar o pacote com suporte a GPU
+pip install -e ".[gpu]"
+```
+
+Isso instalará as dependências necessárias para aceleração GPU (cupy-cuda12x, cudf-cu12, cugraph-cu12). Note que essas dependências requerem uma GPU NVIDIA compatível com CUDA 12.x.
 
 ### Solução de Problemas de Dependências
 
@@ -68,6 +80,10 @@ As seguintes opções estão disponíveis para todos os comandos da CLI:
 | `--simple` | Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro). Pode ser usado de duas formas:
 |           | - Como opção global antes do comando: `spkmc --simple batch ...`
 |           | - Como opção específica após o comando: `spkmc batch ... --simple`
+|           | Ambas as formas têm o mesmo efeito. |
+| `--gpu` | Usar aceleração GPU para cálculos (requer CuPy, cuDF e cuGraph). Quando ativada, as simulações serão executadas na GPU, o que pode acelerar significativamente os cálculos para redes grandes. Pode ser usado de duas formas:
+|           | - Como opção global antes do comando: `spkmc --gpu run ...`
+|           | - Como opção específica após o comando: `spkmc run --gpu ...`
 |           | Ambas as formas têm o mesmo efeito. |
 
 ### Comandos Disponíveis
@@ -129,7 +145,17 @@ python spkmc_cli.py --simple run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 
 # Simulação com geração de arquivo CSV simplificado (como opção específica após o comando)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma_simple.json --simple
 
-# Ambas as formas acima têm o mesmo efeito: gerar um arquivo CSV simplificado com tempo, infectados e erro
+# Simulação com aceleração GPU (opção global)
+python spkmc_cli.py --gpu run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
+
+# Simulação com aceleração GPU (opção específica)
+python spkmc_cli.py run --gpu -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
+
+# Simulação com aceleração GPU e geração de arquivo CSV simplificado (opções globais)
+python spkmc_cli.py --gpu --simple run -n cn -d gamma --shape 2.0 --scale 1.0 -N 5000 -o results/cn_gpu.json
+
+# Simulação com aceleração GPU e geração de arquivo CSV simplificado (opções específicas)
+python spkmc_cli.py run --gpu --simple -n cn -d gamma --shape 2.0 --scale 1.0 -N 5000 -o results/cn_gpu.json
 ```
 
 ### Comando `plot`
@@ -286,9 +312,14 @@ G = NetworkFactory.create_complete_graph(N=100)
 #### Inicialização do Simulador
 
 ```python
-# Inicializa o simulador com uma distribuição
+# Inicializa o simulador com uma distribuição (sem GPU)
 simulator = SPKMC(distribution=gamma_dist)
+
+# Inicializa o simulador com uma distribuição e aceleração GPU
+simulator = SPKMC(distribution=gamma_dist, use_gpu=True)
 ```
+
+A opção `use_gpu=True` ativa a aceleração GPU para os cálculos. Se as dependências GPU não estiverem disponíveis ou se a GPU não for detectada, o simulador emitirá um aviso e continuará usando a CPU.
 
 #### Configuração dos Parâmetros
 
@@ -492,6 +523,90 @@ Para exemplos completos de uso, consulte os seguintes arquivos:
 - [Exemplos de uso da CLI](../examples/cli_examples.md)
 - [Exemplo básico de simulação](../examples/basic_example.py)
 - [Exemplo de uso programático da CLI](../examples/basic_simulation.py)
+
+## Uso da Aceleração GPU
+
+O SPKMC suporta aceleração GPU para melhorar significativamente o desempenho das simulações, especialmente para redes grandes e complexas. A aceleração GPU utiliza as bibliotecas CuPy, cuDF e cuGraph para executar cálculos na GPU.
+
+### Requisitos para Aceleração GPU
+
+- GPU NVIDIA compatível com CUDA 12.x
+- Drivers NVIDIA atualizados
+- Dependências GPU instaladas:
+  - cupy-cuda12x
+  - cudf-cu12
+  - cugraph-cu12
+
+### Instalação das Dependências GPU
+
+Para instalar o SPKMC com suporte a GPU:
+
+```bash
+pip install -e ".[gpu]"
+```
+
+### Uso da GPU via CLI
+
+Para usar a aceleração GPU na linha de comando, você pode adicionar a flag `--gpu` de duas maneiras:
+
+1. Como opção global antes do comando:
+```bash
+python spkmc_cli.py --gpu run -n er -d gamma -N 5000 --k-avg 10 -s 50
+```
+
+2. Como opção específica após o comando:
+```bash
+python spkmc_cli.py run --gpu -n er -d gamma -N 5000 --k-avg 10 -s 50
+```
+
+Ambas as formas têm o mesmo efeito. A flag `--gpu` também pode ser usada com o comando `batch`:
+
+```bash
+python spkmc_cli.py batch --gpu scenarios.json --output-dir results/
+```
+
+ou
+
+```bash
+python spkmc_cli.py --gpu batch scenarios.json --output-dir results/
+```
+
+### Uso da GPU Programaticamente
+
+Para usar a aceleração GPU em seus próprios scripts:
+
+```python
+from spkmc import SPKMC, GammaDistribution
+
+# Criar distribuição
+gamma_dist = GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
+
+# Inicializar o simulador com GPU
+simulator = SPKMC(distribution=gamma_dist, use_gpu=True)
+
+# O restante do código permanece o mesmo
+# ...
+```
+
+### Verificação de Disponibilidade da GPU
+
+Você pode verificar se a GPU está disponível programaticamente:
+
+```python
+from spkmc.utils.gpu_utils import is_gpu_available
+
+if is_gpu_available():
+    print("GPU disponível para aceleração")
+else:
+    print("GPU não disponível, usando CPU")
+```
+
+### Considerações de Desempenho
+
+- A aceleração GPU é mais eficiente para redes grandes (N > 1000)
+- A transferência de dados entre CPU e GPU pode ser um gargalo para redes pequenas
+- Para obter o melhor desempenho, mantenha os dados na GPU o máximo possível
+- O ganho de desempenho pode variar dependendo do tipo de rede e distribuição
 
 ## Dicas e Boas Práticas
 
