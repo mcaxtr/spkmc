@@ -596,7 +596,8 @@ def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sour
     
     # Extrair distâncias para os nós 0..N-1 (excluindo o super-nó)
     # e converter para array CuPy
-    dist_array = result['distance'].to_array()[:N]
+    # Usar .values ou .to_numpy() em vez de .to_array() para Series do cuDF
+    dist_array = result['distance'].values[:N]
     dist = cp.array(dist_array)
     
     # Sincronizar para garantir que todas as operações foram concluídas
