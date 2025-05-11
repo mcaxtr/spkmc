@@ -413,8 +413,8 @@ class SPKMC:
             
             # Executa as simulações mantendo os dados na GPU
             for run in tqdm(range(num_runs), desc=f"Execuções (expoente={exponent})"):
-                # Cria a rede
-                G = NetworkFactory.create_complex_network(N, exponent, k_avg)
+                # Cria a rede usando GPU
+                G = NetworkFactory.create_complex_network(N, exponent, k_avg, use_gpu=self.use_gpu)
                 
                 # Configura os nós inicialmente infectados
                 init_infect = int(N * initial_perc)

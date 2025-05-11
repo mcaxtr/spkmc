@@ -33,17 +33,34 @@ def create_erdos_renyi_gpu(N: int, k_avg: float) -> Tuple[int, np.ndarray]:
     # Calcula a probabilidade de conexão
     p = k_avg / (N - 1)
     
-    # Cria uma matriz de adjacência aleatória na GPU
-    random_matrix = cp.random.random((N, N))
-    adj_matrix = random_matrix < p
+    # Estima o número de arestas esperado
+    expected_edges = int(p * N * (N-1))
     
-    # Zera a diagonal (sem auto-loops)
-    cp.fill_diagonal(adj_matrix, 0)
+    # Abordagem mais eficiente: gerar pares de nós diretamente
+    # Gera mais pares do que o necessário para garantir que tenhamos o suficiente
+    # após a filtragem pela probabilidade
+    safety_factor = 1.2
+    num_pairs_to_generate = int(expected_edges * safety_factor)
     
-    # Extrai as arestas da matriz de adjacência
-    edges_indices = cp.where(adj_matrix)
-    sources = edges_indices[0]
-    targets = edges_indices[1]
+    # Gera pares de nós aleatórios
+    sources = cp.random.randint(0, N, num_pairs_to_generate, dtype=cp.int32)
+    targets = cp.random.randint(0, N, num_pairs_to_generate, dtype=cp.int32)
+    
+    # Remove auto-loops
+    mask = sources != targets
+    sources = sources[mask]
+    targets = targets[mask]
+    
+    # Aplica a probabilidade de conexão
+    random_values = cp.random.random(sources.shape)
+    mask = random_values < p
+    sources = sources[mask]
+    targets = targets[mask]
+    
+    # Limita ao número esperado de arestas se tivermos mais
+    if len(sources) > expected_edges:
+        sources = sources[:expected_edges]
+        targets = targets[:expected_edges]
     
     # Combina as fontes e alvos em uma matriz de arestas
     edges = cp.stack([sources, targets], axis=1)
@@ -95,16 +112,55 @@ def configuration_model_gpu(degree_sequence: cp.ndarray) -> cp.ndarray:
     Returns:
         Matriz de arestas como array CuPy
     """
+    import time
+    from spkmc.cli.formatting import log_debug
+    
+    start_time = time.time()
+    
     # Cria uma lista de "stubs" (meias-arestas) para cada nó
     # Cada nó i aparece degree_sequence[i] vezes na lista
-    stubs = cp.zeros(cp.sum(degree_sequence).item(), dtype=cp.int32)
+    total_stubs = cp.sum(degree_sequence).item()
+    stubs = cp.zeros(total_stubs, dtype=cp.int32)
     
-    # Preenche a lista de stubs
-    idx = 0
-    for i in range(len(degree_sequence)):
-        degree = degree_sequence[i].item()
-        stubs[idx:idx+degree] = i
-        idx += degree
+    # Abordagem mais eficiente: usar operações vetorizadas em vez de loop Python
+    # Cria um array de índices cumulativos
+    cum_degrees = cp.cumsum(degree_sequence)
+    start_indices = cp.zeros_like(degree_sequence)
+    start_indices[1:] = cum_degrees[:-1]
+    
+    # Cria um kernel para preencher o array de stubs
+    kernel_code = """
+    extern "C" __global__
+    void fill_stubs(int* stubs, int* degrees, int* start_indices, int n) {
+        int i = blockDim.x * blockIdx.x + threadIdx.x;
+        if (i < n) {
+            int degree = degrees[i];
+            int start = start_indices[i];
+            for (int j = 0; j < degree; j++) {
+                stubs[start + j] = i;
+            }
+        }
+    }
+    """
+    
+    # Compila e executa o kernel
+    try:
+        import cupy.cuda.compiler as compiler
+        kernel = compiler.RawKernel(kernel_code, 'fill_stubs')
+        
+        # Executa o kernel
+        threads_per_block = 256
+        blocks_per_grid = (len(degree_sequence) + threads_per_block - 1) // threads_per_block
+        kernel((blocks_per_grid,), (threads_per_block,),
+               (stubs, degree_sequence, start_indices, len(degree_sequence)))
+    except Exception as e:
+        # Fallback para implementação Python se o kernel falhar
+        log_debug(f"SPKMC: Erro ao executar kernel CUDA: {e}. Usando implementação Python.")
+        idx = 0
+        for i in range(len(degree_sequence)):
+            degree = degree_sequence[i].item()
+            stubs[idx:idx+degree] = i
+            idx += degree
     
     # Embaralha os stubs
     cp.random.shuffle(stubs)
@@ -123,6 +179,9 @@ def configuration_model_gpu(degree_sequence: cp.ndarray) -> cp.ndarray:
     # Remove auto-loops (arestas que conectam um nó a ele mesmo)
     mask = sources != targets
     edges = edges[mask]
+    
+    end_time = time.time()
+    log_debug(f"GPU: Tempo total configuration_model_gpu: {(end_time-start_time)*1000:.2f}ms")
     
     return edges
 
@@ -172,16 +231,22 @@ def create_complete_graph_gpu(N: int) -> Tuple[int, np.ndarray]:
     
     start_time = time.time()
     
-    # Cria uma matriz de adjacência completa na GPU
-    adj_matrix = cp.ones((N, N), dtype=cp.bool_)
+    # Número total de arestas em um grafo completo direcionado sem auto-loops
+    num_edges = N * (N - 1)
     
-    # Zera a diagonal (sem auto-loops)
-    cp.fill_diagonal(adj_matrix, 0)
+    # Abordagem mais eficiente: gerar todas as combinações possíveis de nós
+    # sem criar uma matriz de adjacência completa
+    sources = cp.zeros(num_edges, dtype=cp.int32)
+    targets = cp.zeros(num_edges, dtype=cp.int32)
     
-    # Extrai as arestas da matriz de adjacência
-    edges_indices = cp.where(adj_matrix)
-    sources = edges_indices[0]
-    targets = edges_indices[1]
+    # Preenche as fontes e alvos
+    idx = 0
+    for i in range(N):
+        for j in range(N):
+            if i != j:  # Evita auto-loops
+                sources[idx] = i
+                targets[idx] = j
+                idx += 1
     
     # Combina as fontes e alvos em uma matriz de arestas
     edges = cp.stack([sources, targets], axis=1)
