@@ -67,7 +67,7 @@ def timing_decorator(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
-        print(f"Função {func.__name__} executada em {end_time - start_time:.6f} segundos")
+        # print(f"Função {func.__name__} executada em {end_time - start_time:.6f} segundos")
         return result
     return wrapper
 
