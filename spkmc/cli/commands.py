@@ -159,49 +159,40 @@ def run(simple, gpu, network_type, dist_type, shape, scale, mu, lambda_val, expo
     # Verificar disponibilidade de GPU
     if gpu:
         try:
-            from spkmc.utils.gpu_utils import CUPY_AVAILABLE, GPU_AVAILABLE, print_gpu_info, gpu_status_message
+            from spkmc.utils.gpu_utils import is_gpu_available, print_gpu_info, CUPY_AVAILABLE
             log_debug("Verificando disponibilidade de GPU...", verbose_only=False)
             
+            # Verificar se CuPy está instalado
             if CUPY_AVAILABLE:
                 import cupy
-                log_debug(f"CuPy instalado: versão {cupy.__version__}", verbose_only=False)
+                log_debug(f"✓ CuPy instalado: versão {cupy.__version__}", verbose_only=False)
                 
-                # Verificar versão do CUDA
-                cuda_version = cupy.cuda.runtime.runtimeGetVersion()
-                cuda_major = cuda_version // 1000
-                cuda_minor = (cuda_version % 1000) // 10
-                log_debug(f"CUDA versão: {cuda_major}.{cuda_minor}", verbose_only=False)
+                # Verificar se a GPU está disponível usando a função atualizada
+                gpu_available = is_gpu_available(verbose=True)
                 
-                # Verificar driver
-                try:
-                    driver_version = cupy.cuda.runtime.driverGetVersion()
-                    driver_major = driver_version // 1000
-                    driver_minor = (driver_version % 1000) // 10
-                    log_debug(f"Driver CUDA versão: {driver_major}.{driver_minor}", verbose_only=False)
-                except:
-                    log_debug("Não foi possível obter a versão do driver CUDA", verbose_only=False)
-            
-            # Usar o resultado da verificação centralizada
-            if GPU_AVAILABLE:
-                log_success("GPU disponível para uso!")
-                
-                # Imprimir informações detalhadas da GPU
-                console.print(format_title("Informações da GPU"))
-                try:
-                    gpu_info = print_gpu_info()
-                    if not gpu_info:
-                        log_warning("Não foi possível inicializar a GPU corretamente.")
+                if gpu_available:
+                    log_success("✓ GPU disponível para uso!")
+                    
+                    # Imprimir informações detalhadas da GPU
+                    console.print(format_title("Informações da GPU"))
+                    try:
+                        gpu_info = print_gpu_info()
+                        if not gpu_info:
+                            log_warning("⚠ Não foi possível inicializar a GPU corretamente.")
+                            gpu = False
+                    except Exception as e:
+                        log_warning(f"⚠ Erro ao imprimir informações da GPU: {e}")
                         gpu = False
-                except Exception as e:
-                    log_warning(f"Erro ao imprimir informações da GPU: {e}")
+                else:
+                    log_warning("⚠ GPU solicitada, mas não disponível. Usando CPU.")
                     gpu = False
             else:
-                if gpu_status_message:
-                    log_warning(gpu_status_message)
+                log_warning("⚠ CuPy não está instalado. GPU não disponível.")
                 log_warning("⚠ GPU solicitada, mas não disponível. Usando CPU.")
                 gpu = False
-        except ImportError:
-            log_warning("Módulo GPU não encontrado. Usando CPU.")
+        except ImportError as e:
+            log_warning(f"⚠ Erro ao importar módulos GPU: {e}")
+            log_warning("⚠ GPU solicitada, mas não disponível. Usando CPU.")
             gpu = False
     
     # Registrar início da simulação

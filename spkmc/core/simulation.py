@@ -49,25 +49,38 @@ class SPKMC:
             use_gpu: Se True, usa GPU para aceleração (se disponível)
         """
         self.distribution = distribution
-        self.use_gpu = use_gpu and GPU_AVAILABLE
-        self.execution_mode = "GPU" if self.use_gpu else "CPU"
         
-        if self.use_gpu:
-            print("Usando GPU para aceleração")
-            # Imprimir informações da GPU
+        # Verificar disponibilidade da GPU usando a função atualizada
+        if use_gpu:
             try:
-                from spkmc.utils.gpu_utils import print_gpu_info
-                gpu_available = print_gpu_info()
-                if not gpu_available:
-                    print("Erro ao inicializar GPU. Revertendo para CPU.")
+                from spkmc.utils.gpu_utils import is_gpu_available, print_gpu_info
+                gpu_available = is_gpu_available()
+                
+                if gpu_available:
+                    print("✓ Usando GPU para aceleração")
+                    self.use_gpu = True
+                    self.execution_mode = "GPU"
+                    
+                    # Imprimir informações detalhadas da GPU apenas se verbose
+                    if os.environ.get("SPKMC_VERBOSE", "0") == "1":
+                        try:
+                            gpu_info_available = print_gpu_info()
+                            if not gpu_info_available:
+                                print("⚠ Aviso: Não foi possível obter informações detalhadas da GPU.")
+                        except Exception as e:
+                            print(f"⚠ Aviso: Erro ao imprimir informações da GPU: {e}")
+                else:
+                    print("⚠ GPU solicitada, mas não disponível. Usando CPU.")
                     self.use_gpu = False
                     self.execution_mode = "CPU"
             except Exception as e:
-                print(f"Erro ao imprimir informações da GPU: {e}")
+                print(f"⚠ Erro ao verificar disponibilidade da GPU: {e}")
                 self.use_gpu = False
                 self.execution_mode = "CPU"
-        elif use_gpu and not GPU_AVAILABLE:
-            pass
+        else:
+            # GPU não solicitada
+            self.use_gpu = False
+            self.execution_mode = "CPU"
     
     @timing_decorator
     def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[Union[np.ndarray, "cp.ndarray"], Union[np.ndarray, "cp.ndarray"]]:

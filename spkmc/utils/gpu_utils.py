@@ -26,30 +26,27 @@ try:
     CUPY_AVAILABLE = True
     
     # Verificar se o CUDA está disponível
-    if cp.cuda.is_available():
-        # Verificar se há dispositivos CUDA
-        device_count = cp.cuda.runtime.getDeviceCount()
-        if device_count > 0:
-            # Verificar se pelo menos um dispositivo tem memória disponível
-            for i in range(device_count):
-                try:
-                    device_props = cp.cuda.runtime.getDeviceProperties(i)
-                    if device_props['totalGlobalMem'] > 0:
-                        # Definir o dispositivo atual
-                        cp.cuda.Device(i).use()
-                        # Testar uma operação simples
-                        test_array = cp.array([1, 2, 3])
-                        test_result = cp.sum(test_array)
-                        if test_result == 6:
-                            GPU_AVAILABLE = True
-                            break
-                except Exception:
-                    continue
-        
-        if not GPU_AVAILABLE:
-            gpu_status_message = "CUDA disponível, mas nenhum dispositivo GPU utilizável encontrado."
-    else:
-        gpu_status_message = "CUDA não está disponível no sistema."
+    try:
+        if cp.cuda.is_available():
+            # Verificar se há dispositivos CUDA
+            device_count = cp.cuda.runtime.getDeviceCount()
+            if device_count > 0:
+                # Definir o dispositivo atual (primeiro dispositivo)
+                cp.cuda.Device(0).use()
+                # Testar uma operação simples
+                test_array = cp.array([1, 2, 3])
+                test_result = cp.sum(test_array)
+                if test_result == 6:
+                    GPU_AVAILABLE = True
+                    gpu_status_message = ""  # Limpar mensagem de erro se GPU estiver disponível
+                else:
+                    gpu_status_message = "Falha no teste de operação básica na GPU."
+            else:
+                gpu_status_message = "Nenhum dispositivo CUDA encontrado."
+        else:
+            gpu_status_message = "CUDA não está disponível no sistema."
+    except Exception as e:
+        gpu_status_message = f"Erro ao verificar GPU: {str(e)}"
 except ImportError:
     gpu_status_message = "CuPy não está instalado. GPU não disponível."
 
@@ -73,14 +70,27 @@ def timing_decorator(func):
     return wrapper
 
 
-def is_gpu_available() -> bool:
+def is_gpu_available(verbose: bool = False) -> bool:
     """
     Retorna o status de disponibilidade da GPU.
-    Esta função apenas retorna o valor pré-calculado durante a importação do módulo.
+    Esta função verifica o valor pré-calculado durante a importação do módulo.
+    
+    Args:
+        verbose: Se True, imprime informações detalhadas sobre o status da GPU
     
     Returns:
         True se a GPU estiver disponível, False caso contrário
     """
+    if verbose:
+        print_gpu_status()
+    
+    # Verificar novamente se o CuPy está disponível
+    if not CUPY_AVAILABLE:
+        if verbose:
+            print("CuPy não está disponível, GPU não pode ser usada.")
+        return False
+    
+    # Retornar o status global
     return GPU_AVAILABLE
 
 
@@ -90,40 +100,57 @@ def print_gpu_status():
     """
     global gpu_status_message
     
-    # Se temos uma mensagem de erro/status, exibi-la
-    if gpu_status_message:
-        print(gpu_status_message)
+    # Verificar se CuPy está disponível
+    if not CUPY_AVAILABLE:
+        print("⚠ CuPy não está instalado ou não foi importado corretamente.")
+        if gpu_status_message:
+            print(f"  Detalhes: {gpu_status_message}")
         return
     
+    # Verificar se GPU está disponível
     if not GPU_AVAILABLE:
-        print("GPU não disponível para uso.")
+        print("⚠ GPU não disponível para uso.")
+        if gpu_status_message:
+            print(f"  Motivo: {gpu_status_message}")
+        
+        # Verificar se CUDA está disponível mesmo que a GPU não esteja
+        try:
+            if cp.cuda.is_available():
+                print("  CUDA está disponível, mas há um problema com a GPU.")
+                device_count = cp.cuda.runtime.getDeviceCount()
+                print(f"  Dispositivos CUDA encontrados: {device_count}")
+            else:
+                print("  CUDA não está disponível no sistema.")
+        except Exception as e:
+            print(f"  Erro ao verificar CUDA: {e}")
         return
     
+    # Se chegou aqui, GPU está disponível
     try:
         device_count = cp.cuda.runtime.getDeviceCount()
-        print(f"GPU disponível: {device_count} dispositivo(s) CUDA encontrado(s).")
+        print(f"✓ GPU disponível: {device_count} dispositivo(s) CUDA encontrado(s).")
         
         # Mostrar informações do dispositivo atual
         current_device = cp.cuda.Device()
         props = cp.cuda.runtime.getDeviceProperties(current_device.id)
-        print(f"Dispositivo atual: {props['name'].decode()} com {props['totalGlobalMem'] / (1024**3):.2f} GB")
+        print(f"  Dispositivo atual: {props['name'].decode()} com {props['totalGlobalMem'] / (1024**3):.2f} GB")
         
         # Versão do CUDA
         cuda_version = cp.cuda.runtime.runtimeGetVersion()
         major = cuda_version // 1000
         minor = (cuda_version % 1000) // 10
-        print(f"Versão CUDA: {major}.{minor}")
+        print(f"  Versão CUDA: {major}.{minor}")
         
         # Versão do driver
         try:
             driver_version = cp.cuda.runtime.driverGetVersion()
             driver_major = driver_version // 1000
             driver_minor = (driver_version % 1000) // 10
-            print(f"Versão do driver: {driver_major}.{driver_minor}")
+            print(f"  Versão do driver: {driver_major}.{driver_minor}")
         except:
-            print("Não foi possível obter a versão do driver")
+            print("  Não foi possível obter a versão do driver")
     except Exception as e:
-        print(f"Erro ao obter informações da GPU: {e}")
+        print(f"  Erro ao obter informações da GPU: {e}")
 
 
 @timing_decorator
@@ -136,72 +163,121 @@ def print_gpu_info():
     """
     global gpu_status_message
     
+    # Verificar se CuPy está disponível
     if not CUPY_AVAILABLE:
+        print("\n===== STATUS DA GPU =====")
+        print("❌ CuPy não está instalado ou não foi importado corretamente.")
         if gpu_status_message:
-            print(gpu_status_message)
+            print(f"   Detalhes: {gpu_status_message}")
+        print("===========================")
         return False
     
     try:
-        if cp.cuda.is_available():
+        # Verificar se CUDA está disponível
+        cuda_available = False
+        try:
+            cuda_available = cp.cuda.is_available()
+        except Exception as e:
+            print(f"\n===== STATUS DA GPU =====")
+            print(f"❌ Erro ao verificar disponibilidade do CUDA: {e}")
+            print("===========================")
+            return False
+        
+        if cuda_available:
             print("\n===== INFORMAÇÕES DA GPU =====")
-            print(f"CUDA disponível: Sim")
+            print(f"✓ CUDA disponível: Sim")
             
             # Versão do CUDA
-            cuda_version = cp.cuda.runtime.runtimeGetVersion()
-            major = cuda_version // 1000
-            minor = (cuda_version % 1000) // 10
-            print(f"Versão CUDA: {major}.{minor} (build {cuda_version})")
+            try:
+                cuda_version = cp.cuda.runtime.runtimeGetVersion()
+                major = cuda_version // 1000
+                minor = (cuda_version % 1000) // 10
+                print(f"✓ Versão CUDA: {major}.{minor} (build {cuda_version})")
+            except Exception as e:
+                print(f"❌ Erro ao obter versão do CUDA: {e}")
             
             # Informações do driver
             try:
                 driver_version = cp.cuda.runtime.driverGetVersion()
                 driver_major = driver_version // 1000
                 driver_minor = (driver_version % 1000) // 10
-                print(f"Versão do driver: {driver_major}.{driver_minor} (build {driver_version})")
-            except:
-                print("Não foi possível obter a versão do driver")
+                print(f"✓ Versão do driver: {driver_major}.{driver_minor} (build {driver_version})")
+            except Exception as e:
+                print(f"❌ Erro ao obter versão do driver: {e}")
             
             # Número de dispositivos
-            device_count = cp.cuda.runtime.getDeviceCount()
-            print(f"Número de dispositivos: {device_count}")
-            
-            # Informações detalhadas de cada dispositivo
-            for i in range(device_count):
-                device_props = cp.cuda.runtime.getDeviceProperties(i)
-                print(f"\nDispositivo {i}: {device_props['name'].decode()}")
-                print(f"  Memória total: {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
-                print(f"  Multiprocessadores: {device_props['multiProcessorCount']}")
-                print(f"  Capacidade de computação: {device_props['major']}.{device_props['minor']}")
-                print(f"  Clock máximo: {device_props['clockRate'] / 1000:.2f} MHz")
-                print(f"  Largura de banda de memória: {2 * device_props['memoryClockRate'] * (device_props['memoryBusWidth'] / 8) / 1.0e6:.2f} GB/s")
-                print(f"  Registradores por bloco: {device_props['regsPerBlock']}")
-                print(f"  Memória compartilhada por bloco: {device_props['sharedMemPerBlock'] / 1024:.2f} KB")
-                print(f"  Tamanho máximo de grid: ({device_props['maxGridSize'][0]}, {device_props['maxGridSize'][1]}, {device_props['maxGridSize'][2]})")
-                print(f"  Tamanho máximo de bloco: ({device_props['maxThreadsDim'][0]}, {device_props['maxThreadsDim'][1]}, {device_props['maxThreadsDim'][2]})")
-                print(f"  Threads máximas por bloco: {device_props['maxThreadsPerBlock']}")
+            try:
+                device_count = cp.cuda.runtime.getDeviceCount()
+                print(f"✓ Número de dispositivos: {device_count}")
                 
-                # Definir o dispositivo atual para obter informações de uso
-                cp.cuda.Device(i).use()
+                if device_count == 0:
+                    print("❌ Nenhum dispositivo CUDA encontrado, mesmo com CUDA disponível.")
+                    print("===========================")
+                    return False
                 
-                # Mostrar uso atual de memória
-                mempool = cp.get_default_memory_pool()
-                print(f"  Uso atual de memória: {mempool.used_bytes() / (1024**3):.2f} GB")
-                print(f"  Memória total alocada: {mempool.total_bytes() / (1024**3):.2f} GB")
+                # Informações detalhadas de cada dispositivo
+                for i in range(device_count):
+                    try:
+                        device_props = cp.cuda.runtime.getDeviceProperties(i)
+                        print(f"\n✓ Dispositivo {i}: {device_props['name'].decode()}")
+                        print(f"  Memória total: {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
+                        print(f"  Multiprocessadores: {device_props['multiProcessorCount']}")
+                        print(f"  Capacidade de computação: {device_props['major']}.{device_props['minor']}")
+                        print(f"  Clock máximo: {device_props['clockRate'] / 1000:.2f} MHz")
+                        
+                        # Definir o dispositivo atual para obter informações de uso
+                        cp.cuda.Device(i).use()
+                        
+                        # Mostrar uso atual de memória
+                        try:
+                            mempool = cp.get_default_memory_pool()
+                            print(f"  Uso atual de memória: {mempool.used_bytes() / (1024**3):.2f} GB")
+                            print(f"  Memória total alocada: {mempool.total_bytes() / (1024**3):.2f} GB")
+                        except Exception as e:
+                            print(f"  ❌ Erro ao obter informações de memória: {e}")
+                        
+                        # Verificar se há operações em execução
+                        try:
+                            cp.cuda.Stream.null.synchronize()
+                            print(f"  Status: Pronto para operações")
+                        except Exception as e:
+                            print(f"  Status: Ocupado - {str(e)}")
+                    except Exception as e:
+                        print(f"❌ Erro ao obter informações do dispositivo {i}: {e}")
                 
-                # Verificar se há operações em execução
+                # Testar uma operação simples para confirmar que a GPU está funcionando
                 try:
-                    cp.cuda.Stream.null.synchronize()
-                    print(f"  Status: Pronto para operações")
+                    test_array = cp.array([1, 2, 3])
+                    test_result = cp.sum(test_array)
+                    if test_result == 6:
+                        print("\n✓ Teste de operação básica na GPU: Sucesso")
+                    else:
+                        print(f"\n❌ Teste de operação básica na GPU falhou: resultado = {test_result}, esperado = 6")
+                        print("===========================")
+                        return False
                 except Exception as e:
-                    print(f"  Status: Ocupado - {str(e)}")
+                    print(f"\n❌ Erro ao testar operação básica na GPU: {e}")
+                    print("===========================")
+                    return False
+                
+            except Exception as e:
+                print(f"❌ Erro ao obter contagem de dispositivos: {e}")
+                print("===========================")
+                return False
             
             print("\n==============================")
             return True
         else:
-            print("CUDA está instalado, mas não está disponível.")
+            print("\n===== STATUS DA GPU =====")
+            print("❌ CUDA está instalado, mas não está disponível.")
+            if gpu_status_message:
+                print(f"   Motivo: {gpu_status_message}")
+            print("===========================")
             return False
     except Exception as e:
-        print(f"Erro ao obter informações da GPU: {e}")
+        print("\n===== STATUS DA GPU =====")
+        print(f"❌ Erro ao obter informações da GPU: {e}")
+        print("===========================")
         return False
 
 
