@@ -66,9 +66,12 @@ try:
         log_debug(f"GPU: get_dist_gpu - Tipos: edges={type(edges)}, sources={type(sources)}")
         
         # 1. Transferência das arestas para GPU
+        log_debug(f"GPU: get_dist_gpu - Convertendo edges para GPU")
         edges_gpu = cp.asarray(edges, dtype=cp.int32)
+        log_debug(f"GPU: get_dist_gpu - edges_gpu={type(edges_gpu)}, shape={edges_gpu.shape}")
 
         # 2. Amostragem de tempos de recuperação e infecção na GPU
+        log_debug(f"GPU: get_dist_gpu - Amostrando tempos de recuperação e infecção")
         if params['distribution'] == 'gamma':
             recovery_times = cp.random.gamma(
                 params['shape'], params['scale'], size=N
@@ -83,29 +86,50 @@ try:
             times = cp.random.exponential(
                 params['lambda'], size=edges_gpu.shape[0]
             )
+        log_debug(f"GPU: get_dist_gpu - recovery_times={type(recovery_times)}, times={type(times)}")
 
         # 3. Condição de infecção vs. recuperação
+        log_debug(f"GPU: get_dist_gpu - Calculando condição de infecção vs. recuperação")
         u = edges_gpu[:, 0]
+        log_debug(f"GPU: get_dist_gpu - u={type(u)}, shape={u.shape}")
         infection_times = cp.where(times >= recovery_times[u], cp.inf, times)
+        log_debug(f"GPU: get_dist_gpu - infection_times={type(infection_times)}")
 
         # 4. Super-nó para múltiplas fontes
+        log_debug(f"GPU: get_dist_gpu - Criando super-nó para múltiplas fontes")
         super_node = N
-        super_src = cp.full_like(sources, super_node, dtype=cp.int32)
-        dummy_edges = cp.stack([super_src, sources], axis=1)
-        dummy_weights = cp.zeros_like(sources, dtype=cp.float32)
+        # Converter sources para GPU se ainda não for um array CuPy
+        if not isinstance(sources, cp.ndarray):
+            log_debug(f"GPU: get_dist_gpu - Convertendo sources de {type(sources)} para cp.ndarray")
+            sources_gpu = cp.asarray(sources, dtype=cp.int32)
+        else:
+            sources_gpu = sources
+        super_src = cp.full_like(sources_gpu, super_node, dtype=cp.int32)
+        log_debug(f"GPU: get_dist_gpu - super_src={type(super_src)}")
+        dummy_edges = cp.stack([super_src, sources_gpu], axis=1)
+        log_debug(f"GPU: get_dist_gpu - dummy_edges={type(dummy_edges)}")
+        dummy_weights = cp.zeros_like(sources_gpu, dtype=cp.float32)
+        log_debug(f"GPU: get_dist_gpu - dummy_weights={type(dummy_weights)}")
 
         # 5. Concatenação das arestas originais + super-nó
+        log_debug(f"GPU: get_dist_gpu - Concatenando arestas")
         src = cp.concatenate([edges_gpu[:, 0], dummy_edges[:, 0]])
         dst = cp.concatenate([edges_gpu[:, 1], dummy_edges[:, 1]])
         weight = cp.concatenate([infection_times.astype(cp.float32), dummy_weights])
+        log_debug(f"GPU: get_dist_gpu - src={type(src)}, dst={type(dst)}, weight={type(weight)}")
 
         # 6. Construção do DataFrame cuDF diretamente na GPU
+        log_debug(f"GPU: get_dist_gpu - Construindo DataFrame cuDF")
         df = cudf.DataFrame({'src': src, 'dst': dst, 'weight': weight})
+        log_debug(f"GPU: get_dist_gpu - df={type(df)}")
 
         # 7. Criação do grafo e execução de SSSP em GPU
+        log_debug(f"GPU: get_dist_gpu - Criando grafo e executando SSSP")
         G = cugraph.Graph(directed=True)
         G.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight')
+        log_debug(f"GPU: get_dist_gpu - Executando SSSP com super_node={super_node}")
         result = cugraph.sssp(G, source=super_node, weight='weight')
+        log_debug(f"GPU: get_dist_gpu - result={type(result)}")
 
         # 8. Extração das distâncias
         # Manter os dados na GPU como arrays CuPy
