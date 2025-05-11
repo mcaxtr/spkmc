@@ -12,4 +12,4 @@ openpyxl>=3.0.7
 pytest>=6.2.5
 pytest-cov>=2.12.1
 joblib>=1.0.1
-cupy-cuda11x>=11.0.0; extra == 'gpu'
+cupy-cuda12x>=12.0.0; extra == 'gpu'
