@@ -19,6 +19,15 @@ from spkmc.core.networks import NetworkFactory
 from spkmc.io.results import ResultManager
 from spkmc.utils.numba_utils import calculate
 
+# Importação condicional das funções GPU
+try:
+    from spkmc.utils.gpu_utils import (
+        is_gpu_available, calculate_gpu, to_numpy, to_cupy
+    )
+    GPU_AVAILABLE = is_gpu_available()
+except ImportError:
+    GPU_AVAILABLE = False
+
 
 class SPKMC:
     """
@@ -28,14 +37,21 @@ class SPKMC:
     em redes, utilizando o modelo SIR (Susceptible-Infected-Recovered).
     """
     
-    def __init__(self, distribution: Distribution):
+    def __init__(self, distribution: Distribution, use_gpu: bool = False):
         """
         Inicializa o simulador SPKMC.
         
         Args:
             distribution: Objeto de distribuição a ser usado na simulação
+            use_gpu: Se True, usa GPU para aceleração (se disponível)
         """
         self.distribution = distribution
+        self.use_gpu = use_gpu and GPU_AVAILABLE
+        
+        if self.use_gpu:
+            print("Usando GPU para aceleração")
+        elif use_gpu and not GPU_AVAILABLE:
+            print("GPU solicitada, mas não disponível. Usando CPU.")
     
     def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -55,6 +71,13 @@ class SPKMC:
         # Calcula os tempos de infecção
         infection_times = self.distribution.get_infection_times(recovery_weights, edges)
         
+        # Se estiver usando GPU, converte para NumPy para usar com scipy
+        if self.use_gpu:
+            infection_times = to_numpy(infection_times)
+            recovery_weights_cpu = to_numpy(recovery_weights)
+        else:
+            recovery_weights_cpu = recovery_weights
+        
         # Cria a matriz esparsa do grafo
         row_indices = edges[:, 0]
         col_indices = edges[:, 1]
@@ -64,10 +87,15 @@ class SPKMC:
         dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
         dist = np.min(dist_matrix, axis=0)
         
-        return dist, recovery_weights
+        # Se estiver usando GPU, converte de volta para CuPy
+        if self.use_gpu:
+            dist = to_cupy(dist)
+            return dist, recovery_weights
+        else:
+            return dist, recovery_weights_cpu
     
-    def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray, 
-                             time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray,
+                              time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa uma única simulação SPKMC.
         
@@ -85,7 +113,20 @@ class SPKMC:
         
         # Calcula os estados para cada passo de tempo
         steps = time_steps.shape[0]
-        return calculate(N, time_to_infect, recovery_times, time_steps, steps)
+        
+        if self.use_gpu:
+            # Converte time_steps para CuPy se necessário
+            if not isinstance(time_steps, type(time_to_infect)):
+                time_steps = to_cupy(time_steps)
+            
+            # Usa a versão GPU da função calculate
+            S, I, R = calculate_gpu(N, time_to_infect, recovery_times, time_steps, steps)
+            
+            # Converte os resultados de volta para NumPy
+            return to_numpy(S), to_numpy(I), to_numpy(R)
+        else:
+            # Usa a versão CPU da função calculate
+            return calculate(N, time_to_infect, recovery_times, time_steps, steps)
     
     def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray, 
                                 samples: int, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

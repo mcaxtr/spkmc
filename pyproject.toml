@@ -44,6 +44,9 @@ dev = [
     "mypy>=0.900",
     "flake8>=3.9.0",
 ]
+gpu = [
+    "cupy-cuda11x>=11.0.0",
+]
 
 [project.scripts]
 spkmc = "spkmc.cli.commands:cli"

@@ -92,6 +92,7 @@ def cli(verbose, no_color, simple):
 
 @cli.command(help="Executar uma simulação SPKMC")
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
+@click.option("--gpu", is_flag=True, default=False, help="Usar GPU para aceleração (se disponível)")
 @click.option("--network-type", "-n", type=str, default="er", show_default=True,
               callback=validate_network_type,
               help="Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg)")
@@ -147,13 +148,25 @@ def cli(verbose, no_color, simple):
               help="Sobrescrever resultados existentes")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a simulação")
-def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent, nodes, k_avg,
+def run(simple, gpu, network_type, dist_type, shape, scale, mu, lambda_val, exponent, nodes, k_avg,
         samples, num_runs, initial_perc, t_max, steps, output, export_format, no_plot,
         save_plot, overwrite, verbose):
     """Executa uma simulação SPKMC com os parâmetros especificados."""
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
+    
+    # Verificar disponibilidade de GPU
+    if gpu:
+        try:
+            from spkmc.utils.gpu_utils import is_gpu_available
+            gpu_available = is_gpu_available()
+            if not gpu_available:
+                log_warning("GPU solicitada, mas não disponível. Usando CPU.")
+                gpu = False
+        except ImportError:
+            log_warning("Módulo GPU não encontrado. Usando CPU.")
+            gpu = False
     
     # Registrar início da simulação
     start_time = time.time()
@@ -166,11 +179,11 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
         "mu": mu,
         "lambda": lambda_val
     }
-    distribution = create_distribution(dist_type, **distribution_params)
+    distribution = create_distribution(dist_type, use_gpu=gpu, **distribution_params)
     log_debug(f"Distribuição {dist_type.capitalize()} criada com parâmetros: {distribution_params}", verbose_only=True)
     
     # Criar o simulador
-    simulator = SPKMC(distribution)
+    simulator = SPKMC(distribution, use_gpu=gpu)
     
     # Criar os passos de tempo
     time_steps = create_time_steps(t_max, steps)
@@ -187,6 +200,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
     console.print(f"  {format_param('Rede', network_type_upper)}")
     console.print(f"  {format_param('Distribuição', dist_type_cap)}")
     console.print(f"  {format_param('Nós', nodes)}")
+    console.print(f"  {format_param('Modo de execução', 'GPU' if gpu else 'CPU')}")
     
     if network_type in ["er", "cn"]:
         console.print(f"  {format_param('Grau médio', k_avg)}")
@@ -595,6 +609,7 @@ def info(simple, result_file, list_files, export, output, verbose):
 
 
 @cli.command(help="Comparar resultados de múltiplas simulações")
+@click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
 @click.argument("result_files", nargs=-1, type=str, required=True)
 @click.option("--labels", "-l", multiple=True,
               help="Rótulos para cada arquivo (opcional)")
@@ -726,6 +741,7 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
 
 @cli.command(help="Executar múltiplos cenários de simulação a partir de um arquivo JSON")
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
+@click.option("--gpu", is_flag=True, default=False, help="Usar GPU para aceleração (se disponível)")
 @click.argument("scenarios_file", type=str, default="batches.json", required=False)
 @click.option("--output-dir", "-o", type=str, default="./results",
               help="Diretório para salvar os resultados (padrão: ./results)")
@@ -739,10 +755,22 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
               help="Salvar os gráficos em arquivos")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a execução")
-def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, verbose):
+def batch(simple, gpu, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, verbose):
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
+    
+    # Verificar disponibilidade de GPU
+    if gpu:
+        try:
+            from spkmc.utils.gpu_utils import is_gpu_available
+            gpu_available = is_gpu_available()
+            if not gpu_available:
+                log_warning("GPU solicitada, mas não disponível. Usando CPU.")
+                gpu = False
+        except ImportError:
+            log_warning("Módulo GPU não encontrado. Usando CPU.")
+            gpu = False
     """
     Executa múltiplos cenários de simulação a partir de um arquivo JSON.
     
@@ -875,6 +903,7 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                     console.print(f"  {format_param('Rede', network_type.upper())}")
                     console.print(f"  {format_param('Distribuição', dist_type.capitalize())}")
                     console.print(f"  {format_param('Nós', nodes)}")
+                    console.print(f"  {format_param('Modo de execução', 'GPU' if gpu else 'CPU')}")
                     
                     if network_type in ["er", "cn"]:
                         console.print(f"  {format_param('Grau médio', k_avg)}")
@@ -893,11 +922,11 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                     "mu": mu,
                     "lambda": lambda_val
                 }
-                distribution = create_distribution(dist_type, **distribution_params)
+                distribution = create_distribution(dist_type, use_gpu=gpu, **distribution_params)
                 log_debug(f"Distribuição {dist_type.capitalize()} criada com parâmetros: {distribution_params}", verbose_only=True)
                 
                 # Criar o simulador
-                simulator = SPKMC(distribution)
+                simulator = SPKMC(distribution, use_gpu=gpu)
                 
                 # Criar os passos de tempo
                 time_steps = create_time_steps(t_max, steps)
@@ -945,7 +974,8 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                         "initial_perc": initial_perc,
                         "scenario_number": scenario_num,
                         "scenario_label": scenario_label,
-                        "execution_time": time.time() - start_time
+                        "execution_time": time.time() - start_time,
+                        "gpu_mode": gpu
                     }
                 }
                 

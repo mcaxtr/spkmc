@@ -7,7 +7,7 @@ utilizadas no algoritmo SPKMC para modelar os tempos de recuperação e infecç�
 
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Union
 
 from spkmc.utils.numba_utils import (
     gamma_sampling,
@@ -16,12 +16,36 @@ from spkmc.utils.numba_utils import (
     compute_infection_times_exponential
 )
 
+# Importação condicional das funções GPU
+try:
+    from spkmc.utils.gpu_utils import (
+        is_gpu_available,
+        gamma_sampling_gpu,
+        get_weight_exponential_gpu,
+        compute_infection_times_gamma_gpu,
+        compute_infection_times_exponential_gpu,
+        to_numpy,
+        to_cupy
+    )
+    GPU_AVAILABLE = is_gpu_available()
+except ImportError:
+    GPU_AVAILABLE = False
+
 
 class Distribution(ABC):
     """Classe abstrata para distribuições de probabilidade usadas no SPKMC."""
     
+    def __init__(self, use_gpu: bool = False):
+        """
+        Inicializa a distribuição.
+        
+        Args:
+            use_gpu: Se True, usa GPU para aceleração (se disponível)
+        """
+        self.use_gpu = use_gpu and GPU_AVAILABLE
+    
     @abstractmethod
-    def get_recovery_weights(self, size: int) -> np.ndarray:
+    def get_recovery_weights(self, size: int) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Gera os pesos de recuperação para cada nó.
         
@@ -29,21 +53,22 @@ class Distribution(ABC):
             size: Número de nós
             
         Returns:
-            Array com os pesos de recuperação
+            Array com os pesos de recuperação (NumPy ou CuPy)
         """
         pass
     
     @abstractmethod
-    def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    def get_infection_times(self, recovery_times: Union[np.ndarray, "cp.ndarray"],
+                           edges: np.ndarray) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Calcula os tempos de infecção para cada aresta.
         
         Args:
-            recovery_times: Tempos de recuperação para cada nó
+            recovery_times: Tempos de recuperação para cada nó (NumPy ou CuPy)
             edges: Arestas do grafo como matriz (u, v)
             
         Returns:
-            Array com os tempos de infecção
+            Array com os tempos de infecção (NumPy ou CuPy)
         """
         pass
     
@@ -80,7 +105,7 @@ class Distribution(ABC):
 class GammaDistribution(Distribution):
     """Implementação da distribuição Gamma para o SPKMC."""
     
-    def __init__(self, shape: float, scale: float, lmbd: float = 1.0):
+    def __init__(self, shape: float, scale: float, lmbd: float = 1.0, use_gpu: bool = False):
         """
         Inicializa a distribuição Gamma.
         
@@ -88,12 +113,14 @@ class GammaDistribution(Distribution):
             shape: Parâmetro de forma da distribuição Gamma
             scale: Parâmetro de escala da distribuição Gamma
             lmbd: Parâmetro lambda para tempos de infecção (padrão: 1.0)
+            use_gpu: Se True, usa GPU para aceleração (se disponível)
         """
+        super().__init__(use_gpu)
         self.shape = shape
         self.scale = scale
         self.lmbd = lmbd
     
-    def get_recovery_weights(self, size: int) -> np.ndarray:
+    def get_recovery_weights(self, size: int) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Gera os pesos de recuperação usando a distribuição Gamma.
         
@@ -101,23 +128,33 @@ class GammaDistribution(Distribution):
             size: Número de nós
             
         Returns:
-            Array com os pesos de recuperação
+            Array com os pesos de recuperação (NumPy ou CuPy)
         """
-        return gamma_sampling(self.shape, self.scale, size)
+        if self.use_gpu:
+            return gamma_sampling_gpu(self.shape, self.scale, size)
+        else:
+            return gamma_sampling(self.shape, self.scale, size)
     
-    def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    def get_infection_times(self, recovery_times: Union[np.ndarray, "cp.ndarray"],
+                           edges: np.ndarray) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Calcula os tempos de infecção usando a distribuição Gamma.
         
         Args:
-            recovery_times: Tempos de recuperação para cada nó
+            recovery_times: Tempos de recuperação para cada nó (NumPy ou CuPy)
             edges: Arestas do grafo como matriz (u, v)
             
         Returns:
-            Array com os tempos de infecção
+            Array com os tempos de infecção (NumPy ou CuPy)
         """
         # Nota: Atualmente usando exponencial para infecção, mesmo com recuperação gamma
-        return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
+        if self.use_gpu:
+            # Converter edges para CuPy se necessário
+            if not isinstance(edges, type(recovery_times)):
+                edges = to_cupy(edges)
+            return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
+        else:
+            return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
     
     def get_distribution_name(self) -> str:
         """
@@ -155,18 +192,20 @@ class GammaDistribution(Distribution):
 class ExponentialDistribution(Distribution):
     """Implementação da distribuição Exponencial para o SPKMC."""
     
-    def __init__(self, mu: float, lmbd: float):
+    def __init__(self, mu: float, lmbd: float, use_gpu: bool = False):
         """
         Inicializa a distribuição Exponencial.
         
         Args:
             mu: Parâmetro mu para tempos de recuperação
             lmbd: Parâmetro lambda para tempos de infecção
+            use_gpu: Se True, usa GPU para aceleração (se disponível)
         """
+        super().__init__(use_gpu)
         self.mu = mu
         self.lmbd = lmbd
     
-    def get_recovery_weights(self, size: int) -> np.ndarray:
+    def get_recovery_weights(self, size: int) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Gera os pesos de recuperação usando a distribuição Exponencial.
         
@@ -174,22 +213,32 @@ class ExponentialDistribution(Distribution):
             size: Número de nós
             
         Returns:
-            Array com os pesos de recuperação
+            Array com os pesos de recuperação (NumPy ou CuPy)
         """
-        return get_weight_exponential(self.mu, size)
+        if self.use_gpu:
+            return get_weight_exponential_gpu(self.mu, size)
+        else:
+            return get_weight_exponential(self.mu, size)
     
-    def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    def get_infection_times(self, recovery_times: Union[np.ndarray, "cp.ndarray"],
+                           edges: np.ndarray) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Calcula os tempos de infecção usando a distribuição Exponencial.
         
         Args:
-            recovery_times: Tempos de recuperação para cada nó
+            recovery_times: Tempos de recuperação para cada nó (NumPy ou CuPy)
             edges: Arestas do grafo como matriz (u, v)
             
         Returns:
-            Array com os tempos de infecção
+            Array com os tempos de infecção (NumPy ou CuPy)
         """
-        return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
+        if self.use_gpu:
+            # Converter edges para CuPy se necessário
+            if not isinstance(edges, type(recovery_times)):
+                edges = to_cupy(edges)
+            return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
+        else:
+            return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
     
     def get_distribution_name(self) -> str:
         """
@@ -223,12 +272,13 @@ class ExponentialDistribution(Distribution):
         }
 
 
-def create_distribution(dist_type: str, **kwargs) -> Distribution:
+def create_distribution(dist_type: str, use_gpu: bool = False, **kwargs) -> Distribution:
     """
     Cria uma instância de distribuição com base no tipo e parâmetros fornecidos.
     
     Args:
         dist_type: Tipo de distribuição ('gamma' ou 'exponential')
+        use_gpu: Se True, usa GPU para aceleração (se disponível)
         **kwargs: Parâmetros específicos da distribuição
     
     Returns:
@@ -237,16 +287,20 @@ def create_distribution(dist_type: str, **kwargs) -> Distribution:
     Raises:
         ValueError: Se o tipo de distribuição for desconhecido
     """
+    if use_gpu and not GPU_AVAILABLE:
+        print("GPU solicitada, mas não disponível. Usando CPU.")
+        use_gpu = False
+        
     if dist_type.lower() == "gamma":
         shape = kwargs.get("shape", 2.0)
         scale = kwargs.get("scale", 1.0)
         lmbd = kwargs.get("lambda", 1.0)
-        return GammaDistribution(shape=shape, scale=scale, lmbd=lmbd)
+        return GammaDistribution(shape=shape, scale=scale, lmbd=lmbd, use_gpu=use_gpu)
     
     elif dist_type.lower() == "exponential":
         mu = kwargs.get("mu", 1.0)
         lmbd = kwargs.get("lambda", 1.0)
-        return ExponentialDistribution(mu=mu, lmbd=lmbd)
+        return ExponentialDistribution(mu=mu, lmbd=lmbd, use_gpu=use_gpu)
     
     else:
         raise ValueError(f"Tipo de distribuição desconhecido: {dist_type}")
