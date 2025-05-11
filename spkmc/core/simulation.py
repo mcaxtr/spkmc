@@ -19,15 +19,17 @@ from spkmc.core.networks import NetworkFactory
 from spkmc.io.results import ResultManager
 from spkmc.utils.numba_utils import calculate
 
-# Importação condicional das funções GPU
-try:
-    from spkmc.utils.gpu_utils import (
-        is_gpu_available, calculate_gpu, calculate_gpu_vectorized,
-        get_dist_sparse_gpu, to_numpy, to_cupy, timing_decorator
-    )
-    GPU_AVAILABLE = is_gpu_available()
-except ImportError:
-    GPU_AVAILABLE = False
+# Importação das funções GPU
+from spkmc.utils.gpu_utils import (
+    CUPY_AVAILABLE,
+    GPU_AVAILABLE,
+    calculate_gpu,
+    calculate_gpu_vectorized,
+    get_dist_sparse_gpu,
+    to_numpy,
+    to_cupy,
+    timing_decorator
+)
 
 
 class SPKMC:
@@ -65,7 +67,7 @@ class SPKMC:
                 self.use_gpu = False
                 self.execution_mode = "CPU"
         elif use_gpu and not GPU_AVAILABLE:
-            print("GPU solicitada, mas não disponível. Usando CPU.")
+            pass
     
     @timing_decorator
     def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[Union[np.ndarray, "cp.ndarray"], Union[np.ndarray, "cp.ndarray"]]:

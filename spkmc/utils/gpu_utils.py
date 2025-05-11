@@ -9,15 +9,49 @@ import numpy as np
 from typing import Optional, Tuple, Union, List
 import time
 
-# Importação condicional de CuPy
+# Variáveis globais para controle de GPU
+CUPY_AVAILABLE = False
+GPU_AVAILABLE = False
+
+# Mensagem de status da GPU (será impressa apenas uma vez durante a inicialização)
+gpu_status_message = ""
+
+# Importação condicional de CuPy e verificação única de disponibilidade
 try:
     import cupy as cp
     from cupyx.scipy.sparse import csr_matrix as cp_csr_matrix
     from cupyx.scipy.sparse.csgraph import dijkstra as cp_dijkstra
+    
+    # Verificar se o CuPy está instalado
     CUPY_AVAILABLE = True
+    
+    # Verificar se o CUDA está disponível
+    if cp.cuda.is_available():
+        # Verificar se há dispositivos CUDA
+        device_count = cp.cuda.runtime.getDeviceCount()
+        if device_count > 0:
+            # Verificar se pelo menos um dispositivo tem memória disponível
+            for i in range(device_count):
+                try:
+                    device_props = cp.cuda.runtime.getDeviceProperties(i)
+                    if device_props['totalGlobalMem'] > 0:
+                        # Definir o dispositivo atual
+                        cp.cuda.Device(i).use()
+                        # Testar uma operação simples
+                        test_array = cp.array([1, 2, 3])
+                        test_result = cp.sum(test_array)
+                        if test_result == 6:
+                            GPU_AVAILABLE = True
+                            break
+                except Exception:
+                    continue
+        
+        if not GPU_AVAILABLE:
+            gpu_status_message = "CUDA disponível, mas nenhum dispositivo GPU utilizável encontrado."
+    else:
+        gpu_status_message = "CUDA não está disponível no sistema."
 except ImportError:
-    CUPY_AVAILABLE = False
-
+    gpu_status_message = "CuPy não está instalado. GPU não disponível."
 
 # Função para medir o tempo de execução
 def timing_decorator(func):
@@ -41,55 +75,55 @@ def timing_decorator(func):
 
 def is_gpu_available() -> bool:
     """
-    Verifica se CuPy está instalado e se há GPUs disponíveis.
+    Retorna o status de disponibilidade da GPU.
+    Esta função apenas retorna o valor pré-calculado durante a importação do módulo.
     
     Returns:
-        True se CuPy estiver instalado e houver GPUs disponíveis, False caso contrário
+        True se a GPU estiver disponível, False caso contrário
     """
-    if not CUPY_AVAILABLE:
-        print("CuPy não está instalado. GPU não disponível.")
-        return False
+    return GPU_AVAILABLE
+
+
+def print_gpu_status():
+    """
+    Imprime o status atual da GPU.
+    """
+    global gpu_status_message
+    
+    # Se temos uma mensagem de erro/status, exibi-la
+    if gpu_status_message:
+        print(gpu_status_message)
+        return
+    
+    if not GPU_AVAILABLE:
+        print("GPU não disponível para uso.")
+        return
     
     try:
-        # Verificar se o CUDA está disponível
-        cuda_available = cp.cuda.is_available()
-        if not cuda_available:
-            print("CUDA não está disponível no sistema.")
-            return False
-        
-        # Verificar se há dispositivos CUDA disponíveis
         device_count = cp.cuda.runtime.getDeviceCount()
-        if device_count == 0:
-            print("Nenhum dispositivo CUDA encontrado.")
-            return False
+        print(f"GPU disponível: {device_count} dispositivo(s) CUDA encontrado(s).")
         
-        # Se chegou até aqui, pelo menos um dispositivo CUDA está disponível
-        print(f"Encontrados {device_count} dispositivo(s) CUDA.")
+        # Mostrar informações do dispositivo atual
+        current_device = cp.cuda.Device()
+        props = cp.cuda.runtime.getDeviceProperties(current_device.id)
+        print(f"Dispositivo atual: {props['name'].decode()} com {props['totalGlobalMem'] / (1024**3):.2f} GB")
         
-        # Verificar a memória disponível em pelo menos um dispositivo
-        for i in range(device_count):
-            try:
-                device_props = cp.cuda.runtime.getDeviceProperties(i)
-                if device_props['totalGlobalMem'] > 0:
-                    print(f"GPU disponível: {device_props['name'].decode()} com {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
-                    # Definir o dispositivo atual para garantir que ele seja usado
-                    cp.cuda.Device(i).use()
-                    # Testar uma operação simples para confirmar que a GPU está funcionando
-                    test_array = cp.array([1, 2, 3])
-                    test_result = cp.sum(test_array)
-                    if test_result == 6:
-                        print("Teste de operação GPU bem-sucedido.")
-                        return True
-                    else:
-                        print("Teste de operação GPU falhou.")
-            except Exception as e:
-                print(f"Erro ao verificar propriedades do dispositivo {i}: {e}")
+        # Versão do CUDA
+        cuda_version = cp.cuda.runtime.runtimeGetVersion()
+        major = cuda_version // 1000
+        minor = (cuda_version % 1000) // 10
+        print(f"Versão CUDA: {major}.{minor}")
         
-        print("Nenhum dispositivo CUDA com memória disponível encontrado.")
-        return False
+        # Versão do driver
+        try:
+            driver_version = cp.cuda.runtime.driverGetVersion()
+            driver_major = driver_version // 1000
+            driver_minor = (driver_version % 1000) // 10
+            print(f"Versão do driver: {driver_major}.{driver_minor}")
+        except:
+            print("Não foi possível obter a versão do driver")
     except Exception as e:
-        print(f"Erro ao verificar disponibilidade da GPU: {e}")
-        return False
+        print(f"Erro ao obter informações da GPU: {e}")
 
 
 @timing_decorator
@@ -100,8 +134,11 @@ def print_gpu_info():
     Returns:
         bool: True se a GPU estiver disponível, False caso contrário
     """
+    global gpu_status_message
+    
     if not CUPY_AVAILABLE:
-        print("CuPy não está instalado. Não é possível obter informações da GPU.")
+        if gpu_status_message:
+            print(gpu_status_message)
         return False
     
     try:
@@ -194,7 +231,7 @@ def to_cupy(array: Union[np.ndarray, "cp.ndarray"]) -> "cp.ndarray":
         Array CuPy
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     if isinstance(array, np.ndarray):
         return cp.array(array)
@@ -214,7 +251,7 @@ def gamma_sampling_gpu(shape: float, scale: float, size: Optional[int] = None) -
         Amostra da distribuição Gamma como array CuPy
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     return cp.random.gamma(shape, scale, size)
 
@@ -231,7 +268,7 @@ def get_weight_exponential_gpu(param: float, size: Optional[int] = None) -> "cp.
         Amostra da distribuição Exponencial como array CuPy
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     return cp.random.exponential(1 / param, size)
 
@@ -250,7 +287,7 @@ def compute_infection_times_gamma_gpu(shape: float, scale: float, recovery_times
         Tempos de infecção para cada aresta como array CuPy
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     num_edges = edges.shape[0]
     infection_times = cp.empty(num_edges, dtype=cp.float64)
@@ -284,7 +321,7 @@ def compute_infection_times_exponential_gpu(beta: float, recovery_times: "cp.nda
         Tempos de infecção para cada aresta como array CuPy
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     num_edges = edges.shape[0]
     infection_times = cp.empty(num_edges, dtype=cp.float64)
@@ -318,7 +355,7 @@ def get_states_gpu(time_to_infect: "cp.ndarray", time_to_recover: "cp.ndarray", 
         Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó (arrays CuPy)
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     S = time_to_infect > time
     I = ~S & (time_to_infect + time_to_recover > time)
@@ -342,7 +379,7 @@ def calculate_gpu(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndar
         Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado (arrays CuPy)
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     S_time = cp.zeros(steps, dtype=cp.float64)
     I_time = cp.zeros(steps, dtype=cp.float64)
@@ -376,7 +413,7 @@ def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_time
         Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado (arrays CuPy)
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     # Verificar e converter tipos de dados para garantir compatibilidade
     if time_to_infect.dtype != cp.float64:
@@ -446,7 +483,7 @@ def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sour
         Array com as distâncias mínimas (array CuPy)
     """
     if not CUPY_AVAILABLE:
-        raise RuntimeError("CuPy não está disponível")
+        raise RuntimeError("GPU não disponível para operações")
     
     # Verificar e converter tipos de dados para garantir compatibilidade
     if edges.dtype != cp.int32:

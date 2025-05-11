@@ -16,21 +16,18 @@ from spkmc.utils.numba_utils import (
     compute_infection_times_exponential
 )
 
-# Importação condicional das funções GPU
-try:
-    from spkmc.utils.gpu_utils import (
-        is_gpu_available,
-        gamma_sampling_gpu,
-        get_weight_exponential_gpu,
-        compute_infection_times_gamma_gpu,
-        compute_infection_times_exponential_gpu,
-        to_numpy,
-        to_cupy,
-        timing_decorator
-    )
-    GPU_AVAILABLE = is_gpu_available()
-except ImportError:
-    GPU_AVAILABLE = False
+# Importação das funções GPU
+from spkmc.utils.gpu_utils import (
+    CUPY_AVAILABLE,
+    GPU_AVAILABLE,
+    gamma_sampling_gpu,
+    get_weight_exponential_gpu,
+    compute_infection_times_gamma_gpu,
+    compute_infection_times_exponential_gpu,
+    to_numpy,
+    to_cupy,
+    timing_decorator
+)
 
 
 class Distribution(ABC):
@@ -341,7 +338,6 @@ def create_distribution(dist_type: str, use_gpu: bool = False, **kwargs) -> Dist
         ValueError: Se o tipo de distribuição for desconhecido
     """
     if use_gpu and not GPU_AVAILABLE:
-        print("GPU solicitada, mas não disponível. Usando CPU.")
         use_gpu = False
     
     # Adicionar informação sobre o modo de execução aos parâmetros
