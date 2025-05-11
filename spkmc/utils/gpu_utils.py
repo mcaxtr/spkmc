@@ -141,9 +141,13 @@ try:
         I_time = cp.zeros(steps)
         R_time = cp.zeros(steps)
         
+        # Converter arrays NumPy para CuPy uma única vez fora do loop
+        time_to_infect_gpu = cp.asarray(time_to_infect)
+        recovery_times_gpu = cp.asarray(recovery_times)
+        
         for idx, t in enumerate(time_steps):
             S, I, R = get_states_gpu(
-                cp.asarray(time_to_infect), cp.asarray(recovery_times), t
+                time_to_infect_gpu, recovery_times_gpu, t
             )
             S_time[idx] = cp.sum(S) / N
             I_time[idx] = cp.sum(I) / N

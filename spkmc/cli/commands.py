@@ -207,6 +207,10 @@ def run(simple, gpu, network_type, dist_type, shape, scale, mu, lambda_val, expo
     network_type_upper = network_type.upper()
     dist_type_cap = dist_type.capitalize()
     
+    # Determinar o modo de execução (CPU ou GPU)
+    execution_mode = "GPU" if use_gpu else "CPU"
+    
+    console.print(f"  {format_param('Modo de execução', execution_mode)}")
     console.print(f"  {format_param('Rede', network_type_upper)}")
     console.print(f"  {format_param('Distribuição', dist_type_cap)}")
     console.print(f"  {format_param('Nós', nodes)}")
@@ -895,7 +899,13 @@ def batch(simple, gpu, scenarios_file, output_dir, prefix, compare, no_plot, sav
                 
                 # Exibir informações do cenário
                 if verbose:
+                    # Verificar se a GPU foi solicitada (globalmente ou localmente)
+                    use_gpu = gpu or os.environ.get("SPKMC_USE_GPU") == "1"
+                    # Determinar o modo de execução (CPU ou GPU)
+                    execution_mode = "GPU" if use_gpu else "CPU"
+                    
                     console.print(format_title(f"Cenário {scenario_num}/{len(scenarios)}: {scenario_label}"))
+                    console.print(f"  {format_param('Modo de execução', execution_mode)}")
                     console.print(f"  {format_param('Rede', network_type.upper())}")
                     console.print(f"  {format_param('Distribuição', dist_type.capitalize())}")
                     console.print(f"  {format_param('Nós', nodes)}")
