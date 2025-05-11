@@ -159,9 +159,26 @@ def run(simple, gpu, network_type, dist_type, shape, scale, mu, lambda_val, expo
     # Verificar disponibilidade de GPU
     if gpu:
         try:
-            from spkmc.utils.gpu_utils import is_gpu_available
+            from spkmc.utils.gpu_utils import is_gpu_available, print_gpu_info
+            log_debug("Verificando disponibilidade de GPU...", verbose_only=False)
+            
+            # Tentar importar CuPy para verificar se está instalado
+            try:
+                import cupy
+                log_debug(f"CuPy instalado: versão {cupy.__version__}", verbose_only=False)
+            except ImportError:
+                log_warning("CuPy não está instalado. Não é possível usar GPU.")
+                gpu = False
+                
+            # Verificar disponibilidade de GPU
             gpu_available = is_gpu_available()
-            if not gpu_available:
+            if gpu_available:
+                log_debug("GPU disponível para uso.", verbose_only=False)
+                try:
+                    print_gpu_info()
+                except Exception as e:
+                    log_warning(f"Erro ao imprimir informações da GPU: {e}")
+            else:
                 log_warning("GPU solicitada, mas não disponível. Usando CPU.")
                 gpu = False
         except ImportError:

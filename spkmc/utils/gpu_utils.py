@@ -48,6 +48,12 @@ def is_gpu_available() -> bool:
     """
     if not CUPY_AVAILABLE:
         return False
+    
+    try:
+        return cp.cuda.is_available()
+    except Exception as e:
+        print(f"Erro ao verificar disponibilidade da GPU: {e}")
+        return False
 
 
 def print_gpu_info():
