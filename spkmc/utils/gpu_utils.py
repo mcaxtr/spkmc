@@ -63,13 +63,25 @@ def is_gpu_available() -> bool:
             print("Nenhum dispositivo CUDA encontrado.")
             return False
         
+        # Se chegou até aqui, pelo menos um dispositivo CUDA está disponível
+        print(f"Encontrados {device_count} dispositivo(s) CUDA.")
+        
         # Verificar a memória disponível em pelo menos um dispositivo
         for i in range(device_count):
             try:
                 device_props = cp.cuda.runtime.getDeviceProperties(i)
                 if device_props['totalGlobalMem'] > 0:
                     print(f"GPU disponível: {device_props['name'].decode()} com {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
-                    return True
+                    # Definir o dispositivo atual para garantir que ele seja usado
+                    cp.cuda.Device(i).use()
+                    # Testar uma operação simples para confirmar que a GPU está funcionando
+                    test_array = cp.array([1, 2, 3])
+                    test_result = cp.sum(test_array)
+                    if test_result == 6:
+                        print("Teste de operação GPU bem-sucedido.")
+                        return True
+                    else:
+                        print("Teste de operação GPU falhou.")
             except Exception as e:
                 print(f"Erro ao verificar propriedades do dispositivo {i}: {e}")
         

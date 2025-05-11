@@ -23,7 +23,7 @@ from spkmc.utils.numba_utils import calculate
 try:
     from spkmc.utils.gpu_utils import (
         is_gpu_available, calculate_gpu, calculate_gpu_vectorized,
-        get_dist_sparse_gpu, to_numpy, to_cupy
+        get_dist_sparse_gpu, to_numpy, to_cupy, timing_decorator
     )
     GPU_AVAILABLE = is_gpu_available()
 except ImportError:

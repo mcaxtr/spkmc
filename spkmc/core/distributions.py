@@ -25,7 +25,8 @@ try:
         compute_infection_times_gamma_gpu,
         compute_infection_times_exponential_gpu,
         to_numpy,
-        to_cupy
+        to_cupy,
+        timing_decorator
     )
     GPU_AVAILABLE = is_gpu_available()
 except ImportError:
