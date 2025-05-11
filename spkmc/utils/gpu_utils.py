@@ -102,9 +102,10 @@ try:
         G.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight')
         result = cugraph.sssp(G, source=super_node, weight='weight')
 
-        # 8. Extração das distâncias de volta ao host
-        dist_gpu = result['distance'].to_numpy()[:N]
-        return dist_gpu, recovery_times.get()
+        # 8. Extração das distâncias
+        # Manter os dados na GPU como arrays CuPy
+        dist_gpu = cp.asarray(result['distance'].to_array()[:N])
+        return dist_gpu, recovery_times
     
     def get_states_gpu(time_to_infect, recovery_times, t):
         """
@@ -135,8 +136,8 @@ try:
         
         Args:
             N: Número de nós no grafo
-            time_to_infect: Tempo para infecção de cada nó
-            recovery_times: Tempo para recuperação de cada nó
+            time_to_infect: Tempo para infecção de cada nó (array NumPy ou CuPy)
+            recovery_times: Tempo para recuperação de cada nó (array NumPy ou CuPy)
             time_steps: Array com os passos de tempo
             steps: Número de passos de tempo
             
@@ -147,11 +148,21 @@ try:
         I_time = cp.zeros(steps)
         R_time = cp.zeros(steps)
         
-        # Converter arrays NumPy para CuPy uma única vez fora do loop
-        time_to_infect_gpu = cp.asarray(time_to_infect)
-        recovery_times_gpu = cp.asarray(recovery_times)
+        # Verificar se os arrays já são CuPy, caso contrário, converter
+        if not isinstance(time_to_infect, cp.ndarray):
+            time_to_infect_gpu = cp.asarray(time_to_infect)
+        else:
+            time_to_infect_gpu = time_to_infect
+            
+        if not isinstance(recovery_times, cp.ndarray):
+            recovery_times_gpu = cp.asarray(recovery_times)
+        else:
+            recovery_times_gpu = recovery_times
+            
+        # Converter time_steps para CuPy
+        time_steps_gpu = cp.asarray(time_steps)
         
-        for idx, t in enumerate(time_steps):
+        for idx, t in enumerate(time_steps_gpu):
             S, I, R = get_states_gpu(
                 time_to_infect_gpu, recovery_times_gpu, t
             )
@@ -159,6 +170,7 @@ try:
             I_time[idx] = cp.sum(I) / N
             R_time[idx] = cp.sum(R) / N
             
+        # Converter de volta para NumPy apenas no final
         return S_time.get(), I_time.get(), R_time.get()
     
 except ImportError:
