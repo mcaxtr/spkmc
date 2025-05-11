@@ -46,8 +46,8 @@ dev = [
 ]
 gpu = [
     "cupy-cuda12x>=12.0.0",
-    "cudf",
-    "cugraph",
+    "cudf-cu12",
+    "cugraph-cu12",
 ]
 
 [project.scripts]
