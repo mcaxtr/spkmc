@@ -260,8 +260,8 @@ class SPKMC:
             
             # Executa as simulações mantendo os dados na GPU
             for run in tqdm(range(num_runs), desc="Execuções"):
-                # Cria a rede
-                G = NetworkFactory.create_erdos_renyi(N, k_avg)
+                # Cria a rede usando GPU
+                G = NetworkFactory.create_erdos_renyi(N, k_avg, use_gpu=self.use_gpu)
                 
                 # Configura os nós inicialmente infectados
                 init_infect = int(N * initial_perc)
@@ -310,7 +310,7 @@ class SPKMC:
             # Executa as simulações
             for run in tqdm(range(num_runs), desc="Execuções"):
                 # Cria a rede
-                G = NetworkFactory.create_erdos_renyi(N, k_avg)
+                G = NetworkFactory.create_erdos_renyi(N, k_avg, use_gpu=False)
                 
                 # Configura os nós inicialmente infectados
                 init_infect = int(N * initial_perc)
@@ -463,7 +463,7 @@ class SPKMC:
             # Executa as simulações
             for run in tqdm(range(num_runs), desc=f"Execuções (expoente={exponent})"):
                 # Cria a rede
-                G = NetworkFactory.create_complex_network(N, exponent, k_avg)
+                G = NetworkFactory.create_complex_network(N, exponent, k_avg, use_gpu=False)
                 
                 # Configura os nós inicialmente infectados
                 init_infect = int(N * initial_perc)
@@ -544,7 +544,7 @@ class SPKMC:
                     print(f"Erro ao carregar resultados existentes: {e}")
         
         # Cria a rede
-        G = NetworkFactory.create_complete_graph(N)
+        G = NetworkFactory.create_complete_graph(N, use_gpu=self.use_gpu)
         
         # Configura os nós inicialmente infectados
         init_infect = int(N * initial_perc)
@@ -591,7 +591,12 @@ class SPKMC:
         Raises:
             ValueError: Se o tipo de rede for desconhecido
         """
+        from spkmc.cli.formatting import log_debug
+        
         network_type = network_type.lower()
+        
+        if self.use_gpu:
+            log_debug("SPKMC: Usando GPU para simulação")
         
         # Parâmetros comuns
         N = kwargs.get("N", 1000)

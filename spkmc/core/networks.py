@@ -7,7 +7,7 @@ utilizadas nas simulações SPKMC, como redes Erdos-Renyi, redes complexas e gra
 
 import networkx as nx
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 
 class NetworkFactory:
@@ -16,12 +16,13 @@ class NetworkFactory:
     NETWORK_TYPES = ["er", "cn", "cg"]  # Tipos de rede suportados
     
     @staticmethod
-    def create_network(network_type: str, **kwargs) -> nx.DiGraph:
+    def create_network(network_type: str, use_gpu: bool = False, **kwargs) -> nx.DiGraph:
         """
         Cria uma rede com base no tipo e parâmetros fornecidos.
         
         Args:
             network_type: Tipo de rede ('er', 'cn', 'cg')
+            use_gpu: Se True, usa GPU para criar a rede quando possível
             **kwargs: Parâmetros específicos do tipo de rede
         
         Returns:
@@ -35,35 +36,57 @@ class NetworkFactory:
         if network_type == "er":
             N = kwargs.get("N", 1000)
             k_avg = kwargs.get("k_avg", 10)
-            return NetworkFactory.create_erdos_renyi(N, k_avg)
+            return NetworkFactory.create_erdos_renyi(N, k_avg, use_gpu)
         
         elif network_type == "cn":
             N = kwargs.get("N", 1000)
             exponent = kwargs.get("exponent", 2.5)
             k_avg = kwargs.get("k_avg", 10)
-            return NetworkFactory.create_complex_network(N, exponent, k_avg)
+            return NetworkFactory.create_complex_network(N, exponent, k_avg, use_gpu)
         
         elif network_type == "cg":
             N = kwargs.get("N", 1000)
-            return NetworkFactory.create_complete_graph(N)
+            return NetworkFactory.create_complete_graph(N, use_gpu)
         
         else:
             raise ValueError(f"Tipo de rede desconhecido: {network_type}")
     
     @staticmethod
-    def create_erdos_renyi(N: int, k_avg: float) -> nx.DiGraph:
+    def create_erdos_renyi(N: int, k_avg: float, use_gpu: bool = False) -> nx.DiGraph:
         """
         Cria uma rede Erdos-Renyi.
         
         Args:
             N: Número de nós
             k_avg: Grau médio
+            use_gpu: Se True, usa GPU para criar a rede
             
         Returns:
             Grafo direcionado Erdos-Renyi
         """
-        p = k_avg / (N - 1)
-        return nx.erdos_renyi_graph(N, p, directed=True)
+        if use_gpu:
+            try:
+                from spkmc.utils.network_gpu_utils import create_erdos_renyi_gpu
+                from spkmc.cli.formatting import log_debug
+                
+                log_debug("SPKMC: Usando GPU para criar rede Erdos-Renyi")
+                n_nodes, edges = create_erdos_renyi_gpu(N, k_avg)
+                
+                # Cria o grafo a partir das arestas
+                G = nx.DiGraph()
+                G.add_nodes_from(range(n_nodes))
+                G.add_edges_from(edges)
+                return G
+            except Exception as e:
+                from spkmc.cli.formatting import log_debug
+                log_debug(f"SPKMC: Erro ao usar GPU para criar rede Erdos-Renyi: {e}. Usando CPU.")
+                # Fallback para CPU em caso de erro
+                p = k_avg / (N - 1)
+                return nx.erdos_renyi_graph(N, p, directed=True)
+        else:
+            # Versão CPU original
+            p = k_avg / (N - 1)
+            return nx.erdos_renyi_graph(N, p, directed=True)
     
     @staticmethod
     def generate_discrete_power_law(n: int, alpha: float, xmin: int, xmax: float) -> np.ndarray:
@@ -91,7 +114,7 @@ class NetworkFactory:
             return power_law_seq
     
     @staticmethod
-    def create_complex_network(N: int, exponent: float, k_avg: float) -> nx.DiGraph:
+    def create_complex_network(N: int, exponent: float, k_avg: float, use_gpu: bool = False) -> nx.DiGraph:
         """
         Cria uma rede complexa com distribuição de grau seguindo lei de potência.
         
@@ -99,33 +122,84 @@ class NetworkFactory:
             N: Número de nós
             exponent: Expoente da lei de potência
             k_avg: Grau médio
+            use_gpu: Se True, usa GPU para criar a rede
             
         Returns:
             Grafo direcionado complexo
         """
-        degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
-        degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
-        
-        if sum(degree_sequence) % 2 != 0:
-            degree_sequence[np.argmin(degree_sequence)] += 1
-        
-        G = nx.configuration_model(degree_sequence)
-        G = nx.DiGraph(G)
-        G.remove_edges_from(nx.selfloop_edges(G))
-        return G
+        if use_gpu:
+            try:
+                from spkmc.utils.network_gpu_utils import create_complex_network_gpu
+                from spkmc.cli.formatting import log_debug
+                
+                log_debug("SPKMC: Usando GPU para criar rede complexa")
+                n_nodes, edges = create_complex_network_gpu(N, exponent, k_avg)
+                
+                # Cria o grafo a partir das arestas
+                G = nx.DiGraph()
+                G.add_nodes_from(range(n_nodes))
+                G.add_edges_from(edges)
+                return G
+            except Exception as e:
+                from spkmc.cli.formatting import log_debug
+                log_debug(f"SPKMC: Erro ao usar GPU para criar rede complexa: {e}. Usando CPU.")
+                # Fallback para CPU em caso de erro
+                degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
+                degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
+                
+                if sum(degree_sequence) % 2 != 0:
+                    degree_sequence[np.argmin(degree_sequence)] += 1
+                
+                G = nx.configuration_model(degree_sequence)
+                G = nx.DiGraph(G)
+                G.remove_edges_from(nx.selfloop_edges(G))
+                return G
+        else:
+            # Versão CPU original
+            degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
+            degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
+            
+            if sum(degree_sequence) % 2 != 0:
+                degree_sequence[np.argmin(degree_sequence)] += 1
+            
+            G = nx.configuration_model(degree_sequence)
+            G = nx.DiGraph(G)
+            G.remove_edges_from(nx.selfloop_edges(G))
+            return G
     
     @staticmethod
-    def create_complete_graph(N: int) -> nx.DiGraph:
+    def create_complete_graph(N: int, use_gpu: bool = False) -> nx.DiGraph:
         """
         Cria um grafo completo.
         
         Args:
             N: Número de nós
+            use_gpu: Se True, usa GPU para criar a rede
             
         Returns:
             Grafo direcionado completo
         """
-        return nx.complete_graph(N, create_using=nx.DiGraph())
+        if use_gpu:
+            try:
+                from spkmc.utils.network_gpu_utils import create_complete_graph_gpu
+                from spkmc.cli.formatting import log_debug
+                
+                log_debug("SPKMC: Usando GPU para criar grafo completo")
+                n_nodes, edges = create_complete_graph_gpu(N)
+                
+                # Cria o grafo a partir das arestas
+                G = nx.DiGraph()
+                G.add_nodes_from(range(n_nodes))
+                G.add_edges_from(edges)
+                return G
+            except Exception as e:
+                from spkmc.cli.formatting import log_debug
+                log_debug(f"SPKMC: Erro ao usar GPU para criar grafo completo: {e}. Usando CPU.")
+                # Fallback para CPU em caso de erro
+                return nx.complete_graph(N, create_using=nx.DiGraph())
+        else:
+            # Versão CPU original
+            return nx.complete_graph(N, create_using=nx.DiGraph())
     
     @staticmethod
     def get_network_info(network_type: str, **kwargs) -> Dict[str, Any]:
