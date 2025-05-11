@@ -1,0 +1,15 @@
+include LICENSE
+include README.md
+include requirements.txt
+include pyproject.toml
+include setup.cfg
+include setup.py
+include .gitignore
+
+recursive-include tests *.py
+recursive-include examples *.py *.ipynb *.md
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
