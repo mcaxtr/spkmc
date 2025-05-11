@@ -48,21 +48,30 @@ class SPKMC:
         """
         self.distribution = distribution
         self.use_gpu = use_gpu and GPU_AVAILABLE
+        self.execution_mode = "GPU" if self.use_gpu else "CPU"
         
         if self.use_gpu:
             print("Usando GPU para aceleração")
             # Imprimir informações da GPU
             try:
                 from spkmc.utils.gpu_utils import print_gpu_info
-                print_gpu_info()
+                gpu_available = print_gpu_info()
+                if not gpu_available:
+                    print("Erro ao inicializar GPU. Revertendo para CPU.")
+                    self.use_gpu = False
+                    self.execution_mode = "CPU"
             except Exception as e:
                 print(f"Erro ao imprimir informações da GPU: {e}")
+                self.use_gpu = False
+                self.execution_mode = "CPU"
         elif use_gpu and not GPU_AVAILABLE:
             print("GPU solicitada, mas não disponível. Usando CPU.")
     
-    def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    @timing_decorator
+    def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[Union[np.ndarray, "cp.ndarray"], Union[np.ndarray, "cp.ndarray"]]:
         """
         Calcula as distâncias mínimas dos nós de origem para todos os outros nós.
+        Versão otimizada que mantém os dados na GPU durante todo o processamento quando use_gpu=True.
         
         Args:
             N: Número de nós
@@ -75,43 +84,42 @@ class SPKMC:
         # Gera os tempos de recuperação
         recovery_weights = self.distribution.get_recovery_weights(N)
         
-        # Calcula os tempos de infecção
-        infection_times = self.distribution.get_infection_times(recovery_weights, edges)
-        
         if self.use_gpu:
-            # Usar a implementação GPU do algoritmo de Dijkstra
-            # Converter edges e sources para CuPy se necessário
-            if not isinstance(edges, type(recovery_weights)):
-                edges_gpu = to_cupy(edges)
-            else:
-                edges_gpu = edges
-                
-            if not isinstance(sources, type(recovery_weights)):
-                sources_gpu = to_cupy(sources)
-            else:
-                sources_gpu = sources
+            # Converter edges e sources para CuPy se ainda não estiverem
+            edges_gpu = to_cupy(edges) if not isinstance(edges, type(recovery_weights)) else edges
+            sources_gpu = to_cupy(sources) if not isinstance(sources, type(recovery_weights)) else sources
             
-            # Calcular distâncias usando a implementação GPU
+            # Calcular os tempos de infecção diretamente na GPU
+            # Isso evita transferências desnecessárias entre CPU e GPU
+            infection_times = self.distribution.get_infection_times(recovery_weights, edges_gpu)
+            
+            # Calcular distâncias usando a implementação GPU otimizada
             dist = get_dist_sparse_gpu(edges_gpu, infection_times, sources_gpu, N)
             
+            # Não converter de volta para CPU aqui, manter na GPU para processamento posterior
             return dist, recovery_weights
         else:
             # Implementação CPU original
-            # Cria a matriz esparsa do grafo
+            # Calcular os tempos de infecção
+            infection_times = self.distribution.get_infection_times(recovery_weights, edges)
+            
+            # Criar a matriz esparsa do grafo
             row_indices = edges[:, 0]
             col_indices = edges[:, 1]
             graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
             
-            # Calcula as distâncias mínimas
+            # Calcular as distâncias mínimas
             dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
             dist = np.min(dist_matrix, axis=0)
             
             return dist, recovery_weights
     
+    @timing_decorator
     def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray,
                                time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa uma única simulação SPKMC.
+        Versão otimizada que usa operações vetorizadas e mantém os dados na GPU quando use_gpu=True.
         
         Args:
             N: Número de nós
@@ -129,17 +137,30 @@ class SPKMC:
         steps = time_steps.shape[0]
         
         if self.use_gpu:
-            # Converte time_steps para CuPy se necessário
-            if not isinstance(time_steps, type(time_to_infect)):
-                time_steps = to_cupy(time_steps)
-            
-            # Usa a versão vetorizada da função calculate_gpu para melhor desempenho
-            S, I, R = calculate_gpu_vectorized(N, time_to_infect, recovery_times, time_steps)
-            
-            # Converte os resultados de volta para NumPy
-            return to_numpy(S), to_numpy(I), to_numpy(R)
+            try:
+                # Converter time_steps para CuPy se necessário
+                if not isinstance(time_steps, type(time_to_infect)):
+                    time_steps = to_cupy(time_steps)
+                
+                # Usar a versão vetorizada otimizada da função calculate_gpu
+                # Esta versão evita loops e usa operações de broadcasting para melhor desempenho
+                S, I, R = calculate_gpu_vectorized(N, time_to_infect, recovery_times, time_steps)
+                
+                # Converter os resultados de volta para NumPy apenas no final
+                # para evitar transferências desnecessárias entre CPU e GPU
+                return to_numpy(S), to_numpy(I), to_numpy(R)
+            except Exception as e:
+                print(f"Erro durante a execução em GPU: {e}")
+                print("Revertendo para execução em CPU...")
+                # Converter dados para NumPy se necessário
+                if not isinstance(time_to_infect, np.ndarray):
+                    time_to_infect = to_numpy(time_to_infect)
+                if not isinstance(recovery_times, np.ndarray):
+                    recovery_times = to_numpy(recovery_times)
+                # Usar a versão CPU da função calculate
+                return calculate(N, time_to_infect, recovery_times, time_steps, steps)
         else:
-            # Usa a versão CPU da função calculate
+            # Usar a versão CPU da função calculate
             return calculate(N, time_to_infect, recovery_times, time_steps, steps)
     
     def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray, 
@@ -268,7 +289,8 @@ class SPKMC:
                 "k_avg": k_avg,
                 "samples": samples,
                 "num_runs": num_runs,
-                "initial_perc": initial_perc
+                "initial_perc": initial_perc,
+                "execution_mode": self.execution_mode
             }
         }
         
@@ -362,7 +384,8 @@ class SPKMC:
                 "k_avg": k_avg,
                 "samples": samples,
                 "num_runs": num_runs,
-                "initial_perc": initial_perc
+                "initial_perc": initial_perc,
+                "execution_mode": self.execution_mode
             }
         }
         
@@ -424,7 +447,8 @@ class SPKMC:
                 "distribution_params": self.distribution.get_params_dict(),
                 "N": N,
                 "samples": samples,
-                "initial_perc": initial_perc
+                "initial_perc": initial_perc,
+                "execution_mode": self.execution_mode
             }
         }
         

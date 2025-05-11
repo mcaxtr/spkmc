@@ -47,48 +47,112 @@ def is_gpu_available() -> bool:
         True se CuPy estiver instalado e houver GPUs disponíveis, False caso contrário
     """
     if not CUPY_AVAILABLE:
+        print("CuPy não está instalado. GPU não disponível.")
         return False
     
     try:
-        return cp.cuda.is_available()
+        # Verificar se o CUDA está disponível
+        cuda_available = cp.cuda.is_available()
+        if not cuda_available:
+            print("CUDA não está disponível no sistema.")
+            return False
+        
+        # Verificar se há dispositivos CUDA disponíveis
+        device_count = cp.cuda.runtime.getDeviceCount()
+        if device_count == 0:
+            print("Nenhum dispositivo CUDA encontrado.")
+            return False
+        
+        # Verificar a memória disponível em pelo menos um dispositivo
+        for i in range(device_count):
+            try:
+                device_props = cp.cuda.runtime.getDeviceProperties(i)
+                if device_props['totalGlobalMem'] > 0:
+                    print(f"GPU disponível: {device_props['name'].decode()} com {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
+                    return True
+            except Exception as e:
+                print(f"Erro ao verificar propriedades do dispositivo {i}: {e}")
+        
+        print("Nenhum dispositivo CUDA com memória disponível encontrado.")
+        return False
     except Exception as e:
         print(f"Erro ao verificar disponibilidade da GPU: {e}")
         return False
 
 
+@timing_decorator
 def print_gpu_info():
     """
-    Imprime informações sobre a GPU disponível.
+    Imprime informações detalhadas sobre a GPU disponível.
+    
+    Returns:
+        bool: True se a GPU estiver disponível, False caso contrário
     """
     if not CUPY_AVAILABLE:
         print("CuPy não está instalado. Não é possível obter informações da GPU.")
-        return
+        return False
     
     try:
         if cp.cuda.is_available():
+            print("\n===== INFORMAÇÕES DA GPU =====")
             print(f"CUDA disponível: Sim")
-            print(f"Versão CUDA: {cp.cuda.runtime.runtimeGetVersion()}")
-            print(f"Número de dispositivos: {cp.cuda.runtime.getDeviceCount()}")
             
-            for i in range(cp.cuda.runtime.getDeviceCount()):
+            # Versão do CUDA
+            cuda_version = cp.cuda.runtime.runtimeGetVersion()
+            major = cuda_version // 1000
+            minor = (cuda_version % 1000) // 10
+            print(f"Versão CUDA: {major}.{minor} (build {cuda_version})")
+            
+            # Informações do driver
+            try:
+                driver_version = cp.cuda.runtime.driverGetVersion()
+                driver_major = driver_version // 1000
+                driver_minor = (driver_version % 1000) // 10
+                print(f"Versão do driver: {driver_major}.{driver_minor} (build {driver_version})")
+            except:
+                print("Não foi possível obter a versão do driver")
+            
+            # Número de dispositivos
+            device_count = cp.cuda.runtime.getDeviceCount()
+            print(f"Número de dispositivos: {device_count}")
+            
+            # Informações detalhadas de cada dispositivo
+            for i in range(device_count):
                 device_props = cp.cuda.runtime.getDeviceProperties(i)
-                print(f"Dispositivo {i}: {device_props['name'].decode()}")
+                print(f"\nDispositivo {i}: {device_props['name'].decode()}")
                 print(f"  Memória total: {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
                 print(f"  Multiprocessadores: {device_props['multiProcessorCount']}")
                 print(f"  Capacidade de computação: {device_props['major']}.{device_props['minor']}")
+                print(f"  Clock máximo: {device_props['clockRate'] / 1000:.2f} MHz")
+                print(f"  Largura de banda de memória: {2 * device_props['memoryClockRate'] * (device_props['memoryBusWidth'] / 8) / 1.0e6:.2f} GB/s")
+                print(f"  Registradores por bloco: {device_props['regsPerBlock']}")
+                print(f"  Memória compartilhada por bloco: {device_props['sharedMemPerBlock'] / 1024:.2f} KB")
+                print(f"  Tamanho máximo de grid: ({device_props['maxGridSize'][0]}, {device_props['maxGridSize'][1]}, {device_props['maxGridSize'][2]})")
+                print(f"  Tamanho máximo de bloco: ({device_props['maxThreadsDim'][0]}, {device_props['maxThreadsDim'][1]}, {device_props['maxThreadsDim'][2]})")
+                print(f"  Threads máximas por bloco: {device_props['maxThreadsPerBlock']}")
                 
-            # Mostrar uso atual de memória
-            mempool = cp.get_default_memory_pool()
-            print(f"Uso atual de memória: {mempool.used_bytes() / (1024**3):.2f} GB")
-            print(f"Memória total alocada: {mempool.total_bytes() / (1024**3):.2f} GB")
+                # Definir o dispositivo atual para obter informações de uso
+                cp.cuda.Device(i).use()
+                
+                # Mostrar uso atual de memória
+                mempool = cp.get_default_memory_pool()
+                print(f"  Uso atual de memória: {mempool.used_bytes() / (1024**3):.2f} GB")
+                print(f"  Memória total alocada: {mempool.total_bytes() / (1024**3):.2f} GB")
+                
+                # Verificar se há operações em execução
+                try:
+                    cp.cuda.Stream.null.synchronize()
+                    print(f"  Status: Pronto para operações")
+                except Exception as e:
+                    print(f"  Status: Ocupado - {str(e)}")
+            
+            print("\n==============================")
+            return True
         else:
             print("CUDA está instalado, mas não está disponível.")
+            return False
     except Exception as e:
         print(f"Erro ao obter informações da GPU: {e}")
-    
-    try:
-        return cp.cuda.is_available()
-    except Exception:
         return False
 
 
@@ -286,7 +350,9 @@ def calculate_gpu(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndar
 def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndarray",
                            time_steps: "cp.ndarray") -> Tuple["cp.ndarray", "cp.ndarray", "cp.ndarray"]:
     """
-    Versão vetorizada da função calculate_gpu que evita loops sequenciais.
+    Versão otimizada e vetorizada da função calculate_gpu que evita loops sequenciais.
+    Utiliza operações de broadcasting para calcular os estados para todos os passos de tempo de uma vez,
+    reduzindo significativamente o tempo de processamento.
     
     Args:
         N: Número de nós no grafo
@@ -300,28 +366,54 @@ def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_time
     if not CUPY_AVAILABLE:
         raise RuntimeError("CuPy não está disponível")
     
+    # Verificar e converter tipos de dados para garantir compatibilidade
+    if time_to_infect.dtype != cp.float64:
+        time_to_infect = time_to_infect.astype(cp.float64)
+    
+    if recovery_times.dtype != cp.float64:
+        recovery_times = recovery_times.astype(cp.float64)
+    
+    if time_steps.dtype != cp.float64:
+        time_steps = time_steps.astype(cp.float64)
+    
     steps = len(time_steps)
     
-    # Criar matrizes para armazenar os resultados
-    S_time = cp.zeros(steps, dtype=cp.float64)
-    I_time = cp.zeros(steps, dtype=cp.float64)
-    R_time = cp.zeros(steps, dtype=cp.float64)
+    # Pré-alocar memória para os resultados
+    S_time = cp.empty(steps, dtype=cp.float64)
+    I_time = cp.empty(steps, dtype=cp.float64)
+    R_time = cp.empty(steps, dtype=cp.float64)
     
-    # Expandir time_to_infect e recovery_times para comparação com time_steps
+    # Usar reshape para preparar os arrays para broadcasting
     # Isso permite operações vetorizadas em vez de loops
-    expanded_time_to_infect = time_to_infect.reshape(-1, 1)  # Coluna
-    expanded_recovery_times = recovery_times.reshape(-1, 1)  # Coluna
-    expanded_time_steps = time_steps.reshape(1, -1)  # Linha
+    expanded_time_to_infect = time_to_infect.reshape(-1, 1)  # Coluna: (N, 1)
+    expanded_recovery_times = recovery_times.reshape(-1, 1)  # Coluna: (N, 1)
+    expanded_time_steps = time_steps.reshape(1, -1)          # Linha: (1, steps)
     
-    # Calcular estados para todos os passos de tempo de uma vez
+    # Calcular a matriz de recuperação uma vez para reutilização
+    recovery_end_times = expanded_time_to_infect + expanded_recovery_times  # (N, 1)
+    
+    # Calcular estados para todos os passos de tempo de uma vez usando broadcasting
+    # Isso cria matrizes booleanas de tamanho (N, steps)
     S_matrix = expanded_time_to_infect > expanded_time_steps
-    I_matrix = (~S_matrix) & (expanded_time_to_infect + expanded_recovery_times > expanded_time_steps)
-    R_matrix = (~S_matrix) & (~I_matrix)
+    I_matrix = (~S_matrix) & (recovery_end_times > expanded_time_steps)
     
-    # Calcular proporções para cada passo de tempo
-    S_time = cp.sum(S_matrix, axis=0) / N
-    I_time = cp.sum(I_matrix, axis=0) / N
-    R_time = cp.sum(R_matrix, axis=0) / N
+    # Não precisamos calcular R_matrix explicitamente, podemos usar a propriedade S + I + R = 1
+    # R_matrix = (~S_matrix) & (~I_matrix)
+    
+    # Calcular proporções para cada passo de tempo usando soma ao longo do eixo dos nós
+    # e dividindo pelo número total de nós
+    S_time = cp.sum(S_matrix, axis=0, dtype=cp.float64) / N
+    I_time = cp.sum(I_matrix, axis=0, dtype=cp.float64) / N
+    
+    # Calcular R_time usando a propriedade S + I + R = 1
+    # Isso é mais eficiente do que calcular R_matrix explicitamente
+    R_time = 1.0 - S_time - I_time
+    
+    # Liberar memória intermediária
+    del S_matrix, I_matrix, expanded_time_to_infect, expanded_recovery_times, recovery_end_times
+    
+    # Sincronizar para garantir que todas as operações foram concluídas
+    cp.cuda.Stream.null.synchronize()
     
     return S_time, I_time, R_time
 
@@ -330,6 +422,7 @@ def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_time
 def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sources: "cp.ndarray", N: int) -> "cp.ndarray":
     """
     Calcula as distâncias mínimas dos nós de origem para todos os outros nós usando GPU.
+    Implementação otimizada do algoritmo de Dijkstra que mantém os dados na GPU durante todo o processamento.
     
     Args:
         edges: Arestas do grafo como matriz (u, v) (array CuPy)
@@ -343,15 +436,46 @@ def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sour
     if not CUPY_AVAILABLE:
         raise RuntimeError("CuPy não está disponível")
     
-    # Criar a matriz esparsa do grafo
-    row_indices = edges[:, 0].astype(cp.int32)
-    col_indices = edges[:, 1].astype(cp.int32)
-    graph_matrix = cp_csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
+    # Verificar e converter tipos de dados para garantir compatibilidade
+    if edges.dtype != cp.int32:
+        edges = edges.astype(cp.int32)
+    
+    if infection_times.dtype != cp.float64:
+        infection_times = infection_times.astype(cp.float64)
+    
+    if sources.dtype != cp.int32:
+        sources = sources.astype(cp.int32)
+    
+    # Criar a matriz esparsa do grafo de forma otimizada
+    row_indices = edges[:, 0]
+    col_indices = edges[:, 1]
+    
+    # Usar o construtor otimizado da matriz esparsa
+    graph_matrix = cp_csr_matrix(
+        (infection_times, (row_indices, col_indices)),
+        shape=(N, N),
+        dtype=cp.float64
+    )
+    
+    # Otimizar a matriz esparsa para melhorar o desempenho do algoritmo de Dijkstra
+    graph_matrix.sort_indices()
+    graph_matrix.eliminate_zeros()
     
     # Calcular as distâncias mínimas usando a implementação do CuPy
-    dist_matrix = cp_dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
+    # Configurar parâmetros para melhor desempenho
+    dist_matrix = cp_dijkstra(
+        csgraph=graph_matrix,
+        directed=True,
+        indices=sources,
+        return_predecessors=False,
+        limit=cp.inf,  # Sem limite de distância
+        min_only=True  # Otimização quando só precisamos do mínimo
+    )
     
-    # Calcular o mínimo das distâncias para cada nó
+    # Calcular o mínimo das distâncias para cada nó de forma eficiente
     dist = cp.min(dist_matrix, axis=0)
+    
+    # Sincronizar para garantir que todas as operações foram concluídas
+    cp.cuda.Stream.null.synchronize()
     
     return dist

@@ -135,10 +135,12 @@ class GammaDistribution(Distribution):
         else:
             return gamma_sampling(self.shape, self.scale, size)
     
+    @timing_decorator
     def get_infection_times(self, recovery_times: Union[np.ndarray, "cp.ndarray"],
                            edges: np.ndarray) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Calcula os tempos de infecção usando a distribuição Gamma.
+        Versão otimizada que mantém os dados na GPU durante todo o processamento quando use_gpu=True.
         
         Args:
             recovery_times: Tempos de recuperação para cada nó (NumPy ou CuPy)
@@ -149,13 +151,35 @@ class GammaDistribution(Distribution):
         """
         # Nota: Atualmente usando exponencial para infecção, mesmo com recuperação gamma
         if self.use_gpu:
-            # Manter os dados na GPU o máximo possível
-            # Converter edges para CuPy se necessário
-            if not isinstance(edges, type(recovery_times)):
-                edges = to_cupy(edges)
-            # Usar a versão GPU otimizada
-            return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
+            try:
+                # Verificar se estamos usando CuPy
+                is_cupy = hasattr(recovery_times, "device")
+                
+                # Converter edges para CuPy se necessário
+                if not is_cupy:
+                    # Se recovery_times não é CuPy, converter ambos para CuPy
+                    recovery_times_gpu = to_cupy(recovery_times)
+                    edges_gpu = to_cupy(edges)
+                else:
+                    # Se recovery_times já é CuPy, apenas converter edges se necessário
+                    recovery_times_gpu = recovery_times
+                    edges_gpu = to_cupy(edges) if not isinstance(edges, type(recovery_times)) else edges
+                
+                # Usar a versão GPU otimizada
+                result = compute_infection_times_exponential_gpu(self.lmbd, recovery_times_gpu, edges_gpu)
+                
+                # Não converter de volta para CPU, manter na GPU para processamento posterior
+                return result
+            except Exception as e:
+                print(f"Erro ao calcular tempos de infecção na GPU: {e}")
+                print("Revertendo para CPU...")
+                # Converter para NumPy se necessário
+                if not isinstance(recovery_times, np.ndarray):
+                    recovery_times = to_numpy(recovery_times)
+                # Usar a versão CPU
+                return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
         else:
+            # Usar a versão CPU
             return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
     
     def get_distribution_name(self) -> str:
@@ -222,10 +246,12 @@ class ExponentialDistribution(Distribution):
         else:
             return get_weight_exponential(self.mu, size)
     
+    @timing_decorator
     def get_infection_times(self, recovery_times: Union[np.ndarray, "cp.ndarray"],
                            edges: np.ndarray) -> Union[np.ndarray, "cp.ndarray"]:
         """
         Calcula os tempos de infecção usando a distribuição Exponencial.
+        Versão otimizada que mantém os dados na GPU durante todo o processamento quando use_gpu=True.
         
         Args:
             recovery_times: Tempos de recuperação para cada nó (NumPy ou CuPy)
@@ -235,13 +261,35 @@ class ExponentialDistribution(Distribution):
             Array com os tempos de infecção (NumPy ou CuPy)
         """
         if self.use_gpu:
-            # Manter os dados na GPU o máximo possível
-            # Converter edges para CuPy se necessário
-            if not isinstance(edges, type(recovery_times)):
-                edges = to_cupy(edges)
-            # Usar a versão GPU otimizada
-            return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
+            try:
+                # Verificar se estamos usando CuPy
+                is_cupy = hasattr(recovery_times, "device")
+                
+                # Converter edges para CuPy se necessário
+                if not is_cupy:
+                    # Se recovery_times não é CuPy, converter ambos para CuPy
+                    recovery_times_gpu = to_cupy(recovery_times)
+                    edges_gpu = to_cupy(edges)
+                else:
+                    # Se recovery_times já é CuPy, apenas converter edges se necessário
+                    recovery_times_gpu = recovery_times
+                    edges_gpu = to_cupy(edges) if not isinstance(edges, type(recovery_times)) else edges
+                
+                # Usar a versão GPU otimizada
+                result = compute_infection_times_exponential_gpu(self.lmbd, recovery_times_gpu, edges_gpu)
+                
+                # Não converter de volta para CPU, manter na GPU para processamento posterior
+                return result
+            except Exception as e:
+                print(f"Erro ao calcular tempos de infecção na GPU: {e}")
+                print("Revertendo para CPU...")
+                # Converter para NumPy se necessário
+                if not isinstance(recovery_times, np.ndarray):
+                    recovery_times = to_numpy(recovery_times)
+                # Usar a versão CPU
+                return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
         else:
+            # Usar a versão CPU
             return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
     
     def get_distribution_name(self) -> str:
@@ -294,17 +342,41 @@ def create_distribution(dist_type: str, use_gpu: bool = False, **kwargs) -> Dist
     if use_gpu and not GPU_AVAILABLE:
         print("GPU solicitada, mas não disponível. Usando CPU.")
         use_gpu = False
+    
+    # Adicionar informação sobre o modo de execução aos parâmetros
+    execution_mode = "GPU" if use_gpu and GPU_AVAILABLE else "CPU"
+    print(f"Criando distribuição {dist_type} no modo {execution_mode}")
         
     if dist_type.lower() == "gamma":
         shape = kwargs.get("shape", 2.0)
         scale = kwargs.get("scale", 1.0)
         lmbd = kwargs.get("lambda", 1.0)
-        return GammaDistribution(shape=shape, scale=scale, lmbd=lmbd, use_gpu=use_gpu)
+        distribution = GammaDistribution(shape=shape, scale=scale, lmbd=lmbd, use_gpu=use_gpu)
+        
+        # Adicionar informação sobre o modo de execução ao dicionário de parâmetros
+        original_get_params_dict = distribution.get_params_dict
+        def enhanced_get_params_dict():
+            params = original_get_params_dict()
+            params["execution_mode"] = execution_mode
+            return params
+        distribution.get_params_dict = enhanced_get_params_dict
+        
+        return distribution
     
     elif dist_type.lower() == "exponential":
         mu = kwargs.get("mu", 1.0)
         lmbd = kwargs.get("lambda", 1.0)
-        return ExponentialDistribution(mu=mu, lmbd=lmbd, use_gpu=use_gpu)
+        distribution = ExponentialDistribution(mu=mu, lmbd=lmbd, use_gpu=use_gpu)
+        
+        # Adicionar informação sobre o modo de execução ao dicionário de parâmetros
+        original_get_params_dict = distribution.get_params_dict
+        def enhanced_get_params_dict():
+            params = original_get_params_dict()
+            params["execution_mode"] = execution_mode
+            return params
+        distribution.get_params_dict = enhanced_get_params_dict
+        
+        return distribution
     
     else:
         raise ValueError(f"Tipo de distribuição desconhecido: {dist_type}")
