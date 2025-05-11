@@ -128,7 +128,8 @@ try:
         G = cugraph.Graph(directed=True)
         G.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight')
         log_debug(f"GPU: get_dist_gpu - Executando SSSP com super_node={super_node}")
-        result = cugraph.sssp(G, source=super_node, weight='weight')
+        # Usar o parâmetro correto edge_attr em vez de weight
+        result = cugraph.sssp(G, source=super_node, edge_attr='weight')
         log_debug(f"GPU: get_dist_gpu - result={type(result)}")
 
         # 8. Extração das distâncias
