@@ -118,7 +118,7 @@ class SPKMC:
             log_debug(f"run_single_simulation - Usando CPU")
             return calculate(N, time_to_infect, recovery_times, time_steps, steps)
     
-    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray, 
+    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray,
                                 samples: int, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa múltiplas simulações SPKMC e retorna a média.
@@ -133,38 +133,85 @@ class SPKMC:
         Returns:
             Tupla com (S_mean, I_mean, R_mean) contendo a média da proporção de indivíduos em cada estado
         """
+        from spkmc.cli.formatting import log_debug
+        
         steps = time_steps.shape[0]
-        
-        S_values = np.zeros((samples, steps))
-        I_values = np.zeros((samples, steps))
-        R_values = np.zeros((samples, steps))
-        
         edges = np.array(G.edges())
         N = G.number_of_nodes()
         
-        # Configura a barra de progresso
-        if show_progress:
-            sample_items = tqdm(range(samples), desc="Amostras")
+        # Otimização para GPU
+        if self.use_gpu:
+            import cupy as cp
+            
+            # Inicializar arrays na GPU
+            S_values_gpu = cp.zeros((samples, steps))
+            I_values_gpu = cp.zeros((samples, steps))
+            R_values_gpu = cp.zeros((samples, steps))
+            
+            # Configura a barra de progresso
+            if show_progress:
+                sample_items = tqdm(range(samples), desc="Amostras")
+            else:
+                sample_items = range(samples)
+            
+            # Executa as simulações mantendo os dados na GPU
+            for sample in sample_items:
+                S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
+                
+                # Converter para GPU se ainda não estiver
+                if not isinstance(S, cp.ndarray):
+                    S_gpu = cp.asarray(S)
+                    I_gpu = cp.asarray(I)
+                    R_gpu = cp.asarray(R)
+                else:
+                    S_gpu, I_gpu, R_gpu = S, I, R
+                
+                # Armazenar na GPU
+                S_values_gpu[sample, :] = S_gpu
+                I_values_gpu[sample, :] = I_gpu
+                R_values_gpu[sample, :] = R_gpu
+            
+            # Calcular médias na GPU
+            S_mean_gpu = cp.mean(S_values_gpu, axis=0)
+            I_mean_gpu = cp.mean(I_values_gpu, axis=0)
+            R_mean_gpu = cp.mean(R_values_gpu, axis=0)
+            
+            # Converter resultados de volta para CPU apenas no final
+            S_mean = S_mean_gpu.get()
+            I_mean = I_mean_gpu.get()
+            R_mean = R_mean_gpu.get()
+            
+            log_debug("SPKMC: Cálculo de médias realizado na GPU")
+            return S_mean, I_mean, R_mean
         else:
-            sample_items = range(samples)
-        
-        # Executa as simulações
-        for sample in sample_items:
-            S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
-            S_values[sample, :] = S
-            I_values[sample, :] = I
-            R_values[sample, :] = R
-        
-        # Calcula as médias
-        S_mean = np.mean(S_values, axis=0)
-        I_mean = np.mean(I_values, axis=0)
-        R_mean = np.mean(R_values, axis=0)
-        
-        return S_mean, I_mean, R_mean
+            # Versão CPU original
+            S_values = np.zeros((samples, steps))
+            I_values = np.zeros((samples, steps))
+            R_values = np.zeros((samples, steps))
+            
+            # Configura a barra de progresso
+            if show_progress:
+                sample_items = tqdm(range(samples), desc="Amostras")
+            else:
+                sample_items = range(samples)
+            
+            # Executa as simulações
+            for sample in sample_items:
+                S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
+                S_values[sample, :] = S
+                I_values[sample, :] = I
+                R_values[sample, :] = R
+            
+            # Calcula as médias
+            S_mean = np.mean(S_values, axis=0)
+            I_mean = np.mean(I_values, axis=0)
+            R_mean = np.mean(R_values, axis=0)
+            
+            return S_mean, I_mean, R_mean
     
-    def simulate_erdos_renyi(self, num_runs: int, time_steps: np.ndarray, N: int = 3000, 
-                            k_avg: float = 10, samples: int = 100, initial_perc: float = 0.01, 
-                            load_if_exists: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
+    def simulate_erdos_renyi(self, num_runs: int, time_steps: np.ndarray, N: int = 3000,
+                            k_avg: float = 10, samples: int = 100, initial_perc: float = 0.01,
+                            load_if_exists: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
                                                                 np.ndarray, np.ndarray, np.ndarray]:
         """
         Simula a propagação em múltiplas redes Erdos-Renyi.
@@ -181,7 +228,7 @@ class SPKMC:
         Returns:
             Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
-        S_list, I_list, R_list = [], [], []
+        from spkmc.cli.formatting import log_debug
         
         # Verifica se já existem resultados salvos
         if load_if_exists:
@@ -190,42 +237,102 @@ class SPKMC:
                 try:
                     result = ResultManager.load_result(result_path)
                     return (
-                        np.array(result.get('S_val', [])), 
-                        np.array(result.get('I_val', [])), 
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
                         np.array(result.get('R_val', [])),
-                        np.array(result.get('S_err', [])), 
-                        np.array(result.get('I_err', [])), 
+                        np.array(result.get('S_err', [])),
+                        np.array(result.get('I_err', [])),
                         np.array(result.get('R_err', []))
                     )
                 except Exception as e:
                     print(f"Erro ao carregar resultados existentes: {e}")
         
-        # Executa as simulações
-        for run in tqdm(range(num_runs), desc="Execuções"):
-            # Cria a rede
-            G = NetworkFactory.create_erdos_renyi(N, k_avg)
-            
-            # Configura os nós inicialmente infectados
-            init_infect = int(N * initial_perc)
-            if init_infect < 1:
-                raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
-            sources = np.random.randint(0, N, init_infect)
-            
-            # Executa a simulação
-            S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
-            
-            S_list.append(S)
-            I_list.append(I)
-            R_list.append(R)
+        steps = time_steps.shape[0]
         
-        # Calcula médias e erros
-        S_avg = np.mean(np.array(S_list), axis=0)
-        I_avg = np.mean(np.array(I_list), axis=0)
-        R_avg = np.mean(np.array(R_list), axis=0)
-        
-        S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
-        I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
-        R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
+        # Otimização para GPU
+        if self.use_gpu:
+            import cupy as cp
+            
+            # Inicializar arrays na GPU
+            S_values_gpu = cp.zeros((num_runs, steps))
+            I_values_gpu = cp.zeros((num_runs, steps))
+            R_values_gpu = cp.zeros((num_runs, steps))
+            
+            # Executa as simulações mantendo os dados na GPU
+            for run in tqdm(range(num_runs), desc="Execuções"):
+                # Cria a rede
+                G = NetworkFactory.create_erdos_renyi(N, k_avg)
+                
+                # Configura os nós inicialmente infectados
+                init_infect = int(N * initial_perc)
+                if init_infect < 1:
+                    raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
+                sources = np.random.randint(0, N, init_infect)
+                
+                # Executa a simulação
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                
+                # Converter para GPU se ainda não estiver
+                if not isinstance(S, cp.ndarray):
+                    S_gpu = cp.asarray(S)
+                    I_gpu = cp.asarray(I)
+                    R_gpu = cp.asarray(R)
+                else:
+                    S_gpu, I_gpu, R_gpu = S, I, R
+                
+                # Armazenar na GPU
+                S_values_gpu[run, :] = S_gpu
+                I_values_gpu[run, :] = I_gpu
+                R_values_gpu[run, :] = R_gpu
+            
+            # Calcular médias e erros na GPU
+            S_avg_gpu = cp.mean(S_values_gpu, axis=0)
+            I_avg_gpu = cp.mean(I_values_gpu, axis=0)
+            R_avg_gpu = cp.mean(R_values_gpu, axis=0)
+            
+            S_err_gpu = cp.std(S_values_gpu / cp.sqrt(N), axis=0)
+            I_err_gpu = cp.std(I_values_gpu / cp.sqrt(N), axis=0)
+            R_err_gpu = cp.std(R_values_gpu / cp.sqrt(N), axis=0)
+            
+            # Converter resultados de volta para CPU apenas no final
+            S_avg = S_avg_gpu.get()
+            I_avg = I_avg_gpu.get()
+            R_avg = R_avg_gpu.get()
+            S_err = S_err_gpu.get()
+            I_err = I_err_gpu.get()
+            R_err = R_err_gpu.get()
+            
+            log_debug("SPKMC: Cálculo de médias e erros realizado na GPU")
+        else:
+            # Versão CPU original
+            S_list, I_list, R_list = [], [], []
+            
+            # Executa as simulações
+            for run in tqdm(range(num_runs), desc="Execuções"):
+                # Cria a rede
+                G = NetworkFactory.create_erdos_renyi(N, k_avg)
+                
+                # Configura os nós inicialmente infectados
+                init_infect = int(N * initial_perc)
+                if init_infect < 1:
+                    raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
+                sources = np.random.randint(0, N, init_infect)
+                
+                # Executa a simulação
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                
+                S_list.append(S)
+                I_list.append(I)
+                R_list.append(R)
+            
+            # Calcula médias e erros
+            S_avg = np.mean(np.array(S_list), axis=0)
+            I_avg = np.mean(np.array(I_list), axis=0)
+            R_avg = np.mean(np.array(R_list), axis=0)
+            
+            S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
+            I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
+            R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
         
         # Salva os resultados
         result = {
@@ -253,10 +360,10 @@ class SPKMC:
         
         return S_avg, I_avg, R_avg, S_err, I_err, R_err
     
-    def simulate_complex_network(self, num_runs: int, exponent: float, time_steps: np.ndarray, 
-                               N: int = 3000, k_avg: float = 10, samples: int = 100, 
-                               initial_perc: float = 0.01, load_if_exists: bool = True) -> Tuple[np.ndarray, np.ndarray, 
-                                                                                              np.ndarray, np.ndarray, 
+    def simulate_complex_network(self, num_runs: int, exponent: float, time_steps: np.ndarray,
+                               N: int = 3000, k_avg: float = 10, samples: int = 100,
+                               initial_perc: float = 0.01, load_if_exists: bool = True) -> Tuple[np.ndarray, np.ndarray,
+                                                                                              np.ndarray, np.ndarray,
                                                                                               np.ndarray, np.ndarray]:
         """
         Simula a propagação em múltiplas redes complexas.
@@ -274,7 +381,7 @@ class SPKMC:
         Returns:
             Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
-        S_list, I_list, R_list = [], [], []
+        from spkmc.cli.formatting import log_debug
         
         # Verifica se já existem resultados salvos
         if load_if_exists:
@@ -283,42 +390,102 @@ class SPKMC:
                 try:
                     result = ResultManager.load_result(result_path)
                     return (
-                        np.array(result.get('S_val', [])), 
-                        np.array(result.get('I_val', [])), 
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
                         np.array(result.get('R_val', [])),
-                        np.array(result.get('S_err', [])), 
-                        np.array(result.get('I_err', [])), 
+                        np.array(result.get('S_err', [])),
+                        np.array(result.get('I_err', [])),
                         np.array(result.get('R_err', []))
                     )
                 except Exception as e:
                     print(f"Erro ao carregar resultados existentes: {e}")
         
-        # Executa as simulações
-        for run in tqdm(range(num_runs), desc=f"Execuções (expoente={exponent})"):
-            # Cria a rede
-            G = NetworkFactory.create_complex_network(N, exponent, k_avg)
-            
-            # Configura os nós inicialmente infectados
-            init_infect = int(N * initial_perc)
-            if init_infect < 1:
-                raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
-            sources = np.random.randint(0, N, init_infect)
-            
-            # Executa a simulação
-            S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
-            
-            S_list.append(S)
-            I_list.append(I)
-            R_list.append(R)
+        steps = time_steps.shape[0]
         
-        # Calcula médias e erros
-        S_avg = np.mean(np.array(S_list), axis=0)
-        I_avg = np.mean(np.array(I_list), axis=0)
-        R_avg = np.mean(np.array(R_list), axis=0)
-        
-        S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
-        I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
-        R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
+        # Otimização para GPU
+        if self.use_gpu:
+            import cupy as cp
+            
+            # Inicializar arrays na GPU
+            S_values_gpu = cp.zeros((num_runs, steps))
+            I_values_gpu = cp.zeros((num_runs, steps))
+            R_values_gpu = cp.zeros((num_runs, steps))
+            
+            # Executa as simulações mantendo os dados na GPU
+            for run in tqdm(range(num_runs), desc=f"Execuções (expoente={exponent})"):
+                # Cria a rede
+                G = NetworkFactory.create_complex_network(N, exponent, k_avg)
+                
+                # Configura os nós inicialmente infectados
+                init_infect = int(N * initial_perc)
+                if init_infect < 1:
+                    raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
+                sources = np.random.randint(0, N, init_infect)
+                
+                # Executa a simulação
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                
+                # Converter para GPU se ainda não estiver
+                if not isinstance(S, cp.ndarray):
+                    S_gpu = cp.asarray(S)
+                    I_gpu = cp.asarray(I)
+                    R_gpu = cp.asarray(R)
+                else:
+                    S_gpu, I_gpu, R_gpu = S, I, R
+                
+                # Armazenar na GPU
+                S_values_gpu[run, :] = S_gpu
+                I_values_gpu[run, :] = I_gpu
+                R_values_gpu[run, :] = R_gpu
+            
+            # Calcular médias e erros na GPU
+            S_avg_gpu = cp.mean(S_values_gpu, axis=0)
+            I_avg_gpu = cp.mean(I_values_gpu, axis=0)
+            R_avg_gpu = cp.mean(R_values_gpu, axis=0)
+            
+            S_err_gpu = cp.std(S_values_gpu / cp.sqrt(N), axis=0)
+            I_err_gpu = cp.std(I_values_gpu / cp.sqrt(N), axis=0)
+            R_err_gpu = cp.std(R_values_gpu / cp.sqrt(N), axis=0)
+            
+            # Converter resultados de volta para CPU apenas no final
+            S_avg = S_avg_gpu.get()
+            I_avg = I_avg_gpu.get()
+            R_avg = R_avg_gpu.get()
+            S_err = S_err_gpu.get()
+            I_err = I_err_gpu.get()
+            R_err = R_err_gpu.get()
+            
+            log_debug("SPKMC: Cálculo de médias e erros realizado na GPU")
+        else:
+            # Versão CPU original
+            S_list, I_list, R_list = [], [], []
+            
+            # Executa as simulações
+            for run in tqdm(range(num_runs), desc=f"Execuções (expoente={exponent})"):
+                # Cria a rede
+                G = NetworkFactory.create_complex_network(N, exponent, k_avg)
+                
+                # Configura os nós inicialmente infectados
+                init_infect = int(N * initial_perc)
+                if init_infect < 1:
+                    raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
+                sources = np.random.randint(0, N, init_infect)
+                
+                # Executa a simulação
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                
+                S_list.append(S)
+                I_list.append(I)
+                R_list.append(R)
+            
+            # Calcula médias e erros
+            S_avg = np.mean(np.array(S_list), axis=0)
+            I_avg = np.mean(np.array(I_list), axis=0)
+            R_avg = np.mean(np.array(R_list), axis=0)
+            
+            S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
+            I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
+            R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
         
         # Salva os resultados
         result = {
