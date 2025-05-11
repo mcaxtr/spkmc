@@ -111,13 +111,19 @@ try:
         Calcula os estados (S, I, R) para cada nó em um determinado tempo usando GPU.
         
         Args:
-            time_to_infect: Tempo para infecção de cada nó
-            recovery_times: Tempo para recuperação de cada nó
+            time_to_infect: Tempo para infecção de cada nó (array CuPy)
+            recovery_times: Tempo para recuperação de cada nó (array CuPy)
             t: Tempo atual da simulação
             
         Returns:
             Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó
         """
+        # Verificar se os arrays são do tipo CuPy
+        if not isinstance(time_to_infect, cp.ndarray):
+            time_to_infect = cp.asarray(time_to_infect)
+        if not isinstance(recovery_times, cp.ndarray):
+            recovery_times = cp.asarray(recovery_times)
+            
         S = time_to_infect > t
         I = (~S) & (time_to_infect + recovery_times > t)
         R = (~S) & (~I)
