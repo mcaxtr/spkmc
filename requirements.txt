@@ -13,3 +13,5 @@ pytest>=6.2.5
 pytest-cov>=2.12.1
 joblib>=1.0.1
 cupy-cuda12x>=12.0.0; extra == 'gpu'
+cudf>=23.10.0; extra == 'gpu'
+cugraph>=23.10.0; extra == 'gpu'

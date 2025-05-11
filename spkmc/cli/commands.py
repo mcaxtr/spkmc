@@ -1119,40 +1119,48 @@ def batch(simple, gpu, scenarios_file, output_dir, prefix, compare, no_plot, sav
 def gpu_info():
     """Exibe informações detalhadas sobre a GPU disponível."""
     try:
-        from spkmc.utils.gpu_utils import CUPY_AVAILABLE, GPU_AVAILABLE, print_gpu_info, gpu_status_message
+        # Importar as funções atualizadas
+        from spkmc.utils.gpu_utils import is_gpu_available, print_gpu_info, print_gpu_status
         
-        if not CUPY_AVAILABLE:
-            console.print(format_error(gpu_status_message or "GPU não disponível para operações."))
-            return
-            
-        # CuPy está instalado, mostrar informações
-        import cupy
-        log_debug(f"CuPy instalado: versão {cupy.__version__}", verbose_only=False)
-        
-        # Verificar versão do CUDA
-        cuda_version = cupy.cuda.runtime.runtimeGetVersion()
-        cuda_major = cuda_version // 1000
-        cuda_minor = (cuda_version % 1000) // 10
-        console.print(format_info(f"CUDA versão: {cuda_major}.{cuda_minor}"))
-        
-        # Verificar driver
+        # Verificar se o pacote cupy está instalado
         try:
-            driver_version = cupy.cuda.runtime.driverGetVersion()
-            driver_major = driver_version // 1000
-            driver_minor = (driver_version % 1000) // 10
-            console.print(format_info(f"Driver CUDA versão: {driver_major}.{driver_minor}"))
-        except:
-            console.print(format_warning("Não foi possível obter a versão do driver CUDA"))
-        
-        # Verificar disponibilidade de GPU
-        if GPU_AVAILABLE:
-            console.print(format_success("GPU disponível para uso!"))
+            import cupy
+            console.print(format_success(f"✓ CuPy instalado: versão {cupy.__version__}"))
             
-            # Imprimir informações detalhadas da GPU
-            console.print(format_title("Informações da GPU"))
-            print_gpu_info()
-        else:
-            console.print(format_error("GPU não disponível."))
+            # Verificar disponibilidade da GPU
+            console.print(format_title("Status da GPU"))
             
-    except ImportError:
-        console.print(format_error("Módulo GPU não encontrado. Verifique a instalação."))
+            # Usar a função atualizada para verificar a disponibilidade da GPU
+            gpu_available = is_gpu_available(verbose=True)
+            
+            if gpu_available:
+                console.print(format_success("✓ GPU disponível para uso!"))
+                
+                # Imprimir informações detalhadas da GPU
+                console.print(format_title("Informações Detalhadas da GPU"))
+                print_gpu_info()
+            else:
+                console.print(format_error("⚠ GPU não disponível para uso."))
+                console.print(format_info("Verificando possíveis causas..."))
+                
+                # Verificar se CUDA está disponível mesmo que a GPU não esteja
+                try:
+                    if cupy.cuda.is_available():
+                        console.print(format_warning("CUDA está disponível, mas há um problema com a GPU."))
+                        device_count = cupy.cuda.runtime.getDeviceCount()
+                        console.print(format_info(f"Dispositivos CUDA encontrados: {device_count}"))
+                        
+                        # Tentar obter mais informações sobre o problema
+                        console.print(format_info("Tentando obter mais informações sobre o problema..."))
+                        print_gpu_status()
+                    else:
+                        console.print(format_error("CUDA não está disponível no sistema."))
+                except Exception as e:
+                    console.print(format_error(f"Erro ao verificar CUDA: {e}"))
+        except ImportError:
+            console.print(format_error("⚠ CuPy não está instalado. GPU não disponível."))
+            console.print(format_info("Para usar GPU, instale CuPy com: pip install cupy-cuda12x"))
+            
+    except ImportError as e:
+        console.print(format_error(f"⚠ Erro ao importar módulos GPU: {e}"))
+        console.print(format_info("Verifique se o módulo utils.gpu_utils está disponível."))

@@ -20,7 +20,9 @@ gpu_status_message = ""
 try:
     import cupy as cp
     from cupyx.scipy.sparse import csr_matrix as cp_csr_matrix
-    from cupyx.scipy.sparse.csgraph import dijkstra as cp_dijkstra
+    import cudf
+    import cugraph
+    import numpy as np
     
     # Verificar se o CuPy está instalado
     CUPY_AVAILABLE = True
@@ -47,8 +49,8 @@ try:
             gpu_status_message = "CUDA não está disponível no sistema."
     except Exception as e:
         gpu_status_message = f"Erro ao verificar GPU: {str(e)}"
-except ImportError:
-    gpu_status_message = "CuPy não está instalado. GPU não disponível."
+except ImportError as e:
+    gpu_status_message = f"CuPy não está instalado ou ocorreu um erro: {str(e)}"
 
 # Função para medir o tempo de execução
 def timing_decorator(func):
@@ -547,7 +549,7 @@ def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_time
 def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sources: "cp.ndarray", N: int) -> "cp.ndarray":
     """
     Calcula as distâncias mínimas dos nós de origem para todos os outros nós usando GPU.
-    Implementação otimizada do algoritmo de Dijkstra que mantém os dados na GPU durante todo o processamento.
+    Implementação otimizada usando cugraph para aceleração por GPU.
     
     Args:
         edges: Arestas do grafo como matriz (u, v) (array CuPy)
@@ -561,44 +563,41 @@ def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sour
     if not CUPY_AVAILABLE:
         raise RuntimeError("GPU não disponível para operações")
     
-    # Verificar e converter tipos de dados para garantir compatibilidade
-    if edges.dtype != cp.int32:
-        edges = edges.astype(cp.int32)
+    # Converter para NumPy para criar o DataFrame do cuDF
+    np_edges = to_numpy(edges)
+    np_infection_times = to_numpy(infection_times)
+    np_sources = to_numpy(sources)
     
-    if infection_times.dtype != cp.float64:
-        infection_times = infection_times.astype(cp.float64)
+    # Criar DataFrame do cuDF com as arestas e pesos
+    df = cudf.DataFrame({
+        'src': np_edges[:, 0].astype(np.int32),
+        'dst': np_edges[:, 1].astype(np.int32),
+        'weight': np_infection_times.astype(np.float32),
+    })
     
-    if sources.dtype != cp.int32:
-        sources = sources.astype(cp.int32)
+    # Adicionar super-nó e arestas de peso zero para conectar todas as origens
+    # Isso permite usar o algoritmo SSSP (Single Source Shortest Path) para resolver
+    # o problema de múltiplas origens
+    dummy_df = cudf.DataFrame({
+        'src': np.full(len(np_sources), N, dtype=np.int32),
+        'dst': np_sources.astype(np.int32),
+        'weight': np.zeros(len(np_sources), dtype=np.float32),
+    })
     
-    # Criar a matriz esparsa do grafo de forma otimizada
-    row_indices = edges[:, 0]
-    col_indices = edges[:, 1]
+    # Concatenar os DataFrames
+    full_df = cudf.concat([df, dummy_df], ignore_index=True)
     
-    # Usar o construtor otimizado da matriz esparsa
-    graph_matrix = cp_csr_matrix(
-        (infection_times, (row_indices, col_indices)),
-        shape=(N, N),
-        dtype=cp.float64
-    )
+    # Construir grafo direcionado
+    G = cugraph.Graph(directed=True)
+    G.from_cudf_edgelist(full_df, source='src', destination='dst', edge_attr='weight')
     
-    # Otimizar a matriz esparsa para melhorar o desempenho do algoritmo de Dijkstra
-    graph_matrix.sort_indices()
-    graph_matrix.eliminate_zeros()
+    # Executar algoritmo de caminho mais curto a partir do super-nó
+    result = cugraph.sssp(G, source=N)
     
-    # Calcular as distâncias mínimas usando a implementação do CuPy
-    # Configurar parâmetros para melhor desempenho
-    dist_matrix = cp_dijkstra(
-        csgraph=graph_matrix,
-        directed=True,
-        indices=sources,
-        return_predecessors=False,
-        limit=cp.inf,  # Sem limite de distância
-        min_only=True  # Otimização quando só precisamos do mínimo
-    )
-    
-    # Calcular o mínimo das distâncias para cada nó de forma eficiente
-    dist = cp.min(dist_matrix, axis=0)
+    # Extrair distâncias para os nós 0..N-1 (excluindo o super-nó)
+    # e converter para array CuPy
+    dist_array = result['distance'].to_array()[:N]
+    dist = cp.array(dist_array)
     
     # Sincronizar para garantir que todas as operações foram concluídas
     cp.cuda.Stream.null.synchronize()
