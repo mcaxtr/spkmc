@@ -134,7 +134,11 @@ try:
 
         # 8. Extração das distâncias
         # Manter os dados na GPU como arrays CuPy
-        dist_gpu = cp.asarray(result['distance'].to_array()[:N])
+        log_debug(f"GPU: get_dist_gpu - Extraindo distâncias do resultado")
+        log_debug(f"GPU: get_dist_gpu - Colunas disponíveis no resultado: {result.columns.to_list()}")
+        
+        # Converter a Series do cuDF para um array CuPy usando .values
+        dist_gpu = result['distance'].values[:N]
         log_debug(f"GPU: get_dist_gpu - Saída: dist_gpu={type(dist_gpu)}, recovery_times={type(recovery_times)}")
         return dist_gpu, recovery_times
     
