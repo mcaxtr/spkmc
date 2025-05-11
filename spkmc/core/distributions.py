@@ -149,9 +149,11 @@ class GammaDistribution(Distribution):
         """
         # Nota: Atualmente usando exponencial para infecção, mesmo com recuperação gamma
         if self.use_gpu:
+            # Manter os dados na GPU o máximo possível
             # Converter edges para CuPy se necessário
             if not isinstance(edges, type(recovery_times)):
                 edges = to_cupy(edges)
+            # Usar a versão GPU otimizada
             return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
         else:
             return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
@@ -233,9 +235,11 @@ class ExponentialDistribution(Distribution):
             Array com os tempos de infecção (NumPy ou CuPy)
         """
         if self.use_gpu:
+            # Manter os dados na GPU o máximo possível
             # Converter edges para CuPy se necessário
             if not isinstance(edges, type(recovery_times)):
                 edges = to_cupy(edges)
+            # Usar a versão GPU otimizada
             return compute_infection_times_exponential_gpu(self.lmbd, recovery_times, edges)
         else:
             return compute_infection_times_exponential(self.lmbd, recovery_times, edges)

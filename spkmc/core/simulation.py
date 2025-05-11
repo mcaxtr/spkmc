@@ -22,7 +22,8 @@ from spkmc.utils.numba_utils import calculate
 # Importação condicional das funções GPU
 try:
     from spkmc.utils.gpu_utils import (
-        is_gpu_available, calculate_gpu, to_numpy, to_cupy
+        is_gpu_available, calculate_gpu, calculate_gpu_vectorized,
+        get_dist_sparse_gpu, to_numpy, to_cupy
     )
     GPU_AVAILABLE = is_gpu_available()
 except ImportError:
@@ -50,6 +51,12 @@ class SPKMC:
         
         if self.use_gpu:
             print("Usando GPU para aceleração")
+            # Imprimir informações da GPU
+            try:
+                from spkmc.utils.gpu_utils import print_gpu_info
+                print_gpu_info()
+            except Exception as e:
+                print(f"Erro ao imprimir informações da GPU: {e}")
         elif use_gpu and not GPU_AVAILABLE:
             print("GPU solicitada, mas não disponível. Usando CPU.")
     
@@ -71,31 +78,38 @@ class SPKMC:
         # Calcula os tempos de infecção
         infection_times = self.distribution.get_infection_times(recovery_weights, edges)
         
-        # Se estiver usando GPU, converte para NumPy para usar com scipy
         if self.use_gpu:
-            infection_times = to_numpy(infection_times)
-            recovery_weights_cpu = to_numpy(recovery_weights)
-        else:
-            recovery_weights_cpu = recovery_weights
-        
-        # Cria a matriz esparsa do grafo
-        row_indices = edges[:, 0]
-        col_indices = edges[:, 1]
-        graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
-        
-        # Calcula as distâncias mínimas
-        dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
-        dist = np.min(dist_matrix, axis=0)
-        
-        # Se estiver usando GPU, converte de volta para CuPy
-        if self.use_gpu:
-            dist = to_cupy(dist)
+            # Usar a implementação GPU do algoritmo de Dijkstra
+            # Converter edges e sources para CuPy se necessário
+            if not isinstance(edges, type(recovery_weights)):
+                edges_gpu = to_cupy(edges)
+            else:
+                edges_gpu = edges
+                
+            if not isinstance(sources, type(recovery_weights)):
+                sources_gpu = to_cupy(sources)
+            else:
+                sources_gpu = sources
+            
+            # Calcular distâncias usando a implementação GPU
+            dist = get_dist_sparse_gpu(edges_gpu, infection_times, sources_gpu, N)
+            
             return dist, recovery_weights
         else:
-            return dist, recovery_weights_cpu
+            # Implementação CPU original
+            # Cria a matriz esparsa do grafo
+            row_indices = edges[:, 0]
+            col_indices = edges[:, 1]
+            graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
+            
+            # Calcula as distâncias mínimas
+            dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
+            dist = np.min(dist_matrix, axis=0)
+            
+            return dist, recovery_weights
     
     def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray,
-                              time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                               time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa uma única simulação SPKMC.
         
@@ -119,8 +133,8 @@ class SPKMC:
             if not isinstance(time_steps, type(time_to_infect)):
                 time_steps = to_cupy(time_steps)
             
-            # Usa a versão GPU da função calculate
-            S, I, R = calculate_gpu(N, time_to_infect, recovery_times, time_steps, steps)
+            # Usa a versão vetorizada da função calculate_gpu para melhor desempenho
+            S, I, R = calculate_gpu_vectorized(N, time_to_infect, recovery_times, time_steps)
             
             # Converte os resultados de volta para NumPy
             return to_numpy(S), to_numpy(I), to_numpy(R)

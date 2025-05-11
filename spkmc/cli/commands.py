@@ -281,7 +281,8 @@ def run(simple, gpu, network_type, dist_type, shape, scale, mu, lambda_val, expo
                 "distribution": dist_type,
                 "N": nodes,
                 "initial_perc": initial_perc,
-                "execution_time": execution_time
+                "execution_time": execution_time,
+                "execution_mode": "GPU" if gpu else "CPU"
             }
         }
         

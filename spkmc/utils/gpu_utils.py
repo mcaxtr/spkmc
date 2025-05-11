@@ -6,14 +6,37 @@ para execução em GPU, melhorando o desempenho das simulações SPKMC.
 """
 
 import numpy as np
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
+import time
 
 # Importação condicional de CuPy
 try:
     import cupy as cp
+    from cupyx.scipy.sparse import csr_matrix as cp_csr_matrix
+    from cupyx.scipy.sparse.csgraph import dijkstra as cp_dijkstra
     CUPY_AVAILABLE = True
 except ImportError:
     CUPY_AVAILABLE = False
+
+
+# Função para medir o tempo de execução
+def timing_decorator(func):
+    """
+    Decorador para medir o tempo de execução de uma função.
+    
+    Args:
+        func: Função a ser medida
+        
+    Returns:
+        Função decorada que imprime o tempo de execução
+    """
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        print(f"Função {func.__name__} executada em {end_time - start_time:.6f} segundos")
+        return result
+    return wrapper
 
 
 def is_gpu_available() -> bool:
@@ -25,6 +48,37 @@ def is_gpu_available() -> bool:
     """
     if not CUPY_AVAILABLE:
         return False
+
+
+def print_gpu_info():
+    """
+    Imprime informações sobre a GPU disponível.
+    """
+    if not CUPY_AVAILABLE:
+        print("CuPy não está instalado. Não é possível obter informações da GPU.")
+        return
+    
+    try:
+        if cp.cuda.is_available():
+            print(f"CUDA disponível: Sim")
+            print(f"Versão CUDA: {cp.cuda.runtime.runtimeGetVersion()}")
+            print(f"Número de dispositivos: {cp.cuda.runtime.getDeviceCount()}")
+            
+            for i in range(cp.cuda.runtime.getDeviceCount()):
+                device_props = cp.cuda.runtime.getDeviceProperties(i)
+                print(f"Dispositivo {i}: {device_props['name'].decode()}")
+                print(f"  Memória total: {device_props['totalGlobalMem'] / (1024**3):.2f} GB")
+                print(f"  Multiprocessadores: {device_props['multiProcessorCount']}")
+                print(f"  Capacidade de computação: {device_props['major']}.{device_props['minor']}")
+                
+            # Mostrar uso atual de memória
+            mempool = cp.get_default_memory_pool()
+            print(f"Uso atual de memória: {mempool.used_bytes() / (1024**3):.2f} GB")
+            print(f"Memória total alocada: {mempool.total_bytes() / (1024**3):.2f} GB")
+        else:
+            print("CUDA está instalado, mas não está disponível.")
+    except Exception as e:
+        print(f"Erro ao obter informações da GPU: {e}")
     
     try:
         return cp.cuda.is_available()
@@ -190,6 +244,7 @@ def get_states_gpu(time_to_infect: "cp.ndarray", time_to_recover: "cp.ndarray", 
     return S, I, R
 
 
+@timing_decorator
 def calculate_gpu(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndarray", time_steps: "cp.ndarray", steps: int) -> Tuple["cp.ndarray", "cp.ndarray", "cp.ndarray"]:
     """
     Calcula a proporção de indivíduos em cada estado (S, I, R) para cada passo de tempo usando GPU.
@@ -219,3 +274,78 @@ def calculate_gpu(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndar
         R_time[idx] = cp.sum(R) / N
     
     return S_time, I_time, R_time
+
+
+@timing_decorator
+def calculate_gpu_vectorized(N: int, time_to_infect: "cp.ndarray", recovery_times: "cp.ndarray",
+                           time_steps: "cp.ndarray") -> Tuple["cp.ndarray", "cp.ndarray", "cp.ndarray"]:
+    """
+    Versão vetorizada da função calculate_gpu que evita loops sequenciais.
+    
+    Args:
+        N: Número de nós no grafo
+        time_to_infect: Tempo para infecção de cada nó (array CuPy)
+        recovery_times: Tempo para recuperação de cada nó (array CuPy)
+        time_steps: Array com os passos de tempo (array CuPy)
+        
+    Returns:
+        Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado (arrays CuPy)
+    """
+    if not CUPY_AVAILABLE:
+        raise RuntimeError("CuPy não está disponível")
+    
+    steps = len(time_steps)
+    
+    # Criar matrizes para armazenar os resultados
+    S_time = cp.zeros(steps, dtype=cp.float64)
+    I_time = cp.zeros(steps, dtype=cp.float64)
+    R_time = cp.zeros(steps, dtype=cp.float64)
+    
+    # Expandir time_to_infect e recovery_times para comparação com time_steps
+    # Isso permite operações vetorizadas em vez de loops
+    expanded_time_to_infect = time_to_infect.reshape(-1, 1)  # Coluna
+    expanded_recovery_times = recovery_times.reshape(-1, 1)  # Coluna
+    expanded_time_steps = time_steps.reshape(1, -1)  # Linha
+    
+    # Calcular estados para todos os passos de tempo de uma vez
+    S_matrix = expanded_time_to_infect > expanded_time_steps
+    I_matrix = (~S_matrix) & (expanded_time_to_infect + expanded_recovery_times > expanded_time_steps)
+    R_matrix = (~S_matrix) & (~I_matrix)
+    
+    # Calcular proporções para cada passo de tempo
+    S_time = cp.sum(S_matrix, axis=0) / N
+    I_time = cp.sum(I_matrix, axis=0) / N
+    R_time = cp.sum(R_matrix, axis=0) / N
+    
+    return S_time, I_time, R_time
+
+
+@timing_decorator
+def get_dist_sparse_gpu(edges: "cp.ndarray", infection_times: "cp.ndarray", sources: "cp.ndarray", N: int) -> "cp.ndarray":
+    """
+    Calcula as distâncias mínimas dos nós de origem para todos os outros nós usando GPU.
+    
+    Args:
+        edges: Arestas do grafo como matriz (u, v) (array CuPy)
+        infection_times: Tempos de infecção para cada aresta (array CuPy)
+        sources: Nós de origem (array CuPy)
+        N: Número de nós no grafo
+        
+    Returns:
+        Array com as distâncias mínimas (array CuPy)
+    """
+    if not CUPY_AVAILABLE:
+        raise RuntimeError("CuPy não está disponível")
+    
+    # Criar a matriz esparsa do grafo
+    row_indices = edges[:, 0].astype(cp.int32)
+    col_indices = edges[:, 1].astype(cp.int32)
+    graph_matrix = cp_csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
+    
+    # Calcular as distâncias mínimas usando a implementação do CuPy
+    dist_matrix = cp_dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
+    
+    # Calcular o mínimo das distâncias para cada nó
+    dist = cp.min(dist_matrix, axis=0)
+    
+    return dist
