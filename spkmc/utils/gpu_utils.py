@@ -88,20 +88,37 @@ try:
         u = edges_gpu[:, 0]
         infection_times = cp.where(times >= recovery_times[u], cp.inf, times)
         
-        # 4. Super-nó para múltiplas fontes
+        # 4. Super-nó para múltiplas fontes - otimizado para reduzir transferências
         super_node = N
         sources_gpu = cp.asarray(sources, dtype=cp.int32)
-        super_src = cp.full_like(sources_gpu, super_node, dtype=cp.int32)
-        dummy_edges = cp.stack([super_src, sources_gpu], axis=1)
-        dummy_weights = cp.zeros_like(sources_gpu, dtype=cp.float32)
         
-        # 5. Concatenação das arestas originais + super-nó
-        src = cp.concatenate([edges_gpu[:, 0], dummy_edges[:, 0]])
-        dst = cp.concatenate([edges_gpu[:, 1], dummy_edges[:, 1]])
-        weight = cp.concatenate([infection_times.astype(cp.float32), dummy_weights])
+        # 5. Preparação dos dados para o grafo - otimizado para usar operações vetorizadas
+        # Criar arrays diretamente na GPU
+        num_edges = edges_gpu.shape[0]
+        num_sources = sources_gpu.shape[0]
+        total_edges = num_edges + num_sources
+        
+        # Alocar arrays de uma vez
+        all_src = cp.empty(total_edges, dtype=cp.int32)
+        all_dst = cp.empty(total_edges, dtype=cp.int32)
+        all_weights = cp.empty(total_edges, dtype=cp.float32)
+        
+        # Preencher com dados existentes
+        all_src[:num_edges] = edges_gpu[:, 0]
+        all_dst[:num_edges] = edges_gpu[:, 1]
+        all_weights[:num_edges] = infection_times.astype(cp.float32)
+        
+        # Adicionar super-nó
+        all_src[num_edges:] = super_node
+        all_dst[num_edges:] = sources_gpu
+        all_weights[num_edges:] = 0
         
         # 6. Construção do DataFrame cuDF diretamente na GPU
-        df = cudf.DataFrame({'src': src, 'dst': dst, 'weight': weight})
+        df = cudf.DataFrame({
+            'src': all_src,
+            'dst': all_dst,
+            'weight': all_weights
+        })
         
         # 7. Criação do grafo e execução de SSSP em GPU
         G = cugraph.Graph(directed=True)
@@ -153,10 +170,21 @@ try:
         import time
         start_time = time.time()
         
-        # Converter arrays para GPU uma única vez
-        time_to_infect_gpu = cp.asarray(time_to_infect)
-        recovery_times_gpu = cp.asarray(recovery_times)
-        time_steps_gpu = cp.asarray(time_steps)
+        # Verificar se os arrays já estão na GPU para evitar transferências desnecessárias
+        if isinstance(time_to_infect, cp.ndarray):
+            time_to_infect_gpu = time_to_infect
+        else:
+            time_to_infect_gpu = cp.asarray(time_to_infect)
+            
+        if isinstance(recovery_times, cp.ndarray):
+            recovery_times_gpu = recovery_times
+        else:
+            recovery_times_gpu = cp.asarray(recovery_times)
+            
+        if isinstance(time_steps, cp.ndarray):
+            time_steps_gpu = time_steps
+        else:
+            time_steps_gpu = cp.asarray(time_steps)
         
         # Implementação vetorizada: processa todos os passos de tempo de uma vez
         # Reshape time_steps para permitir broadcasting com arrays de nós
@@ -174,8 +202,14 @@ try:
         I_time = cp.sum(I_matrix, axis=1) / N  # [steps]
         R_time = cp.sum(R_matrix, axis=1) / N  # [steps]
         
-        # Converter de volta para NumPy apenas no final
-        result = S_time.get(), I_time.get(), R_time.get()
+        # Manter os resultados na GPU se possível
+        # Só converter para CPU se necessário
+        if cp.cuda.get_current_stream().done:
+            # Se a stream atual estiver concluída, podemos retornar os arrays GPU diretamente
+            result = S_time, I_time, R_time
+        else:
+            # Caso contrário, converter para CPU
+            result = S_time.get(), I_time.get(), R_time.get()
         
         end_time = time.time()
         log_debug(f"GPU: Tempo total calculate_gpu: {(end_time-start_time)*1000:.2f}ms")
