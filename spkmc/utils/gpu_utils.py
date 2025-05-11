@@ -170,21 +170,10 @@ try:
         import time
         start_time = time.time()
         
-        # Verificar se os arrays já estão na GPU para evitar transferências desnecessárias
-        if isinstance(time_to_infect, cp.ndarray):
-            time_to_infect_gpu = time_to_infect
-        else:
-            time_to_infect_gpu = cp.asarray(time_to_infect)
-            
-        if isinstance(recovery_times, cp.ndarray):
-            recovery_times_gpu = recovery_times
-        else:
-            recovery_times_gpu = cp.asarray(recovery_times)
-            
-        if isinstance(time_steps, cp.ndarray):
-            time_steps_gpu = time_steps
-        else:
-            time_steps_gpu = cp.asarray(time_steps)
+        # Converter arrays para GPU uma única vez
+        time_to_infect_gpu = cp.asarray(time_to_infect)
+        recovery_times_gpu = cp.asarray(recovery_times)
+        time_steps_gpu = cp.asarray(time_steps)
         
         # Implementação vetorizada: processa todos os passos de tempo de uma vez
         # Reshape time_steps para permitir broadcasting com arrays de nós
@@ -202,14 +191,8 @@ try:
         I_time = cp.sum(I_matrix, axis=1) / N  # [steps]
         R_time = cp.sum(R_matrix, axis=1) / N  # [steps]
         
-        # Manter os resultados na GPU se possível
-        # Só converter para CPU se necessário
-        if cp.cuda.get_current_stream().done:
-            # Se a stream atual estiver concluída, podemos retornar os arrays GPU diretamente
-            result = S_time, I_time, R_time
-        else:
-            # Caso contrário, converter para CPU
-            result = S_time.get(), I_time.get(), R_time.get()
+        # Converter de volta para NumPy apenas no final
+        result = S_time.get(), I_time.get(), R_time.get()
         
         end_time = time.time()
         log_debug(f"GPU: Tempo total calculate_gpu: {(end_time-start_time)*1000:.2f}ms")

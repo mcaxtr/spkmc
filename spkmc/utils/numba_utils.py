@@ -6,12 +6,15 @@ para melhorar o desempenho das simulações SPKMC.
 """
 
 import numpy as np
-from numba import njit, prange, set_num_threads, config
+import os
+from numba import njit, prange, set_num_threads, config, vectorize
 from typing import Optional, Tuple
 
 # Configurando Numba para usar o máximo nível de paralelismo
 config.THREADING_LAYER = 'omp'
-set_num_threads(8)  # Ajuste este número conforme necessário para o seu sistema
+# Usar o número de CPUs disponíveis no sistema
+num_cpus = os.cpu_count()
+set_num_threads(num_cpus if num_cpus else 8)
 
 
 @njit
@@ -61,10 +64,14 @@ def compute_infection_times_gamma(shape: float, scale: float, recovery_times: np
     """
     num_edges = edges.shape[0]
     infection_times = np.empty(num_edges)
-
+    
+    # Gerar todos os tempos de infecção de uma vez
+    all_infection_times = gamma_sampling(shape, scale, num_edges)
+    
+    # Processar em paralelo
     for i in prange(num_edges):
         u = edges[i, 0]
-        infection_time = gamma_sampling(shape, scale)
+        infection_time = all_infection_times[i]
         infection_times[i] = np.inf if infection_time >= recovery_times[u] else infection_time
 
     return infection_times
@@ -85,10 +92,14 @@ def compute_infection_times_exponential(beta: float, recovery_times: np.ndarray,
     """
     num_edges = edges.shape[0]
     infection_times = np.empty(num_edges)
-
+    
+    # Gerar todos os tempos de infecção de uma vez
+    all_infection_times = get_weight_exponential(beta, num_edges)
+    
+    # Processar em paralelo
     for i in prange(num_edges):
         u = edges[i, 0]
-        infection_time = get_weight_exponential(beta)
+        infection_time = all_infection_times[i]
         infection_times[i] = np.inf if infection_time >= recovery_times[u] else infection_time
 
     return infection_times
@@ -108,8 +119,8 @@ def get_states(time_to_infect: np.ndarray, time_to_recover: np.ndarray, time: fl
         Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó
     """
     S = time_to_infect > time
-    I = ~S & (time_to_infect + time_to_recover > time)
-    R = ~S & ~I
+    I = (~S) & ((time_to_infect + time_to_recover) > time)
+    R = (~S) & (~I)
     return S, I, R
 
 

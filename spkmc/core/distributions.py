@@ -116,8 +116,8 @@ class GammaDistribution(Distribution):
         Returns:
             Array com os tempos de infecção
         """
-        # Nota: Atualmente usando exponencial para infecção, mesmo com recuperação gamma
-        return compute_infection_times_exponential(self.lmbd, recovery_times, edges)
+        # Usar a distribuição Gamma para os tempos de infecção
+        return compute_infection_times_gamma(self.shape, self.scale, recovery_times, edges)
     
     def get_distribution_name(self) -> str:
         """
