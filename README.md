@@ -23,79 +23,122 @@ O algoritmo SPKMC utiliza o conceito de caminhos mais curtos para calcular os te
 ### Requisitos
 
 - Python 3.8 ou superior
-- Dependências:
-  - NumPy: Operações numéricas eficientes
-  - SciPy: Algoritmos científicos e matemáticos
-  - NetworkX: Criação e manipulação de redes complexas
-  - Matplotlib: Visualização de resultados
-  - Numba: Aceleração de código Python
-  - tqdm: Barras de progresso
-  - Click: Interface de linha de comando
+- Conhecimentos básicos de linha de comando
 
-### Instalação via pip
+### Passo a Passo para Instalação
 
+A instalação do SPKMC segue o fluxo padrão de instalação de pacotes Python. Siga os passos abaixo:
+
+#### 1. Instalar o virtualenv
+
+O virtualenv é uma ferramenta para criar ambientes Python isolados. Isso é importante para evitar conflitos entre dependências de diferentes projetos e é recomendado, já que atualmente é difícil instalar pacotes Python usando pip sem estar em um ambiente virtual.
+
+**Opção 1: Instalação via pip**
 ```bash
-# Instalar dependências
-pip install -r requirements.txt
-
-# Instalar o pacote em modo de desenvolvimento
-pip install -e .
+pip install virtualenv
 ```
 
-### Instalação a partir do código-fonte
+**Opção 2: Instalação via gerenciadores de pacotes do sistema operacional**
+
+Em muitos sistemas, é recomendável instalar o virtualenv através do gerenciador de pacotes do sistema operacional, o que pode resolver problemas de permissão e dependências:
+
+Para Ubuntu/Debian:
+```bash
+sudo apt-get install python3-virtualenv
+```
+
+Para Fedora:
+```bash
+sudo dnf install python3-virtualenv
+```
+
+Para macOS (usando Homebrew):
+```bash
+brew install virtualenv
+```
+
+Para Windows (usando Chocolatey):
+```bash
+choco install virtualenv
+```
+
+#### 2. Criar um ambiente virtual
+
+Crie um ambiente virtual para isolar as dependências do SPKMC:
 
 ```bash
-# Clonar o repositório
+# No Windows
+virtualenv venv
+
+# No Linux/macOS
+python3 -m virtualenv venv
+```
+
+#### 3. Ativar o ambiente virtual
+
+Ative o ambiente virtual criado:
+
+```bash
+# No Windows
+venv\Scripts\activate
+
+# No Linux/macOS
+source venv/bin/activate
+```
+
+Após a ativação, você verá o nome do ambiente virtual no início da linha de comando, como `(venv)`.
+
+#### 4. Clonar o repositório (se ainda não tiver feito)
+
+```bash
 git clone https://github.com/seu-usuario/spkmc.git
 cd spkmc
+```
 
-# Instalar dependências
-pip install -r requirements.txt
+#### 5. Instalar o pacote em modo de desenvolvimento
 
-# Instalar o pacote
+Instale o pacote em modo de desenvolvimento para que as alterações no código sejam refletidas automaticamente:
+
+```bash
 pip install -e .
 ```
+
+Este comando instalará o SPKMC e todas as suas dependências automaticamente. Após a instalação, o comando `spkmc` estará disponível no seu ambiente virtual.
 
 ## Uso Básico
 
-### Interface de Linha de Comando (CLI)
+Após a instalação, você terá acesso ao comando `spkmc` que fornece uma interface de linha de comando completa para executar simulações, visualizar resultados e obter informações.
 
-O pacote fornece uma CLI completa para executar simulações, visualizar resultados e obter informações.
+### Interface de Linha de Comando (CLI)
 
 #### Executar uma simulação
 
 ```bash
-python -m spkmc.cli run --network-type er --dist-type gamma --nodes 1000 --k-avg 10 --samples 50
-```
-
-ou usando o script principal:
-
-```bash
-python spkmc_cli.py run --network-type er --dist-type gamma --nodes 1000 --k-avg 10 --samples 50
+spkmc run --network-type er --dist-type gamma --nodes 1000 --k-avg 10 --samples 50
 ```
 
 #### Visualizar resultados
 
 ```bash
-python -m spkmc.cli plot data/spkmc/gamma/ER/results_1000_50_2.0.json
+spkmc plot data/spkmc/gamma/ER/results_1000_50_2.0.json
 ```
 
 #### Obter informações sobre simulações salvas
 
 ```bash
-python -m spkmc.cli info --result-file data/spkmc/gamma/ER/results_1000_50_2.0.json
+spkmc info --result-file data/spkmc/gamma/ER/results_1000_50_2.0.json
 ```
 
 #### Listar simulações disponíveis
 
 ```bash
-python -m spkmc.cli info --list
+spkmc info --list
 ```
 
 #### Comparar resultados de múltiplas simulações
 
 ```bash
-python -m spkmc.cli compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json
+spkmc compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json
 ```
 
 ### Uso Programático
@@ -141,25 +184,98 @@ plt.show()
 ### Simulação com Rede Erdos-Renyi e Distribuição Gamma
 
 ```bash
-python -m spkmc.cli run -n er -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
+spkmc run -n er -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
 ```
 
 ### Simulação com Rede Complexa e Distribuição Exponencial
 
 ```bash
-python -m spkmc.cli run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
+spkmc run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
 ```
 
 ### Simulação com Grafo Completo
 
 ```bash
-python -m spkmc.cli run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -i 0.01 --t-max 10.0 --steps 100
+spkmc run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -i 0.01 --t-max 10.0 --steps 100
+```
+
+### Execução em Lote
+
+Você pode executar múltiplos cenários de simulação a partir de um arquivo JSON:
+
+```bash
+spkmc batch --scenarios-file batches.json --output-dir results/batch_test
 ```
 
 Para exemplos mais detalhados, consulte o diretório `examples/`:
 - [Exemplos de uso da CLI](examples/cli_examples.md)
 - [Exemplo básico de simulação](examples/basic_example.py)
 - [Exemplo de uso programático da CLI](examples/basic_simulation.py)
+
+## Parâmetros Comuns
+
+### Tipos de Rede
+- `er`: Erdos-Renyi (rede aleatória)
+- `cn`: Complex Network (rede complexa com distribuição de lei de potência)
+- `cg`: Complete Graph (grafo completo)
+
+### Tipos de Distribuição
+- `gamma`: Distribuição Gamma
+- `exponential`: Distribuição Exponencial
+
+### Parâmetros de Simulação
+- `-N, --nodes`: Número de nós na rede
+- `--k-avg`: Grau médio da rede (para redes ER e CN)
+- `-s, --samples`: Número de amostras por execução
+- `-i, --initial-perc`: Porcentagem inicial de infectados
+- `--t-max`: Tempo máximo de simulação
+- `--steps`: Número de passos de tempo
+
+## Solução de Problemas (Troubleshooting)
+
+### Problemas de Instalação
+
+#### Erro: "Command 'pip' not found"
+- **Solução**: Certifique-se de que o Python está instalado corretamente e adicionado ao PATH do sistema. Você também pode tentar usar `python -m pip` em vez de apenas `pip`.
+
+#### Erro ao instalar dependências
+- **Solução**: Verifique se você está usando uma versão compatível do Python (3.8 ou superior). Algumas dependências podem requerer compiladores específicos. No Windows, pode ser necessário instalar o Visual C++ Build Tools.
+
+```bash
+pip install --upgrade pip setuptools wheel
+```
+
+#### Ambiente virtual não ativa corretamente
+- **Solução**: Verifique se você está usando o comando correto para o seu sistema operacional. No Windows, use `venv\Scripts\activate`, e no Linux/macOS, use `source venv/bin/activate`.
+
+#### Problemas de permissão ao instalar pacotes
+- **Solução**: Se você encontrar problemas de permissão ao instalar pacotes, considere usar o gerenciador de pacotes do seu sistema operacional para instalar o virtualenv, como mostrado na seção de instalação.
+
+### Problemas de Execução
+
+#### Comando 'spkmc' não encontrado
+- **Solução**: Certifique-se de que o ambiente virtual está ativado e que o pacote foi instalado corretamente com `pip install -e .`. Você pode verificar se o comando está disponível com:
+
+```bash
+pip list | grep spkmc
+```
+
+#### Erro: "ModuleNotFoundError"
+- **Solução**: Este erro geralmente ocorre quando uma dependência não está instalada. Certifique-se de que você instalou o pacote com `pip install -e .`, que instalará todas as dependências necessárias.
+
+#### Erro de memória durante simulações grandes
+- **Solução**: Reduza o tamanho da rede ou o número de amostras. Para redes muito grandes, considere usar uma máquina com mais memória RAM.
+
+#### Visualização não mostra gráficos
+- **Solução**: Certifique-se de que o matplotlib está instalado corretamente. Em alguns ambientes, pode ser necessário configurar um backend específico:
+
+```python
+import matplotlib
+matplotlib.use('TkAgg')  # ou outro backend compatível
+```
+
+#### Erro ao salvar resultados
+- **Solução**: Verifique se você tem permissões de escrita no diretório de destino. Use o parâmetro `--output` para especificar um caminho alternativo.
 
 ## Documentação
 

@@ -755,32 +755,30 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
     Exemplo de arquivo JSON:
     [
         {
+            "distribution": "gamma",
             "network_type": "er",
-            "dist_type": "gamma",
-            "nodes": 1000,
+            "network_size": 3000,
             "k_avg": 10,
-            "shape": 2.0,
-            "scale": 1.0,
-            "lambda_val": 0.5,
-            "samples": 50,
-            "num_runs": 2,
-            "initial_perc": 0.01,
-            "t_max": 10.0,
-            "steps": 100
+            "shape": 1,
+            "scale": 1,
+            "lambda": 0.45,
+            "samples": 100,
+            "num_runs": 100,
+            "steps": 300,
+            "initial_perc": 0.01
         },
         {
-            "network_type": "cn",
-            "dist_type": "exponential",
-            "nodes": 2000,
-            "k_avg": 8,
-            "exponent": 2.5,
-            "mu": 1.0,
-            "lambda_val": 0.5,
-            "samples": 50,
-            "num_runs": 2,
-            "initial_perc": 0.01,
-            "t_max": 10.0,
-            "steps": 100
+            "distribution": "exponential",
+            "network_type": "er",
+            "network_size": 3000,
+            "k_avg": 10,
+            "shape": 3,
+            "scale": 0.33333,
+            "lambda": 0.45,
+            "samples": 100,
+            "num_runs": 100,
+            "steps": 300,
+            "initial_perc": 0.01
         }
     ]
     """
@@ -834,19 +832,19 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
             try:
                 # Parâmetros com valores padrão
                 network_type = scenario.get("network_type", "er")
-                dist_type = scenario.get("dist_type", "gamma")
-                nodes = scenario.get("nodes", DEFAULT_N)
-                k_avg = scenario.get("k_avg", DEFAULT_K_AVG)
-                shape = scenario.get("shape", DEFAULT_SHAPE)
-                scale = scenario.get("scale", DEFAULT_SCALE)
-                mu = scenario.get("mu", DEFAULT_MU)
-                lambda_val = scenario.get("lambda_val", DEFAULT_LAMBDA)
-                exponent = scenario.get("exponent", DEFAULT_EXPONENT)
-                samples = scenario.get("samples", DEFAULT_SAMPLES)
-                num_runs = scenario.get("num_runs", DEFAULT_NUM_RUNS)
+                dist_type    = scenario.get("distribution", "exponential")
+                nodes        = scenario.get("network_size", DEFAULT_N)
+                k_avg        = scenario.get("k_avg", DEFAULT_K_AVG)
+                shape        = scenario.get("shape", DEFAULT_SHAPE)
+                scale        = scenario.get("scale", DEFAULT_SCALE)
+                mu           = scenario.get("mu", DEFAULT_MU)
+                lambda_val   = scenario.get("lambda", DEFAULT_LAMBDA)
+                exponent     = scenario.get("exponent", DEFAULT_EXPONENT)
+                samples      = scenario.get("samples", DEFAULT_SAMPLES)
+                num_runs     = scenario.get("num_runs", DEFAULT_NUM_RUNS)
                 initial_perc = scenario.get("initial_perc", DEFAULT_INITIAL_PERC)
-                t_max = scenario.get("t_max", DEFAULT_T_MAX)
-                steps = scenario.get("steps", DEFAULT_STEPS)
+                t_max        = scenario.get("t_max", DEFAULT_T_MAX)
+                steps        = scenario.get("steps", DEFAULT_STEPS)
                 
                 # Validar parâmetros
                 if network_type not in ["er", "cn", "cg"]:
