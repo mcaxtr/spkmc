@@ -743,6 +743,9 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
+    
+    # Expandir ~ para caminho absoluto no output_dir
+    output_dir = os.path.expanduser(output_dir)
     """
     Executa múltiplos cenários de simulação a partir de um arquivo JSON.
     
@@ -914,6 +917,54 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                 
                 if network_type == "cn":
                     simulation_params["exponent"] = exponent
+                
+                # Verificar se o cenário já foi executado com os mesmos parâmetros e output_dir
+                if os.path.exists(output_file):
+                    try:
+                        log_debug(f"Verificando arquivo existente: {output_file}")
+                        with open(output_file, 'r') as f:
+                            existing_result = json.load(f)
+                        existing_metadata = existing_result.get("metadata", {})
+                        log_debug(f"Parâmetros existentes: {existing_metadata}")
+                        log_debug(f"Parâmetros atuais: network_type={network_type}, dist_type={dist_type}, nodes={nodes}, initial_perc={initial_perc}, k_avg={k_avg}, num_runs={num_runs}, exponent={exponent}, shape={shape}, scale={scale}, mu={mu}, lambda_val={lambda_val}")
+                        # Comparar parâmetros relevantes
+                        def param_equal(existing_key, current_value, default_value=None):
+                            existing_value = existing_metadata.get(existing_key, default_value)
+                            return existing_value == current_value
+                        
+                        params_match = (
+                            param_equal("network_type", network_type) and
+                            param_equal("distribution", dist_type) and
+                            param_equal("N", nodes) and
+                            param_equal("initial_perc", initial_perc) and
+                            param_equal("k_avg", k_avg) and
+                            param_equal("num_runs", num_runs) and
+                            param_equal("exponent", exponent) and
+                            param_equal("shape", shape) and
+                            param_equal("scale", scale) and
+                            param_equal("mu", mu, default_value=1.0) and
+                            param_equal("lambda", lambda_val)
+                        )
+                        if params_match:
+                            log_info(f"Cenário {scenario_num} já executado com os mesmos parâmetros e output_dir. Pulando execução.")
+                            result_files.append(output_file)
+                            progress.update(task, advance=1)
+                            continue
+                    except Exception as e:
+                        log_warning(f"Não foi possível verificar resultado existente para o cenário {scenario_num}: {e}")
+                
+                # Cabeçalho informativo para cada cenário
+                console.print(format_title(f"Início da execução do cenário {scenario_num}/{len(scenarios)}: {scenario_label}"))
+                console.print(f"  {format_param('Rede', network_type.upper())}")
+                console.print(f"  {format_param('Distribuição', dist_type.capitalize())}")
+                console.print(f"  {format_param('Nós', nodes)}")
+                if network_type in ['er', 'cn']:
+                    console.print(f"  {format_param('Grau médio', k_avg)}")
+                if network_type == 'cn':
+                    console.print(f"  {format_param('Expoente', exponent)}")
+                console.print(f"  {format_param('Amostras', samples)}")
+                console.print(f"  {format_param('Execuções', num_runs)}")
+                console.print(f"  {format_param('Infectados iniciais', f'{initial_perc*100:.2f}%')}")
                 
                 # Executar a simulação
                 log_debug(f"Iniciando execução da simulação para o cenário {scenario_num}", verbose_only=True)
