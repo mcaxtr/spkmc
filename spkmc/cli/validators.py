@@ -84,7 +84,7 @@ def validate_network_type(ctx: click.Context, param: click.Parameter, value: str
     Raises:
         click.BadParameter: Se o tipo de rede não for válido
     """
-    valid_types = ["er", "cn", "cg"]
+    valid_types = ["er", "cn", "cg", "rrn"]
     if value.lower() not in valid_types:
         raise click.BadParameter(f"Tipo de rede inválido. Escolha entre: {', '.join(valid_types)}")
     return value.lower()

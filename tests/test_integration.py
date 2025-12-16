@@ -189,7 +189,31 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
     assert "Simulação concluída com sucesso" in result.output
     assert os.path.exists(output_path2)
     
-    # 3. Visualizar resultados
+    # 3. Executar simulação com rede regular aleatória e distribuição Gamma
+    output_path3 = os.path.join(temp_dir, "rrn_gamma.json")
+    result = runner.invoke(cli, [
+        'run',
+        '--network-type', 'rrn',
+        '--dist-type', 'gamma',
+        '--shape', '2.0',
+        '--scale', '1.0',
+        '--nodes', '20',
+        '--k-avg', '4',
+        '--samples', '2',
+        '--num-runs', '2',
+        '--initial-perc', '0.1',
+        '--t-max', '5.0',
+        '--steps', '6',
+        '--output', output_path3,
+        '--no-plot'
+    ])
+    
+    # Verifica se a simulação foi executada com sucesso
+    assert result.exit_code == 0
+    assert "Simulação concluída com sucesso" in result.output
+    assert os.path.exists(output_path3)
+    
+    # 4. Visualizar resultados
     result = runner.invoke(cli, [
         'plot',
         output_path,
@@ -199,7 +223,7 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
     # Verifica se a visualização foi executada com sucesso
     assert result.exit_code == 0
     
-    # 4. Obter informações sobre os resultados
+    # 5. Obter informações sobre os resultados
     result = runner.invoke(cli, [
         'info',
         '--result-file', output_path
@@ -210,11 +234,11 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
     assert "Parâmetros da Simulação" in result.output
     assert "network_type: er" in result.output.lower()
     
-    # 5. Comparar resultados
+    # 6. Comparar resultados
     result = runner.invoke(cli, [
         'compare',
-        output_path, output_path2,
-        '--labels', 'ER-Gamma', 'CN-Exp'
+        output_path, output_path2, output_path3,
+        '--labels', 'ER-Gamma', 'CN-Exp', 'RRN-Gamma'
     ])
     
     # Verifica se a comparação foi executada com sucesso
@@ -235,6 +259,7 @@ def test_network_distribution_integration():
     er_network = NetworkFactory.create_erdos_renyi(N=20, k_avg=4)
     cn_network = NetworkFactory.create_complex_network(N=20, exponent=2.5, k_avg=4)
     cg_network = NetworkFactory.create_complete_graph(N=10)
+    rrn_network = NetworkFactory.create_random_regular_network(N=20, k_avg=4)
     
     # 3. Verificar propriedades das redes
     assert er_network.number_of_nodes() == 20
@@ -245,6 +270,12 @@ def test_network_distribution_integration():
     
     assert cg_network.number_of_nodes() == 10
     assert cg_network.number_of_edges() == 10 * 9  # Grafo direcionado completo
+    
+    assert rrn_network.number_of_nodes() == 20
+    assert rrn_network.number_of_edges() > 0
+    # Verifica se todos os nós têm o mesmo grau
+    degrees = dict(rrn_network.degree()).values()
+    assert all(d == 4 for d in degrees)
     
     # 4. Criar simuladores
     gamma_simulator = SPKMC(gamma_dist)
@@ -267,8 +298,14 @@ def test_network_distribution_integration():
     # 6.4. Exponential + CN
     S4, I4, R4 = exp_simulator.run_multiple_simulations(cn_network, sources, time_steps, samples=2, show_progress=False)
     
+    # 6.5. Gamma + RRN
+    S5, I5, R5 = gamma_simulator.run_multiple_simulations(rrn_network, sources, time_steps, samples=2, show_progress=False)
+    
+    # 6.6. Exponential + RRN
+    S6, I6, R6 = exp_simulator.run_multiple_simulations(rrn_network, sources, time_steps, samples=2, show_progress=False)
+    
     # 7. Verificar resultados
-    for S, I, R in [(S1, I1, R1), (S2, I2, R2), (S3, I3, R3), (S4, I4, R4)]:
+    for S, I, R in [(S1, I1, R1), (S2, I2, R2), (S3, I3, R3), (S4, I4, R4), (S5, I5, R5), (S6, I6, R6)]:
         assert isinstance(S, np.ndarray)
         assert isinstance(I, np.ndarray)
         assert isinstance(R, np.ndarray)

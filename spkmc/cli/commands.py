@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any, Union
 import time
+import zipfile
 from datetime import datetime
 
 from spkmc.core.distributions import create_distribution
@@ -94,7 +95,7 @@ def cli(verbose, no_color, simple):
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
 @click.option("--network-type", "-n", type=str, default="er", show_default=True,
               callback=validate_network_type,
-              help="Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg)")
+              help="Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg), Random Regular Network (rrn)")
 @click.option("--dist-type", "-d", type=str, default="gamma", show_default=True,
               callback=validate_distribution_type,
               help="Tipo de distribuição: Gamma ou Exponential")
@@ -145,11 +146,13 @@ def cli(verbose, no_color, simple):
               help="Salvar o gráfico em um arquivo (formato: png, pdf, svg)")
 @click.option("--overwrite", is_flag=True, default=False,
               help="Sobrescrever resultados existentes")
+@click.option("--zip", is_flag=True, default=False,
+              help="Criar um arquivo zip com os resultados")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a simulação")
 def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent, nodes, k_avg,
         samples, num_runs, initial_perc, t_max, steps, output, export_format, no_plot,
-        save_plot, overwrite, verbose):
+        save_plot, overwrite, zip, verbose):
     """Executa uma simulação SPKMC com os parâmetros especificados."""
     # Configurar o modo verboso
     if verbose:
@@ -188,7 +191,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
     console.print(f"  {format_param('Distribuição', dist_type_cap)}")
     console.print(f"  {format_param('Nós', nodes)}")
     
-    if network_type in ["er", "cn"]:
+    if network_type in ["er", "cn", "rrn"]:
         console.print(f"  {format_param('Grau médio', k_avg)}")
     
     if network_type == "cn":
@@ -212,7 +215,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
         "overwrite": overwrite
     }
     
-    if network_type in ["er", "cn"]:
+    if network_type in ["er", "cn", "rrn"]:
         simulation_params["k_avg"] = k_avg
         simulation_params["num_runs"] = num_runs
     
@@ -280,7 +283,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
         
         output_result["metadata"]["lambda"] = lambda_val
         
-        if network_type in ["er", "cn"]:
+        if network_type in ["er", "cn", "rrn"]:
             output_result["metadata"]["k_avg"] = k_avg
             output_result["metadata"]["num_runs"] = num_runs
         
@@ -322,6 +325,27 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
                 export_path = output.replace(".json", f".{export_format}")
                 exported_file = ExportManager.export_results(output_result, export_path, export_format)
                 log_success(f"Resultados exportados em formato {export_format.upper()}: {exported_file}")
+            
+            # Criar arquivo zip com os resultados, se solicitado
+            if zip:
+                zip_path = output.replace(".json", ".zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    # Adicionar o arquivo JSON principal
+                    zipf.write(output, os.path.basename(output))
+                    
+                    # Adicionar o arquivo CSV simplificado, se existir
+                    if use_simple and os.path.exists(csv_path):
+                        zipf.write(csv_path, os.path.basename(csv_path))
+                    
+                    # Adicionar o arquivo exportado, se existir
+                    if export_format and os.path.exists(export_path):
+                        zipf.write(export_path, os.path.basename(export_path))
+                    
+                    # Adicionar o gráfico, se existir
+                    if save_plot and os.path.exists(save_plot):
+                        zipf.write(save_plot, os.path.basename(save_plot))
+                
+                log_success(f"Resultados compactados em: {zip_path}")
         except Exception as e:
             log_error(f"Erro ao salvar resultados: {e}")
     
@@ -351,7 +375,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
 
 @cli.command(help="Visualizar resultados de simulações anteriores")
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
-@click.argument("result_file", type=str, callback=validate_file_exists)
+@click.argument("path", type=str)
 @click.option("--with-error", "-e", is_flag=True, default=False,
               help="Mostrar barras de erro (se disponíveis)")
 @click.option("--output", "-o", type=str,
@@ -363,9 +387,13 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
               help="Resolução do gráfico em DPI (quando usado com --output)")
 @click.option("--export", "-x", type=click.Choice(['json', 'csv', 'excel', 'md', 'html']),
               help="Exportar resultados em formato adicional")
+@click.option("--states", "-s", type=str, multiple=True,
+              help="Estados específicos para plotar (ex: --states infected --states recovered)")
+@click.option("--separate", is_flag=True, default=False,
+              help="Plotar múltiplos cenários em gráficos separados (quando um diretório é fornecido)")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas")
-def plot(simple, result_file, with_error, output, format, dpi, export, verbose):
+def plot(simple, path, with_error, output, format, dpi, export, states, separate, verbose):
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
@@ -374,84 +402,234 @@ def plot(simple, result_file, with_error, output, format, dpi, export, verbose):
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
     
-    # Carregar os resultados
-    try:
-        log_info(f"Carregando resultados de: {result_file}")
-        result = ResultManager.load_result(result_file)
-    except Exception as e:
-        log_error(f"Erro ao carregar o arquivo de resultados: {e}")
-        return
+    # Verificar se o caminho é um arquivo ou diretório
+    path_obj = Path(path)
     
-    # Extrair os dados
-    S = np.array(result.get("S_val", []))
-    I = np.array(result.get("I_val", []))
-    R = np.array(result.get("R_val", []))
-    time_steps = np.array(result.get("time", []))
+    if not path_obj.exists():
+        log_error(f"Caminho não encontrado: {path}")
+        ctx.exit(1)
     
-    if not len(S) or not len(I) or not len(R) or not len(time_steps):
-        log_error("Dados incompletos no arquivo de resultados.")
-        return
+    # Processar estados a serem plotados
+    valid_states = {'susceptible', 'infected', 'recovered', 's', 'i', 'r'}
+    states_to_plot = set()
     
-    # Calcular estatísticas básicas
-    max_infected = np.max(I)
-    max_infected_time = time_steps[np.argmax(I)]
-    final_recovered = R[-1]
+    if states:
+        for state in states:
+            state_lower = state.lower()
+            if state_lower in valid_states:
+                # Normalizar para S, I, R
+                if state_lower in ['susceptible', 's']:
+                    states_to_plot.add('S')
+                elif state_lower in ['infected', 'i']:
+                    states_to_plot.add('I')
+                elif state_lower in ['recovered', 'r']:
+                    states_to_plot.add('R')
+            else:
+                log_warning(f"Estado inválido ignorado: {state}")
+    else:
+        # Se nenhum estado foi especificado, plotar todos
+        states_to_plot = {'S', 'I', 'R'}
     
-    console.print(format_title("Estatísticas da Simulação"))
-    console.print(f"  {format_param('Máximo de infectados', f'{max_infected:.4f} (em t={max_infected_time:.2f})')}")
-    console.print(f"  {format_param('Recuperados finais', f'{final_recovered:.4f}')}")
+    if not states_to_plot:
+        log_warning("Nenhum estado válido especificado. Plotando todos os estados.")
+        states_to_plot = {'S', 'I', 'R'}
     
-    # Verificar se há dados de erro disponíveis
-    has_error = "S_err" in result and "I_err" in result and "R_err" in result
+    log_info(f"Estados a serem plotados: {', '.join(sorted(states_to_plot))}")
     
-    # Extrair metadados para o título
-    metadata = result.get("metadata", {})
-    network_type = metadata.get("network_type", "").upper()
-    dist_type = metadata.get("distribution", "").capitalize()
-    N = metadata.get("N", "")
+    # Coletar arquivos de resultados
+    result_files = []
     
-    # Exibir metadados
-    console.print(format_title("Metadados da Simulação"))
-    for key, value in metadata.items():
-        console.print(f"  {format_param(key, value)}")
-    
-    title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
-    
-    try:
-        log_info("Gerando visualização...")
-        
-        if with_error and has_error:
-            S_err = np.array(result.get("S_err", []))
-            I_err = np.array(result.get("I_err", []))
-            R_err = np.array(result.get("R_err", []))
-            Visualizer.plot_result_with_error(S, I, R, S_err, I_err, R_err, time_steps, title, output)
+    if path_obj.is_file():
+        # Arquivo único
+        if path_obj.suffix == '.json':
+            result_files.append(path_obj)
         else:
-            if with_error and not has_error:
-                log_warning("Dados de erro não disponíveis. Mostrando gráfico sem barras de erro.")
-            Visualizer.plot_result(S, I, R, time_steps, title, output)
+            log_error(f"Arquivo deve ser JSON: {path}")
+            ctx.exit(1)
+    elif path_obj.is_dir():
+        # Diretório - buscar todos os arquivos JSON
+        json_files = list(path_obj.glob("*.json"))
+        if not json_files:
+            log_error(f"Nenhum arquivo JSON encontrado no diretório: {path}")
+            ctx.exit(1)
+        result_files.extend(json_files)
+        log_info(f"Encontrados {len(result_files)} arquivos JSON no diretório")
+    else:
+        log_error(f"Caminho inválido: {path}")
+        ctx.exit(1)
+    
+    # Processar arquivos
+    if len(result_files) == 1:
+        # Arquivo único - comportamento original
+        result_file = result_files[0]
+        try:
+            log_info(f"Carregando resultados de: {result_file}")
+            result = ResultManager.load_result(str(result_file))
+        except Exception as e:
+            log_error(f"Erro ao carregar o arquivo de resultados: {e}")
+            ctx.exit(1)
+    
+        # Extrair os dados
+        S = np.array(result.get("S_val", []))
+        I = np.array(result.get("I_val", []))
+        R = np.array(result.get("R_val", []))
+        time_steps = np.array(result.get("time", []))
         
-        if output:
-            log_success(f"Gráfico salvo em: {output}")
-            
-        # Exportar em formato adicional, se especificado
-        if export:
-            export_path = result_file.replace(".json", f".{export}")
-            exported_file = ExportManager.export_results(result, export_path, export)
-            log_success(f"Resultados exportados em formato {export.upper()}: {exported_file}")
+        if not len(S) or not len(I) or not len(R) or not len(time_steps):
+            log_error("Dados incompletos no arquivo de resultados.")
+            ctx.exit(1)
         
-        # Gerar arquivo CSV simplificado se o parâmetro --simple estiver ativado
-        if use_simple:
-            csv_path = result_file.replace(".json", "_simple.csv")
-            with open(csv_path, 'w') as f:
-                # Dados sem cabeçalho (tempo, infectados, erro)
-                for i, t in enumerate(time_steps):
-                    erro = I_err[i] if has_error else 0.0
-                    f.write(f"{t},{I[i]},{erro}\n")
+        # Calcular estatísticas básicas
+        max_infected = np.max(I)
+        max_infected_time = time_steps[np.argmax(I)]
+        final_recovered = R[-1]
+        
+        console.print(format_title("Estatísticas da Simulação"))
+        console.print(f"  {format_param('Máximo de infectados', f'{max_infected:.4f} (em t={max_infected_time:.2f})')}")
+        console.print(f"  {format_param('Recuperados finais', f'{final_recovered:.4f}')}")
+        
+        # Verificar se há dados de erro disponíveis
+        has_error = "S_err" in result and "I_err" in result and "R_err" in result
+        
+        # Extrair metadados para o título
+        metadata = result.get("metadata", {})
+        network_type = metadata.get("network_type", "").upper()
+        dist_type = metadata.get("distribution", "").capitalize()
+        N = metadata.get("N", "")
+        
+        # Exibir metadados
+        console.print(format_title("Metadados da Simulação"))
+        for key, value in metadata.items():
+            console.print(f"  {format_param(key, value)}")
+        
+        title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
+        
+        try:
+            log_info("Gerando visualização...")
             
-            log_success(f"Resultados simplificados salvos em CSV: {csv_path}")
+            if with_error and has_error:
+                S_err = np.array(result.get("S_err", []))
+                I_err = np.array(result.get("I_err", []))
+                R_err = np.array(result.get("R_err", []))
+                Visualizer.plot_result_with_error(S, I, R, S_err, I_err, R_err, time_steps, title, output, states_to_plot)
+            else:
+                if with_error and not has_error:
+                    log_warning("Dados de erro não disponíveis. Mostrando gráfico sem barras de erro.")
+                Visualizer.plot_result(S, I, R, time_steps, title, output, states_to_plot)
             
-    except Exception as e:
-        log_error(f"Erro ao gerar visualização: {e}")
+            if output:
+                log_success(f"Gráfico salvo em: {output}")
+                
+            # Exportar em formato adicional, se especificado
+            if export:
+                export_path = str(result_file).replace(".json", f".{export}")
+                exported_file = ExportManager.export_results(result, export_path, export)
+                log_success(f"Resultados exportados em formato {export.upper()}: {exported_file}")
+            
+            # Gerar arquivo CSV simplificado se o parâmetro --simple estiver ativado
+            if use_simple:
+                csv_path = str(result_file).replace(".json", "_simple.csv")
+                with open(csv_path, 'w') as f:
+                    # Dados sem cabeçalho (tempo, infectados, erro)
+                    for i, t in enumerate(time_steps):
+                        erro = I_err[i] if has_error else 0.0
+                        f.write(f"{t},{I[i]},{erro}\n")
+                
+                log_success(f"Resultados simplificados salvos em CSV: {csv_path}")
+                
+        except Exception as e:
+            log_error(f"Erro ao gerar visualização: {e}")
+    
+    else:
+        # Múltiplos arquivos
+        log_info(f"Processando {len(result_files)} arquivos de resultados...")
+        
+        if separate:
+            # Plotar cada arquivo separadamente
+            for i, result_file in enumerate(result_files):
+                log_info(f"Processando arquivo {i+1}/{len(result_files)}: {result_file.name}")
+                
+                try:
+                    result = ResultManager.load_result(str(result_file))
+                    
+                    # Extrair os dados
+                    S = np.array(result.get("S_val", []))
+                    I = np.array(result.get("I_val", []))
+                    R = np.array(result.get("R_val", []))
+                    time_steps = np.array(result.get("time", []))
+                    
+                    if not len(S) or not len(I) or not len(R) or not len(time_steps):
+                        log_warning(f"Dados incompletos em {result_file.name}, pulando...")
+                        continue
+                    
+                    # Verificar se há dados de erro
+                    has_error = "S_err" in result and "I_err" in result and "R_err" in result
+                    
+                    # Extrair metadados
+                    metadata = result.get("metadata", {})
+                    network_type = metadata.get("network_type", "").upper()
+                    dist_type = metadata.get("distribution", "").capitalize()
+                    N = metadata.get("N", "")
+                    
+                    title = f"Simulação SPKMC - {result_file.stem}"
+                    
+                    # Determinar nome do arquivo de saída
+                    if output:
+                        base_output = Path(output)
+                        output_file = base_output.parent / f"{base_output.stem}_{result_file.stem}{base_output.suffix}"
+                    else:
+                        output_file = None
+                    
+                    if with_error and has_error:
+                        S_err = np.array(result.get("S_err", []))
+                        I_err = np.array(result.get("I_err", []))
+                        R_err = np.array(result.get("R_err", []))
+                        Visualizer.plot_result_with_error(S, I, R, S_err, I_err, R_err, time_steps, title, str(output_file) if output_file else None, states_to_plot)
+                    else:
+                        Visualizer.plot_result(S, I, R, time_steps, title, str(output_file) if output_file else None, states_to_plot)
+                    
+                    if output_file:
+                        log_success(f"Gráfico salvo em: {output_file}")
+                        
+                except Exception as e:
+                    log_error(f"Erro ao processar {result_file.name}: {e}")
+                    continue
+        
+        else:
+            # Plotar todos os arquivos em um único gráfico comparativo
+            results_data = []
+            labels = []
+            
+            for result_file in result_files:
+                try:
+                    result = ResultManager.load_result(str(result_file))
+                    
+                    # Verificar se tem os dados necessários
+                    if all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
+                        results_data.append(result)
+                        labels.append(result_file.stem)
+                    else:
+                        log_warning(f"Dados incompletos em {result_file.name}, pulando...")
+                        
+                except Exception as e:
+                    log_error(f"Erro ao carregar {result_file.name}: {e}")
+                    continue
+            
+            if not results_data:
+                log_error("Nenhum arquivo válido encontrado para plotar.")
+                ctx.exit(1)
+            
+            try:
+                log_info(f"Gerando visualização comparativa de {len(results_data)} cenários...")
+                
+                title = f"Comparação de Simulações SPKMC - {path_obj.name}"
+                Visualizer.compare_results(results_data, labels, title, output, states_to_plot)
+                
+                if output:
+                    log_success(f"Gráfico comparativo salvo em: {output}")
+                    
+            except Exception as e:
+                log_error(f"Erro ao gerar visualização comparativa: {e}")
 
 
 @cli.command(help="Mostrar informações sobre simulações salvas")
@@ -595,6 +773,7 @@ def info(simple, result_file, list_files, export, output, verbose):
 
 
 @cli.command(help="Comparar resultados de múltiplas simulações")
+@click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
 @click.argument("result_files", nargs=-1, type=str, required=True)
 @click.option("--labels", "-l", multiple=True,
               help="Rótulos para cada arquivo (opcional)")
@@ -619,16 +798,42 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
         os.environ["SPKMC_VERBOSE"] = "1"
     
     if not result_files:
-        log_error("Especifique pelo menos um arquivo de resultados.")
+        log_error("Especifique pelo menos um arquivo de resultados ou diretório.")
         return
     
-    # Validar arquivos
-    for file in result_files:
-        if not os.path.exists(file):
-            log_error(f"O arquivo '{file}' não existe.")
+    # Processar argumentos - expandir diretórios para arquivos JSON
+    expanded_files = []
+    for arg in result_files:
+        if not os.path.exists(arg):
+            log_error(f"O caminho '{arg}' não existe.")
+            return
+        
+        if os.path.isdir(arg):
+            # Se for um diretório, buscar todos os arquivos JSON
+            json_files = sorted([str(f) for f in Path(arg).glob("*.json")])
+            if not json_files:
+                log_error(f"Nenhum arquivo JSON encontrado no diretório: {arg}")
+                return
+            log_info(f"Encontrados {len(json_files)} arquivos JSON em {arg}")
+            expanded_files.extend(json_files)
+        elif os.path.isfile(arg):
+            # Se for um arquivo, verificar se é JSON
+            if not arg.endswith('.json'):
+                log_warning(f"O arquivo '{arg}' não é um arquivo JSON, ignorando...")
+                continue
+            expanded_files.append(arg)
+        else:
+            log_error(f"O caminho '{arg}' não é um arquivo nem diretório válido.")
             return
     
-    log_info(f"Comparando {len(result_files)} arquivos de resultados...")
+    if not expanded_files:
+        log_error("Nenhum arquivo JSON válido encontrado para comparar.")
+        return
+    
+    # Atualizar result_files com a lista expandida
+    result_files = expanded_files
+    
+    log_info(f"Comparando {len(result_files)} arquivo(s) de resultados...")
     
     # Usar nomes de arquivos como rótulos padrão se não forem fornecidos
     if not labels:
@@ -715,9 +920,9 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
                             erro = I_err[j] if has_error else 0.0
                             f.write(f"{t},{I[j]},{erro}\n")
                     
-                    log_success(f"Resultados simplificados para '{result_labels[i]}' salvos em CSV: {csv_path}")
+                    log_success(f"Resultados simplificados para '{labels[i]}' salvos em CSV: {csv_path}")
                 except Exception as e:
-                    log_error(f"Erro ao gerar arquivo CSV simplificado para '{result_labels[i]}': {e}")
+                    log_error(f"Erro ao gerar arquivo CSV simplificado para '{labels[i]}': {e}")
             
             
     except Exception as e:
@@ -737,9 +942,11 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
               help="Desativar a geração de gráficos individuais")
 @click.option("--save-plot", is_flag=True, default=False,
               help="Salvar os gráficos em arquivos")
+@click.option("--zip", is_flag=True, default=False,
+              help="Criar um arquivo zip com os resultados de cada cenário")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a execução")
-def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, verbose):
+def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
@@ -850,7 +1057,7 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                 steps        = scenario.get("steps", DEFAULT_STEPS)
                 
                 # Validar parâmetros
-                if network_type not in ["er", "cn", "cg"]:
+                if network_type not in ["er", "cn", "cg", "rrn"]:
                     log_warning(f"Tipo de rede inválido: {network_type}, usando 'er' como padrão.")
                     network_type = "er"
                 
@@ -877,7 +1084,7 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                     console.print(f"  {format_param('Distribuição', dist_type.capitalize())}")
                     console.print(f"  {format_param('Nós', nodes)}")
                     
-                    if network_type in ["er", "cn"]:
+                    if network_type in ["er", "cn", "rrn"]:
                         console.print(f"  {format_param('Grau médio', k_avg)}")
                     
                     if network_type == "cn":
@@ -908,10 +1115,10 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                     "N": nodes,
                     "samples": samples,
                     "initial_perc": initial_perc,
-                    "overwrite": True  # Sempre sobrescrever em execuções em lote
+                    "overwrite": False  # Não sobrescrever automaticamente, verificar parâmetros primeiro
                 }
                 
-                if network_type in ["er", "cn"]:
+                if network_type in ["er", "cn", "rrn"]:
                     simulation_params["k_avg"] = k_avg
                     simulation_params["num_runs"] = num_runs
                 
@@ -929,8 +1136,40 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                         log_debug(f"Parâmetros atuais: network_type={network_type}, dist_type={dist_type}, nodes={nodes}, initial_perc={initial_perc}, k_avg={k_avg}, num_runs={num_runs}, exponent={exponent}, shape={shape}, scale={scale}, mu={mu}, lambda_val={lambda_val}")
                         # Comparar parâmetros relevantes
                         def param_equal(existing_key, current_value, default_value=None):
+                            # Se o valor atual é o valor padrão e a chave não existe no arquivo existente,
+                            # consideramos que são iguais (ambos usam o valor padrão)
+                            if current_value == default_value and existing_key not in existing_metadata:
+                                return True
+                                
                             existing_value = existing_metadata.get(existing_key, default_value)
-                            return existing_value == current_value
+                            
+                            # Se ambos são None, são iguais
+                            if existing_value is None and current_value is None:
+                                return True
+                                
+                            # Se apenas um é None, mas o outro é o valor padrão, são iguais
+                            if (existing_value is None and current_value == default_value) or \
+                               (current_value is None and existing_value == default_value):
+                                return True
+                            
+                            # Se apenas um é None e o outro não é o valor padrão, não são iguais
+                            if existing_value is None or current_value is None:
+                                return False
+                            
+                            try:
+                                # Para strings, ignorar case
+                                if isinstance(current_value, str) and isinstance(existing_value, str):
+                                    return existing_value.lower() == current_value.lower()
+                                
+                                # Para números, converter para float e usar tolerância
+                                if isinstance(current_value, (int, float)) or isinstance(existing_value, (int, float)):
+                                    return abs(float(existing_value) - float(current_value)) < 1e-6
+                                
+                                # Para outros tipos, comparação direta
+                                return existing_value == current_value
+                            except (ValueError, TypeError):
+                                # Se houver erro na conversão, considerar diferentes
+                                return False
                         
                         params_match = (
                             param_equal("network_type", network_type) and
@@ -958,7 +1197,7 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                 console.print(f"  {format_param('Rede', network_type.upper())}")
                 console.print(f"  {format_param('Distribuição', dist_type.capitalize())}")
                 console.print(f"  {format_param('Nós', nodes)}")
-                if network_type in ['er', 'cn']:
+                if network_type in ['er', 'cn', 'rrn']:
                     console.print(f"  {format_param('Grau médio', k_avg)}")
                 if network_type == 'cn':
                     console.print(f"  {format_param('Expoente', exponent)}")
@@ -1007,7 +1246,7 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                 
                 output_result["metadata"]["lambda"] = lambda_val
                 
-                if network_type in ["er", "cn"]:
+                if network_type in ["er", "cn", "rrn"]:
                     output_result["metadata"]["k_avg"] = k_avg
                     output_result["metadata"]["num_runs"] = num_runs
                 
@@ -1038,6 +1277,23 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
                             f.write(f"{t},{I[i]},{erro}\n")
                     
                     log_success(f"Resultados simplificados do cenário {scenario_num} salvos em CSV: {csv_path}")
+                
+                # Criar arquivo zip com os resultados do cenário, se solicitado
+                if zip:
+                    zip_path = output_file.replace(".json", ".zip")
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        # Adicionar o arquivo JSON principal
+                        zipf.write(output_file, os.path.basename(output_file))
+                        
+                        # Adicionar o arquivo CSV simplificado, se existir
+                        if use_simple and os.path.exists(csv_path):
+                            zipf.write(csv_path, os.path.basename(csv_path))
+                        
+                        # Adicionar o gráfico, se existir
+                        if save_plot and os.path.exists(plot_path):
+                            zipf.write(plot_path, os.path.basename(plot_path))
+                    
+                    log_success(f"Resultados do cenário {scenario_num} compactados em: {zip_path}")
                 
                 # Plotar os resultados, se solicitado
                 if not no_plot:
@@ -1112,3 +1368,33 @@ def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plo
     console.print(f"  {format_param('Cenários executados com sucesso', len(result_files))}")
     console.print(f"  {format_param('Tempo total de execução', f'{total_execution_time:.2f} segundos')}")
     console.print(f"  {format_param('Diretório de resultados', output_dir)}")
+    
+    # Criar um arquivo zip com todos os resultados do lote, se solicitado
+    if zip and result_files:
+        batch_zip_path = os.path.join(output_dir, f"{prefix}batch_results.zip")
+        with zipfile.ZipFile(batch_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Adicionar todos os arquivos de resultados
+            for result_file in result_files:
+                zipf.write(result_file, os.path.basename(result_file))
+                
+                # Adicionar os arquivos CSV simplificados correspondentes
+                csv_path = result_file.replace(".json", "_simple.csv")
+                if os.path.exists(csv_path):
+                    zipf.write(csv_path, os.path.basename(csv_path))
+                
+                # Adicionar os gráficos correspondentes
+                plot_path = result_file.replace(".json", ".png")
+                if os.path.exists(plot_path):
+                    zipf.write(plot_path, os.path.basename(plot_path))
+            
+            # Adicionar o gráfico comparativo e seus metadados, se existirem
+            if compare and len(all_results) > 1:
+                compare_path = os.path.join(output_dir, f"{prefix}comparison.png")
+                if os.path.exists(compare_path):
+                    zipf.write(compare_path, os.path.basename(compare_path))
+                
+                compare_meta_path = os.path.join(output_dir, f"{prefix}comparison_meta.json")
+                if os.path.exists(compare_meta_path):
+                    zipf.write(compare_meta_path, os.path.basename(compare_meta_path))
+        
+        log_success(f"Todos os resultados do lote compactados em: {batch_zip_path}")
