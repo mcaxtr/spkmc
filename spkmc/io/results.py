@@ -27,7 +27,7 @@ class ResultManager:
         Gera o caminho para o arquivo de resultados.
         
         Args:
-            network_type: Tipo de rede (ER, CN, CG)
+            network_type: Tipo de rede (ER, CN, CG, RRN)
             distribution: Objeto de distribuição
             N: Número de nós
             samples: Número de amostras
@@ -216,3 +216,46 @@ class ResultManager:
             formatted["has_error_data"] = False
         
         return formatted
+    
+    @staticmethod
+    def load_results_from_directory(directory: Union[str, Path]) -> List[Tuple[Path, Dict[str, Any]]]:
+        """
+        Carrega todos os arquivos JSON de resultados de um diretório.
+        
+        Args:
+            directory: Caminho para o diretório
+            
+        Returns:
+            Lista de tuplas (caminho_arquivo, dados_resultado)
+        
+        Raises:
+            ValueError: Se o diretório não existir ou não contiver arquivos JSON
+        """
+        dir_path = Path(directory)
+        
+        if not dir_path.exists():
+            raise ValueError(f"Diretório não encontrado: {directory}")
+        
+        if not dir_path.is_dir():
+            raise ValueError(f"Caminho não é um diretório: {directory}")
+        
+        json_files = list(dir_path.glob("*.json"))
+        
+        if not json_files:
+            raise ValueError(f"Nenhum arquivo JSON encontrado no diretório: {directory}")
+        
+        results = []
+        
+        for json_file in sorted(json_files):
+            try:
+                data = ResultManager.load_result(str(json_file))
+                results.append((json_file, data))
+            except Exception as e:
+                # Log do erro mas continua processando outros arquivos
+                print(f"Aviso: Erro ao carregar {json_file}: {e}")
+                continue
+        
+        if not results:
+            raise ValueError(f"Nenhum arquivo JSON válido encontrado no diretório: {directory}")
+        
+        return results

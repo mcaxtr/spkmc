@@ -16,10 +16,11 @@ class Visualizer:
     """Classe para visualização de resultados."""
     
     @staticmethod
-    def plot_result_with_error(S: np.ndarray, I: np.ndarray, R: np.ndarray, 
-                              S_err: np.ndarray, I_err: np.ndarray, R_err: np.ndarray, 
+    def plot_result_with_error(S: np.ndarray, I: np.ndarray, R: np.ndarray,
+                              S_err: np.ndarray, I_err: np.ndarray, R_err: np.ndarray,
                               time: np.ndarray, title: Optional[str] = None,
-                              save_path: Optional[str] = None) -> None:
+                              save_path: Optional[str] = None,
+                              states_to_plot: Optional[set] = None) -> None:
         """
         Plota os resultados com barras de erro.
         
@@ -33,11 +34,19 @@ class Visualizer:
             time: Passos de tempo
             title: Título do gráfico (opcional)
             save_path: Caminho para salvar o gráfico (opcional)
+            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
         """
+        if states_to_plot is None:
+            states_to_plot = {'S', 'I', 'R'}
+            
         plt.figure(figsize=(10, 6))
-        plt.errorbar(time, R, yerr=R_err, label='Recuperados', capsize=2, color='g')
-        plt.errorbar(time, I, yerr=I_err, label='Infectados', capsize=2, color='r')
-        plt.errorbar(time, S, yerr=S_err, label='Suscetíveis', capsize=2, color='b')
+        
+        if 'R' in states_to_plot:
+            plt.errorbar(time, R, yerr=R_err, label='Recuperados', capsize=2, color='g')
+        if 'I' in states_to_plot:
+            plt.errorbar(time, I, yerr=I_err, label='Infectados', capsize=2, color='r')
+        if 'S' in states_to_plot:
+            plt.errorbar(time, S, yerr=S_err, label='Suscetíveis', capsize=2, color='b')
         
         plt.xlabel('Tempo')
         plt.ylabel('Proporção de Indivíduos')
@@ -58,7 +67,8 @@ class Visualizer:
     
     @staticmethod
     def plot_result(S: np.ndarray, I: np.ndarray, R: np.ndarray, time: np.ndarray,
-                   title: Optional[str] = None, save_path: Optional[str] = None) -> None:
+                   title: Optional[str] = None, save_path: Optional[str] = None,
+                   states_to_plot: Optional[set] = None) -> None:
         """
         Plota os resultados sem barras de erro.
         
@@ -69,11 +79,19 @@ class Visualizer:
             time: Passos de tempo
             title: Título do gráfico (opcional)
             save_path: Caminho para salvar o gráfico (opcional)
+            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
         """
+        if states_to_plot is None:
+            states_to_plot = {'S', 'I', 'R'}
+            
         plt.figure(figsize=(10, 6))
-        plt.plot(time, R, 'g-', label='Recuperados')
-        plt.plot(time, I, 'r-', label='Infectados')
-        plt.plot(time, S, 'b-', label='Suscetíveis')
+        
+        if 'R' in states_to_plot:
+            plt.plot(time, R, 'g-', label='Recuperados')
+        if 'I' in states_to_plot:
+            plt.plot(time, I, 'r-', label='Infectados')
+        if 'S' in states_to_plot:
+            plt.plot(time, S, 'b-', label='Suscetíveis')
         
         plt.xlabel('Tempo')
         plt.ylabel('Proporção de Indivíduos')
@@ -94,7 +112,8 @@ class Visualizer:
     
     @staticmethod
     def compare_results(results: List[Dict[str, Any]], labels: List[str],
-                       title: Optional[str] = None, save_path: Optional[str] = None) -> None:
+                       title: Optional[str] = None, save_path: Optional[str] = None,
+                       states_to_plot: Optional[set] = None) -> None:
         """
         Compara resultados de múltiplas simulações.
         
@@ -103,6 +122,7 @@ class Visualizer:
             labels: Lista de rótulos para cada resultado
             title: Título do gráfico (opcional)
             save_path: Caminho para salvar o gráfico (opcional)
+            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
         """
         if not results:
             raise ValueError("A lista de resultados está vazia")
@@ -110,6 +130,9 @@ class Visualizer:
         if len(results) != len(labels):
             raise ValueError("O número de resultados e rótulos deve ser igual")
         
+        if states_to_plot is None:
+            states_to_plot = {'S', 'I', 'R'}
+            
         plt.figure(figsize=(12, 8))
         
         # Cores para cada conjunto de dados
@@ -127,9 +150,12 @@ class Visualizer:
             color = colors[i % len(colors)]
             linestyle = '-' if i < len(colors) else '--'
             
-            plt.plot(time, S, f'{color}', linestyle=linestyle, alpha=0.7, label=f'S - {label}')
-            plt.plot(time, I, f'{color}', linestyle=linestyle, alpha=0.7, label=f'I - {label}')
-            plt.plot(time, R, f'{color}', linestyle=linestyle, alpha=0.7, label=f'R - {label}')
+            if 'S' in states_to_plot:
+                plt.plot(time, S, f'{color}', linestyle=linestyle, alpha=0.7, label=f'S - {label}')
+            if 'I' in states_to_plot:
+                plt.plot(time, I, f'{color}', linestyle=linestyle, alpha=0.7, label=f'I - {label}')
+            if 'R' in states_to_plot:
+                plt.plot(time, R, f'{color}', linestyle=linestyle, alpha=0.7, label=f'R - {label}')
         
         plt.xlabel('Tempo')
         plt.ylabel('Proporção de Indivíduos')
