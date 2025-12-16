@@ -8,8 +8,11 @@ simulações.
 
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
 import os
+
+if TYPE_CHECKING:
+    from spkmc.io.experiments import PlotConfig
 
 
 class Visualizer:
@@ -116,7 +119,7 @@ class Visualizer:
                        states_to_plot: Optional[set] = None) -> None:
         """
         Compara resultados de múltiplas simulações.
-        
+
         Args:
             results: Lista de dicionários com resultados
             labels: Lista de rótulos para cada resultado
@@ -126,54 +129,142 @@ class Visualizer:
         """
         if not results:
             raise ValueError("A lista de resultados está vazia")
-        
+
         if len(results) != len(labels):
             raise ValueError("O número de resultados e rótulos deve ser igual")
-        
+
         if states_to_plot is None:
             states_to_plot = {'S', 'I', 'R'}
-            
+
         plt.figure(figsize=(12, 8))
-        
-        # Cores para cada conjunto de dados
-        colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k']
-        
+
+        # Colors for scenarios (different color per scenario)
+        scenario_colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ]
+
+        # Line styles for states (different style per state type)
+        state_styles = {'S': ':', 'I': '-', 'R': '--'}
+
         for i, (result, label) in enumerate(zip(results, labels)):
             if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
                 raise ValueError(f"Resultado {i} não contém todos os dados necessários")
-            
+
             S = np.array(result["S_val"])
             I = np.array(result["I_val"])
             R = np.array(result["R_val"])
             time = np.array(result["time"])
-            
-            color = colors[i % len(colors)]
-            linestyle = '-' if i < len(colors) else '--'
-            
+
+            color = scenario_colors[i % len(scenario_colors)]
+
             if 'S' in states_to_plot:
-                plt.plot(time, S, f'{color}', linestyle=linestyle, alpha=0.7, label=f'S - {label}')
+                plt.plot(time, S, color=color, linestyle=state_styles['S'],
+                        linewidth=1.5, alpha=0.8, label=f'S - {label}')
             if 'I' in states_to_plot:
-                plt.plot(time, I, f'{color}', linestyle=linestyle, alpha=0.7, label=f'I - {label}')
+                plt.plot(time, I, color=color, linestyle=state_styles['I'],
+                        linewidth=2, alpha=0.9, label=f'I - {label}')
             if 'R' in states_to_plot:
-                plt.plot(time, R, f'{color}', linestyle=linestyle, alpha=0.7, label=f'R - {label}')
-        
+                plt.plot(time, R, color=color, linestyle=state_styles['R'],
+                        linewidth=1.5, alpha=0.8, label=f'R - {label}')
+
         plt.xlabel('Tempo')
         plt.ylabel('Proporção de Indivíduos')
-        
+
         if title:
             plt.title(title)
         else:
             plt.title('Comparação de Simulações SPKMC')
-        
-        plt.legend()
+
+        plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='small')
         plt.grid(True, alpha=0.3)
-        
+        plt.tight_layout()
+
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             plt.close()
         else:
             plt.show()
-    
+
+    @staticmethod
+    def compare_results_with_config(results: List[Dict[str, Any]], labels: List[str],
+                                    plot_config: 'PlotConfig',
+                                    save_path: Optional[str] = None) -> None:
+        """
+        Compara resultados de múltiplas simulações com configuração customizada.
+
+        Args:
+            results: Lista de dicionários com resultados
+            labels: Lista de rótulos para cada resultado
+            plot_config: Configuração de plot customizada
+            save_path: Caminho para salvar o gráfico (opcional)
+        """
+        if not results:
+            raise ValueError("A lista de resultados está vazia")
+
+        if len(results) != len(labels):
+            raise ValueError("O número de resultados e rótulos deve ser igual")
+
+        # Use config values
+        states_to_plot = set(plot_config.states_to_plot) if plot_config.states_to_plot else {'S', 'I', 'R'}
+
+        plt.figure(figsize=plot_config.figsize)
+
+        # Colors for scenarios (different color per scenario)
+        scenario_colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ]
+
+        # Line styles for states (different style per state type)
+        state_styles = {'S': ':', 'I': '-', 'R': '--'}
+
+        for i, (result, label) in enumerate(zip(results, labels)):
+            if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
+                raise ValueError(f"Resultado {i} não contém todos os dados necessários")
+
+            S = np.array(result["S_val"])
+            I = np.array(result["I_val"])
+            R = np.array(result["R_val"])
+            time = np.array(result["time"])
+
+            color = scenario_colors[i % len(scenario_colors)]
+
+            if 'S' in states_to_plot:
+                plt.plot(time, S, color=color, linestyle=state_styles['S'],
+                        linewidth=1.5, alpha=0.8, label=f'S - {label}')
+            if 'I' in states_to_plot:
+                plt.plot(time, I, color=color, linestyle=state_styles['I'],
+                        linewidth=2, alpha=0.9, label=f'I - {label}')
+            if 'R' in states_to_plot:
+                plt.plot(time, R, color=color, linestyle=state_styles['R'],
+                        linewidth=1.5, alpha=0.8, label=f'R - {label}')
+
+        plt.xlabel(plot_config.xlabel)
+        plt.ylabel(plot_config.ylabel)
+
+        if plot_config.title:
+            plt.title(plot_config.title)
+        else:
+            plt.title('Comparação de Simulações SPKMC')
+
+        # Position legend outside if many scenarios, otherwise use config position
+        if len(results) > 4:
+            plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='small')
+        else:
+            plt.legend(loc=plot_config.legend_position, fontsize='small')
+
+        if plot_config.grid:
+            plt.grid(True, alpha=plot_config.grid_alpha)
+
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=plot_config.dpi, bbox_inches='tight')
+            plt.close()
+        else:
+            plt.show()
+
     @staticmethod
     def plot_network(G, title: Optional[str] = None, save_path: Optional[str] = None) -> None:
         """

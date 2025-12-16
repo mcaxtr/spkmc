@@ -15,11 +15,14 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 import time
 import zipfile
 from datetime import datetime
+import questionary
+from questionary import Style
 
 from spkmc.core.distributions import create_distribution
 from spkmc.core.networks import NetworkFactory
 from spkmc.core.simulation import SPKMC
 from spkmc.io.results import ResultManager
+from spkmc.io.experiments import ExperimentManager, Experiment, PlotConfig
 from spkmc.visualization.plots import Visualizer
 from spkmc.io.export import ExportManager
 from spkmc.cli.formatting import (
@@ -55,6 +58,303 @@ DEFAULT_SCALE = 1.0
 DEFAULT_MU = 1.0
 DEFAULT_LAMBDA = 1.0
 DEFAULT_EXPONENT = 2.5
+
+
+def display_experiments_menu(experiments: List[Experiment]) -> Optional[int]:
+    """
+    Exibe um menu interativo para seleção de experimento com navegação por setas.
+
+    Args:
+        experiments: Lista de experimentos disponíveis
+
+    Returns:
+        Índice do experimento selecionado (1-based) ou None para sair
+    """
+    # Custom style for the menu
+    custom_style = Style([
+        ('qmark', 'fg:cyan bold'),
+        ('question', 'fg:white bold'),
+        ('answer', 'fg:green bold'),
+        ('pointer', 'fg:cyan bold'),
+        ('highlighted', 'fg:cyan bold'),
+        ('selected', 'fg:green'),
+        ('separator', 'fg:gray'),
+        ('instruction', 'fg:gray italic'),
+    ])
+
+    # Build choices with formatted display
+    choices = []
+    for i, exp in enumerate(experiments):
+        scenarios_count = len(exp.scenarios)
+        results_count = exp.result_count
+
+        # Status indicator
+        if results_count == 0:
+            status = "○ Pending"
+        elif results_count >= scenarios_count:
+            status = "✓ Complete"
+        else:
+            status = f"◐ {results_count}/{scenarios_count}"
+
+        # Format: "Name  |  scenarios  |  status"
+        display = f"{exp.name:<35} │ {scenarios_count} scenarios │ {status}"
+        choices.append(questionary.Choice(title=display, value=i + 1))
+
+    # Add cancel option
+    choices.append(questionary.Separator("─" * 70))
+    choices.append(questionary.Choice(title="⮐ Cancel", value=-1))
+
+    # Display header
+    console.print()
+    console.print("[bold cyan]╔══════════════════════════════════════════════════════════════════════╗[/bold cyan]")
+    console.print("[bold cyan]║[/bold cyan]                    [bold white]SPKMC Experiment Runner[/bold white]                         [bold cyan]║[/bold cyan]")
+    console.print("[bold cyan]╠══════════════════════════════════════════════════════════════════════╣[/bold cyan]")
+    console.print("[bold cyan]║[/bold cyan]  [dim]Use ↑/↓ arrows to navigate, Enter to select, Ctrl+C to cancel[/dim]   [bold cyan]║[/bold cyan]")
+    console.print("[bold cyan]╚══════════════════════════════════════════════════════════════════════╝[/bold cyan]")
+    console.print()
+
+    try:
+        result = questionary.select(
+            "Select an experiment to run:",
+            choices=choices,
+            style=custom_style,
+            instruction="",
+            use_indicator=True,
+            use_shortcuts=False,
+        ).ask()
+
+        # Handle cancel or Ctrl+C
+        if result is None or result == -1:
+            return None
+        return result
+    except KeyboardInterrupt:
+        return None
+
+
+def run_experiment_scenarios(
+    experiment: Experiment,
+    verbose: bool,
+    use_simple: bool,
+    create_zip: bool,
+    no_plot: bool,
+    save_plot: bool
+) -> List[str]:
+    """
+    Executa todos os cenários de um experimento.
+
+    Args:
+        experiment: Experimento a ser executado
+        verbose: Mostrar informações detalhadas
+        use_simple: Gerar arquivos CSV simplificados
+        create_zip: Criar arquivos zip com os resultados
+        no_plot: Desativar geração de gráficos
+        save_plot: Salvar gráficos em arquivos
+
+    Returns:
+        Lista de caminhos dos arquivos de resultado gerados
+    """
+    # Garantir que o diretório de resultados exista
+    results_dir = experiment.ensure_results_dir()
+
+    result_files = []
+    all_results = []
+    all_labels = []
+
+    start_time = time.time()
+
+    with create_progress_bar(f"Executando {len(experiment.scenarios)} cenários", len(experiment.scenarios), verbose) as progress:
+        task = progress.add_task("Processando cenários...", total=len(experiment.scenarios))
+
+        for i, scenario in enumerate(experiment.scenarios):
+            scenario_num = i + 1
+
+            # Extrair parâmetros do cenário
+            network_type = scenario.get("network_type", "er")
+            dist_type    = scenario.get("distribution", "exponential")
+            nodes        = scenario.get("network_size", DEFAULT_N)
+            k_avg        = scenario.get("k_avg", DEFAULT_K_AVG)
+            shape        = scenario.get("shape", DEFAULT_SHAPE)
+            scale        = scenario.get("scale", DEFAULT_SCALE)
+            mu           = scenario.get("mu", DEFAULT_MU)
+            lambda_val   = scenario.get("lambda", DEFAULT_LAMBDA)
+            exponent     = scenario.get("exponent", DEFAULT_EXPONENT)
+            samples      = scenario.get("samples", DEFAULT_SAMPLES)
+            num_runs     = scenario.get("num_runs", DEFAULT_NUM_RUNS)
+            initial_perc = scenario.get("initial_perc", DEFAULT_INITIAL_PERC)
+            t_max        = scenario.get("t_max", DEFAULT_T_MAX)
+            steps        = scenario.get("steps", DEFAULT_STEPS)
+
+            # Criar nome de arquivo para o resultado
+            scenario_label = f"scenario_{scenario_num:03d}"
+            if "label" in scenario:
+                scenario_label = scenario['label']
+
+            output_file = str(results_dir / f"{scenario_label}.json")
+
+            # Verificar se já foi executado
+            if os.path.exists(output_file):
+                try:
+                    with open(output_file, 'r') as f:
+                        existing_result = json.load(f)
+                    existing_metadata = existing_result.get("metadata", {})
+
+                    # Comparação simplificada de parâmetros
+                    params_match = (
+                        existing_metadata.get("network_type", "").lower() == network_type.lower() and
+                        existing_metadata.get("distribution", "").lower() == dist_type.lower() and
+                        existing_metadata.get("N") == nodes and
+                        abs(existing_metadata.get("initial_perc", 0) - initial_perc) < 1e-6
+                    )
+
+                    if params_match:
+                        log_info(f"Cenário {scenario_num} já executado. Pulando...")
+                        result_files.append(output_file)
+                        all_results.append(existing_result)
+                        all_labels.append(scenario.get("label", scenario_label))
+                        progress.update(task, advance=1)
+                        continue
+                except Exception:
+                    pass
+
+            # Exibir informações do cenário
+            if verbose:
+                console.print(format_title(f"Cenário {scenario_num}/{len(experiment.scenarios)}: {scenario_label}"))
+
+            # Criar a distribuição
+            distribution_params = {
+                "shape": shape,
+                "scale": scale,
+                "mu": mu,
+                "lambda": lambda_val
+            }
+            distribution = create_distribution(dist_type, **distribution_params)
+
+            # Criar o simulador
+            simulator = SPKMC(distribution)
+
+            # Criar os passos de tempo
+            time_steps = create_time_steps(t_max, steps)
+
+            # Parâmetros específicos para cada tipo de rede
+            simulation_params = {
+                "N": nodes,
+                "samples": samples,
+                "initial_perc": initial_perc,
+                "overwrite": False
+            }
+
+            if network_type in ["er", "cn", "rrn"]:
+                simulation_params["k_avg"] = k_avg
+                simulation_params["num_runs"] = num_runs
+
+            if network_type == "cn":
+                simulation_params["exponent"] = exponent
+
+            try:
+                # Executar a simulação
+                result = simulator.run_simulation(network_type, time_steps, **simulation_params)
+
+                # Extrair os resultados
+                S = result["S_val"]
+                I = result["I_val"]
+                R = result["R_val"]
+                has_error = result.get("has_error", False)
+
+                if has_error:
+                    S_err = result["S_err"]
+                    I_err = result["I_err"]
+                    R_err = result["R_err"]
+
+                # Preparar o resultado para salvar
+                output_result = {
+                    "S_val": list(S),
+                    "I_val": list(I),
+                    "R_val": list(R),
+                    "time": list(time_steps),
+                    "metadata": {
+                        "network_type": network_type,
+                        "distribution": dist_type,
+                        "N": nodes,
+                        "initial_perc": initial_perc,
+                        "scenario_number": scenario_num,
+                        "scenario_label": scenario_label,
+                        "experiment_name": experiment.name
+                    }
+                }
+
+                # Adicionar parâmetros específicos
+                if dist_type == "gamma":
+                    output_result["metadata"]["shape"] = shape
+                    output_result["metadata"]["scale"] = scale
+                else:
+                    output_result["metadata"]["mu"] = mu
+
+                output_result["metadata"]["lambda"] = lambda_val
+
+                if network_type in ["er", "cn", "rrn"]:
+                    output_result["metadata"]["k_avg"] = k_avg
+                    output_result["metadata"]["num_runs"] = num_runs
+
+                if network_type == "cn":
+                    output_result["metadata"]["exponent"] = exponent
+
+                if has_error:
+                    output_result.update({
+                        "S_err": list(S_err),
+                        "I_err": list(I_err),
+                        "R_err": list(R_err)
+                    })
+
+                # Salvar o resultado
+                with open(output_file, 'w') as f:
+                    json.dump(output_result, f, indent=2)
+
+                result_files.append(output_file)
+                all_results.append(output_result)
+                all_labels.append(scenario.get("label", scenario_label))
+
+                # Gerar arquivo CSV simplificado se necessário
+                if use_simple:
+                    csv_path = output_file.replace(".json", "_simple.csv")
+                    with open(csv_path, 'w') as f:
+                        for j, t in enumerate(time_steps):
+                            erro = I_err[j] if has_error else 0.0
+                            f.write(f"{t},{I[j]},{erro}\n")
+
+                # Gerar gráfico individual se necessário
+                if save_plot and not no_plot:
+                    plot_path = output_file.replace(".json", ".png")
+                    title = f"{experiment.name} - {scenario_label}"
+                    if has_error:
+                        Visualizer.plot_result_with_error(S, I, R, S_err, I_err, R_err, time_steps, title, plot_path)
+                    else:
+                        Visualizer.plot_result(S, I, R, time_steps, title, plot_path)
+
+                # Criar zip individual se necessário
+                if create_zip:
+                    zip_path = output_file.replace(".json", ".zip")
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        zipf.write(output_file, os.path.basename(output_file))
+                        if use_simple:
+                            csv_p = output_file.replace(".json", "_simple.csv")
+                            if os.path.exists(csv_p):
+                                zipf.write(csv_p, os.path.basename(csv_p))
+
+            except Exception as e:
+                log_error(f"Erro ao executar cenário {scenario_num}: {e}")
+
+            progress.update(task, advance=1)
+
+    # Gerar gráfico comparativo com configuração customizada
+    if len(all_results) > 1:
+        compare_path = str(results_dir / "comparison.png")
+        try:
+            Visualizer.compare_results_with_config(all_results, all_labels, experiment.plot_config, compare_path)
+            log_success(f"Gráfico comparativo salvo em: {compare_path}")
+        except Exception as e:
+            log_error(f"Erro ao gerar gráfico comparativo: {e}")
+
+    return result_files
 
 
 def create_time_steps(t_max: float, steps: int) -> np.ndarray:
@@ -929,9 +1229,11 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
         log_error(f"Erro ao gerar visualização comparativa: {e}")
 
 
-@cli.command(help="Executar múltiplos cenários de simulação a partir de um arquivo JSON")
+@cli.command(help="Executar múltiplos cenários de simulação a partir de um arquivo JSON ou experimento")
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
-@click.argument("scenarios_file", type=str, default="batches.json", required=False)
+@click.argument("scenarios_file", type=str, default=None, required=False)
+@click.option("--experiments-dir", "-e", type=str, default=None,
+              help="Diretório base para experimentos (padrão: experiments)")
 @click.option("--output-dir", "-o", type=str, default="./results",
               help="Diretório para salvar os resultados (padrão: ./results)")
 @click.option("--prefix", "-p", type=str, default="",
@@ -946,60 +1248,100 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
               help="Criar um arquivo zip com os resultados de cada cenário")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a execução")
-def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
-    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
-    ctx = click.get_current_context()
-    use_simple = simple or ctx.parent.params.get('simple', False)
-    
-    # Expandir ~ para caminho absoluto no output_dir
-    output_dir = os.path.expanduser(output_dir)
+def batch(simple, scenarios_file, experiments_dir, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
     """
-    Executa múltiplos cenários de simulação a partir de um arquivo JSON.
-    
+    Executa múltiplos cenários de simulação a partir de um arquivo JSON ou experimento.
+
+    Se nenhum arquivo for especificado, exibe um menu interativo com os experimentos
+    disponíveis no diretório 'experiments/' (ou no diretório especificado com --experiments-dir).
+
     O arquivo JSON deve conter uma lista de objetos, cada um representando um cenário
     com parâmetros para a simulação. Cada cenário será executado sequencialmente e
     os resultados serão salvos em arquivos separados no diretório especificado.
-    
-    Por padrão, o comando procura por um arquivo chamado 'batches.json' no diretório atual.
-    
-    Exemplo de arquivo JSON:
-    [
-        {
-            "distribution": "gamma",
-            "network_type": "er",
-            "network_size": 3000,
-            "k_avg": 10,
-            "shape": 1,
-            "scale": 1,
-            "lambda": 0.45,
-            "samples": 100,
-            "num_runs": 100,
-            "steps": 300,
-            "initial_perc": 0.01
-        },
-        {
-            "distribution": "exponential",
-            "network_type": "er",
-            "network_size": 3000,
-            "k_avg": 10,
-            "shape": 3,
-            "scale": 0.33333,
-            "lambda": 0.45,
-            "samples": 100,
-            "num_runs": 100,
-            "steps": 300,
-            "initial_perc": 0.01
-        }
-    ]
     """
+    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+    ctx = click.get_current_context()
+    use_simple = simple or ctx.parent.params.get('simple', False)
+
+    # Expandir ~ para caminho absoluto no output_dir
+    output_dir = os.path.expanduser(output_dir)
+
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
-    
+
+    # ============================================================
+    # EXPERIMENT MODE: Se nenhum arquivo foi especificado
+    # ============================================================
+    if scenarios_file is None:
+        # Criar gerenciador de experimentos
+        exp_manager = ExperimentManager(experiments_dir)
+        experiments = exp_manager.list_experiments()
+
+        if not experiments:
+            # Fallback para batches.json se existir
+            if os.path.exists("batches.json"):
+                log_info("Nenhum experimento encontrado. Usando batches.json como fallback.")
+                scenarios_file = "batches.json"
+            else:
+                log_error("Nenhum experimento encontrado no diretório 'experiments/'.")
+                log_info("Crie um experimento em experiments/<nome>/data.json ou especifique um arquivo de cenários.")
+                return
+        else:
+            # Exibir menu de experimentos
+            selected = display_experiments_menu(experiments)
+
+            if selected is None:
+                log_info("Operação cancelada pelo usuário.")
+                return
+
+            experiment = experiments[selected - 1]
+            log_info(f"Experimento selecionado: {experiment.name}")
+
+            # Verificar se há resultados existentes
+            if experiment.has_results:
+                log_warning(f"O experimento '{experiment.name}' já possui {experiment.result_count} resultado(s).")
+                if click.confirm("Deseja limpar os resultados existentes e re-executar?", default=False):
+                    experiment.clean_results()
+                    log_success("Resultados anteriores removidos.")
+                else:
+                    log_info("Mantendo resultados existentes. Cenários já executados serão ignorados.")
+
+            # Executar o experimento
+            start_time = time.time()
+            log_debug(f"Iniciando execução do experimento em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", verbose_only=False)
+
+            result_files = run_experiment_scenarios(
+                experiment=experiment,
+                verbose=verbose,
+                use_simple=use_simple,
+                create_zip=zip,
+                no_plot=no_plot,
+                save_plot=save_plot
+            )
+
+            # Resumo final
+            end_time = time.time()
+            total_execution_time = end_time - start_time
+
+            console.print(format_title("Resumo da Execução do Experimento"))
+            console.print(f"  {format_param('Experimento', experiment.name)}")
+            console.print(f"  {format_param('Total de cenários', len(experiment.scenarios))}")
+            console.print(f"  {format_param('Cenários processados', len(result_files))}")
+            console.print(f"  {format_param('Tempo total de execução', f'{total_execution_time:.2f} segundos')}")
+            console.print(f"  {format_param('Diretório de resultados', str(experiment.results_dir))}")
+
+            log_success(f"Experimento concluído. {len(result_files)} cenário(s) processado(s).")
+            return
+
+    # ============================================================
+    # FILE MODE: Execução tradicional com arquivo de cenários
+    # ============================================================
+
     # Registrar início da execução em lote
     start_time = time.time()
     log_debug(f"Iniciando execução em lote em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", verbose_only=False)
-    
+
     # Verificar se o arquivo de cenários existe
     if not os.path.exists(scenarios_file):
         log_error(f"O arquivo de cenários '{scenarios_file}' não existe.")
