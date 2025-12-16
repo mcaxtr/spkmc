@@ -139,6 +139,45 @@ python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 2.0 --exponent 2.
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50 -o results/cn_exponential.json
 ```
 
+## Simulação com Rede Regular Aleatória (RRN)
+
+A rede regular aleatória é uma rede onde todos os nós têm exatamente o mesmo número de conexões (grau), mas essas conexões são distribuídas aleatoriamente. Isso cria uma rede homogênea em termos de grau, mas com propriedades aleatórias.
+
+### Exemplo Básico
+
+```bash
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50
+```
+
+Este comando executa uma simulação com:
+- Rede Regular Aleatória (`-n rrn`)
+- Distribuição Gamma (`-d gamma`) com parâmetros de forma (`--shape 2.0`) e escala (`--scale 1.0`)
+- 1000 nós (`-N 1000`)
+- Grau regular de 10 (`--k-avg 10`) - deve ser um número par
+- 50 amostras por execução (`-s 50`)
+- Parâmetro lambda para tempos de infecção (`--lambda 1.0`)
+
+### Variações de Parâmetros
+
+#### Variando o Grau Regular
+
+```bash
+# Grau regular baixo (4)
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 4 -s 50
+
+# Grau regular médio (10)
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
+
+# Grau regular alto (20)
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 20 -s 50
+```
+
+### Salvando Resultados
+
+```bash
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/rrn_gamma.json
+```
+
 ## Comparação entre Diferentes Tipos de Redes
 
 Para comparar diferentes tipos de redes, execute simulações para cada tipo e depois use o comando `compare`.
@@ -154,12 +193,15 @@ python spkmc_cli.py run -n cn -d gamma --shape 2.0 --scale 1.0 --exponent 2.5 -N
 
 # Grafo Completo
 python spkmc_cli.py run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -o results/cg_gamma.json
+
+# Rede Regular Aleatória
+python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/rrn_gamma.json
 ```
 
 ### Comparando os Resultados
 
 ```bash
-python spkmc_cli.py compare results/er_gamma.json results/cn_gamma.json results/cg_gamma.json -l "Erdos-Renyi" "Rede Complexa" "Grafo Completo" -o plots/network_comparison.png
+python spkmc_cli.py compare results/er_gamma.json results/cn_gamma.json results/cg_gamma.json results/rrn_gamma.json -l "Erdos-Renyi" "Rede Complexa" "Grafo Completo" "Rede Regular Aleatória" -o plots/network_comparison.png
 ```
 
 ## Visualização de Resultados Salvos

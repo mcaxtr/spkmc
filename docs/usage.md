@@ -93,7 +93,7 @@ python spkmc_cli.py run [OPÇÕES]
 
 | Opção | Abreviação | Tipo | Padrão | Descrição |
 |-------|------------|------|--------|-----------|
-| `--network-type` | `-n` | string | `er` | Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg) |
+| `--network-type` | `-n` | string | `er` | Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg), Random Regular Network (rrn) |
 | `--dist-type` | `-d` | string | `gamma` | Tipo de distribuição: Gamma ou Exponential |
 | `--shape` | | float | `2.0` | Parâmetro de forma para distribuição Gamma |
 | `--scale` | | float | `1.0` | Parâmetro de escala para distribuição Gamma |
@@ -110,6 +110,7 @@ python spkmc_cli.py run [OPÇÕES]
 | `--output` | `-o` | string | | Caminho para salvar os resultados (opcional) |
 | `--no-plot` | | flag | `False` | Não exibir o gráfico dos resultados |
 | `--overwrite` | | flag | `False` | Sobrescrever resultados existentes |
+| `--zip` | | flag | `False` | Criar um arquivo zip com os resultados |
 
 #### Exemplos
 
@@ -128,6 +129,12 @@ python spkmc_cli.py --simple run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 
 
 # Simulação com geração de arquivo CSV simplificado (como opção específica após o comando)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma_simple.json --simple
+
+# Simulação com geração de arquivo zip contendo os resultados
+python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma.json --zip
+
+# Simulação com geração de arquivo CSV simplificado e arquivo zip
+python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma.json --simple --zip
 
 # Ambas as formas acima têm o mesmo efeito: gerar um arquivo CSV simplificado com tempo, infectados e erro
 ```
@@ -543,6 +550,7 @@ Opção | Abreviação | Tipo | Padrão | Descrição |
 `--compare` | `-c` | flag | `False` | Gerar visualização comparativa dos resultados |
 `--no-plot` | | flag | `False` | Desativar a geração de gráficos individuais |
 `--save-plot` | | flag | `False` | Salvar os gráficos em arquivos |
+`--zip` | | flag | `False` | Criar um arquivo zip com os resultados de cada cenário |
 `--verbose` | `-v` | flag | `False` | Mostrar informações detalhadas durante a execução |
 
 #### Formato do Arquivo JSON de Cenários
@@ -636,6 +644,12 @@ python spkmc_cli.py --simple batch --output-dir resultados/csv_simples
 # Executar cenários e gerar arquivos CSV simplificados (como opção específica após o comando)
 python spkmc_cli.py batch --output-dir resultados/csv_simples --simple
 
+# Executar cenários e criar arquivos zip com os resultados
+python spkmc_cli.py batch --output-dir resultados/zip_results --zip
+
+# Executar cenários, gerar arquivos CSV simplificados e criar arquivos zip
+python spkmc_cli.py batch --output-dir resultados/completo --simple --zip
+
 # Ambas as formas acima têm o mesmo efeito: gerar arquivos CSV simplificados com tempo, infectados e erro para cada cenário
 ```
 
@@ -652,3 +666,8 @@ python spkmc_cli.py batch --output-dir resultados/csv_simples --simple
   - Como opção global antes do comando: `spkmc --simple batch ...`
   - Como opção específica após o comando: `spkmc batch ... --simple`
   Ambas as formas têm o mesmo efeito. Estes arquivos são úteis para análises rápidas ou importação em outras ferramentas de visualização.
+- **Arquivos zipados**: Use a opção `--zip` para criar arquivos zip contendo os resultados de cada cenário. Isso é útil para:
+  - Compartilhar resultados de forma mais organizada
+  - Economizar espaço em disco ao armazenar múltiplos resultados
+  - Facilitar o download e transferência de resultados
+  Quando usado com o comando `batch`, além de criar um arquivo zip para cada cenário, também será criado um arquivo zip contendo todos os resultados do lote.

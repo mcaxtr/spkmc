@@ -187,6 +187,12 @@ plt.show()
 spkmc run -n er -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
 ```
 
+### Simulação com Rede Random Regular Network (RRN) e Distribuição Gamma
+
+```bash
+spkmc run -n rrn -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50 -i 0.01 --t-max 10.0 --steps 100
+```
+
 ### Simulação com Rede Complexa e Distribuição Exponencial
 
 ```bash
@@ -218,6 +224,7 @@ Para exemplos mais detalhados, consulte o diretório `examples/`:
 - `er`: Erdos-Renyi (rede aleatória)
 - `cn`: Complex Network (rede complexa com distribuição de lei de potência)
 - `cg`: Complete Graph (grafo completo)
+- `rrn`: Random Regular Network (rede regular aleatória)
 
 ### Tipos de Distribuição
 - `gamma`: Distribuição Gamma
@@ -225,7 +232,7 @@ Para exemplos mais detalhados, consulte o diretório `examples/`:
 
 ### Parâmetros de Simulação
 - `-N, --nodes`: Número de nós na rede
-- `--k-avg`: Grau médio da rede (para redes ER e CN)
+- `--k-avg`: Grau médio da rede (para redes ER, CN e RRN)
 - `-s, --samples`: Número de amostras por execução
 - `-i, --initial-perc`: Porcentagem inicial de infectados
 - `--t-max`: Tempo máximo de simulação
