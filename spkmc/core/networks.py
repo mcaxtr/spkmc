@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 class NetworkFactory:
     """Fábrica para criar diferentes tipos de redes."""
     
-    NETWORK_TYPES = ["er", "cn", "cg"]  # Tipos de rede suportados
+    NETWORK_TYPES = ["er", "cn", "cg", "rrn"]  # Tipos de rede suportados
     
     @staticmethod
     def create_network(network_type: str, **kwargs) -> nx.DiGraph:
@@ -21,7 +21,7 @@ class NetworkFactory:
         Cria uma rede com base no tipo e parâmetros fornecidos.
         
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg')
+            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             **kwargs: Parâmetros específicos do tipo de rede
         
         Returns:
@@ -46,6 +46,11 @@ class NetworkFactory:
         elif network_type == "cg":
             N = kwargs.get("N", 1000)
             return NetworkFactory.create_complete_graph(N)
+        
+        elif network_type == "rrn":
+            N = kwargs.get("N", 1000)
+            k_avg = kwargs.get("k_avg", 10)
+            return NetworkFactory.create_random_regular_network(N, k_avg)
         
         else:
             raise ValueError(f"Tipo de rede desconhecido: {network_type}")
@@ -128,12 +133,27 @@ class NetworkFactory:
         return nx.complete_graph(N, create_using=nx.DiGraph())
     
     @staticmethod
+    def create_random_regular_network(N: int, k_avg: int) -> nx.DiGraph:
+        """
+        Cria uma rede regular aleatória (random regular network).
+        
+        Args:
+            N: Número de nós
+            k_avg: Grau regular (número de conexões por nó)
+        
+        Returns:
+            Grafo direcionado regular aleatório
+        """
+        G = nx.random_regular_graph(k_avg, N)
+        return nx.DiGraph(G)
+    
+    @staticmethod
     def get_network_info(network_type: str, **kwargs) -> Dict[str, Any]:
         """
         Retorna informações sobre a rede para uso em metadados.
         
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg')
+            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             **kwargs: Parâmetros específicos do tipo de rede
         
         Returns:
@@ -146,7 +166,7 @@ class NetworkFactory:
             "N": kwargs.get("N", 1000)
         }
         
-        if network_type in ["er", "cn"]:
+        if network_type in ["er", "cn", "rrn"]:
             info["k_avg"] = kwargs.get("k_avg", 10)
             
         if network_type == "cn":

@@ -383,7 +383,7 @@ class SPKMC:
         Executa uma simulação com base no tipo de rede e parâmetros fornecidos.
         
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg')
+            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             time_steps: Array com os passos de tempo
             **kwargs: Parâmetros adicionais para a simulação
         
@@ -470,5 +470,121 @@ class SPKMC:
                 "has_error": False
             }
             
+        elif network_type == "rrn":
+            k_avg = kwargs.get("k_avg", 10)
+            num_runs = kwargs.get("num_runs", 2)
+            
+            S, I, R, S_err, I_err, R_err = self.simulate_random_regular_network(
+                num_runs=num_runs,
+                time_steps=time_steps,
+                N=N,
+                k_avg=k_avg,
+                samples=samples,
+                initial_perc=initial_perc,
+                load_if_exists=load_if_exists
+            )
+            
+            return {
+                "S_val": S,
+                "I_val": I,
+                "R_val": R,
+                "S_err": S_err,
+                "I_err": I_err,
+                "R_err": R_err,
+                "time": time_steps,
+                "has_error": True
+            }
+            
         else:
             raise ValueError(f"Tipo de rede desconhecido: {network_type}")
+            
+    def simulate_random_regular_network(self, num_runs: int, time_steps: np.ndarray, N: int = 3000,
+                                      k_avg: int = 10, samples: int = 100, initial_perc: float = 0.01,
+                                      load_if_exists: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
+                                                                          np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Simula a propagação em múltiplas redes regulares aleatórias.
+        
+        Args:
+            num_runs: Número de execuções
+            time_steps: Array com os passos de tempo
+            N: Número de nós
+            k_avg: Grau regular (número de conexões por nó)
+            samples: Número de amostras por execução
+            initial_perc: Porcentagem inicial de infectados
+            load_if_exists: Se True, carrega resultados existentes
+            
+        Returns:
+            Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+        """
+        S_list, I_list, R_list = [], [], []
+        
+        # Verifica se já existem resultados salvos
+        if load_if_exists:
+            result_path = ResultManager.get_result_path("RRN", self.distribution, N, samples)
+            if os.path.exists(result_path):
+                try:
+                    result = ResultManager.load_result(result_path)
+                    return (
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
+                        np.array(result.get('R_val', [])),
+                        np.array(result.get('S_err', [])),
+                        np.array(result.get('I_err', [])),
+                        np.array(result.get('R_err', []))
+                    )
+                except Exception as e:
+                    print(f"Erro ao carregar resultados existentes: {e}")
+        
+        # Executa as simulações
+        for run in tqdm(range(num_runs), desc="Execuções"):
+            # Cria a rede
+            G = NetworkFactory.create_random_regular_network(N, k_avg)
+            
+            # Configura os nós inicialmente infectados
+            init_infect = int(N * initial_perc)
+            if init_infect < 1:
+                raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
+            sources = np.random.randint(0, N, init_infect)
+            
+            # Executa a simulação
+            S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+            
+            S_list.append(S)
+            I_list.append(I)
+            R_list.append(R)
+        
+        # Calcula médias e erros
+        S_avg = np.mean(np.array(S_list), axis=0)
+        I_avg = np.mean(np.array(I_list), axis=0)
+        R_avg = np.mean(np.array(R_list), axis=0)
+        
+        S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
+        I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
+        R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
+        
+        # Salva os resultados
+        result = {
+            "S_val": list(S_avg),
+            "S_err": list(S_err),
+            "I_val": list(I_avg),
+            "I_err": list(I_err),
+            "R_val": list(R_avg),
+            "R_err": list(R_err),
+            "time": list(time_steps),
+            "metadata": {
+                "network_type": "RRN",
+                "distribution": self.distribution.get_distribution_name(),
+                "distribution_params": self.distribution.get_params_dict(),
+                "N": N,
+                "k_avg": k_avg,
+                "samples": samples,
+                "num_runs": num_runs,
+                "initial_perc": initial_perc
+            }
+        }
+        
+        result_path = ResultManager.get_result_path("RRN", self.distribution, N, samples)
+        ResultManager.save_result(result_path, result)
+        
+        return S_avg, I_avg, R_avg, S_err, I_err, R_err
