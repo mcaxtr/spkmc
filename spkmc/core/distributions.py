@@ -5,9 +5,14 @@ Este módulo contém as implementações de diferentes distribuições de probab
 utilizadas no algoritmo SPKMC para modelar os tempos de recuperação e infecção.
 """
 
+from __future__ import annotations
+
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from spkmc.core.transmissibility import TransmissibilityCalculator
 
 from spkmc.utils.numba_utils import (
     gamma_sampling,
@@ -70,11 +75,25 @@ class Distribution(ABC):
     def get_params_dict(self) -> dict:
         """
         Retorna um dicionário com os parâmetros da distribuição.
-        
+
         Returns:
             Dicionário com os parâmetros
         """
         return {}
+
+    def get_transmissibility_calculator(self) -> TransmissibilityCalculator:
+        """
+        Return a transmissibility calculator for this distribution.
+
+        The calculator can be used to compute mean transmissibility T̄,
+        critical thresholds, and perform epidemic analysis.
+
+        Returns:
+            TransmissibilityCalculator instance configured for this distribution
+        """
+        raise NotImplementedError(
+            f"get_transmissibility_calculator not implemented for {self.__class__.__name__}"
+        )
 
 
 class GammaDistribution(Distribution):
@@ -140,7 +159,7 @@ class GammaDistribution(Distribution):
     def get_params_dict(self) -> dict:
         """
         Retorna um dicionário com os parâmetros da distribuição.
-        
+
         Returns:
             Dicionário com os parâmetros
         """
@@ -148,8 +167,21 @@ class GammaDistribution(Distribution):
             "type": "gamma",
             "shape": self.shape,
             "scale": self.scale,
-            "lambda": self.lmbd
+            "lambda": self.lmbd,
         }
+
+    def get_transmissibility_calculator(self) -> TransmissibilityCalculator:
+        """
+        Return a transmissibility calculator for Gamma recovery + Exponential infection.
+
+        Returns:
+            GammaExponentialTransmissibility instance
+        """
+        from spkmc.core.transmissibility import GammaExponentialTransmissibility
+
+        return GammaExponentialTransmissibility(
+            shape=self.shape, scale=self.scale, beta=self.lmbd
+        )
 
 
 class ExponentialDistribution(Distribution):
@@ -212,15 +244,26 @@ class ExponentialDistribution(Distribution):
     def get_params_dict(self) -> dict:
         """
         Retorna um dicionário com os parâmetros da distribuição.
-        
+
         Returns:
             Dicionário com os parâmetros
         """
         return {
             "type": "exponential",
             "mu": self.mu,
-            "lambda": self.lmbd
+            "lambda": self.lmbd,
         }
+
+    def get_transmissibility_calculator(self) -> TransmissibilityCalculator:
+        """
+        Return a transmissibility calculator for Exponential recovery + Exponential infection.
+
+        Returns:
+            ExponentialExponentialTransmissibility instance
+        """
+        from spkmc.core.transmissibility import ExponentialExponentialTransmissibility
+
+        return ExponentialExponentialTransmissibility(beta=self.lmbd, gamma=self.mu)
 
 
 def create_distribution(dist_type: str, **kwargs) -> Distribution:
