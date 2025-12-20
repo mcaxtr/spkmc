@@ -3,14 +3,46 @@ Parallel execution utilities for SPKMC.
 
 This module provides parallel execution infrastructure for running
 multiple scenarios concurrently using multiprocessing.
+
+Uses 'spawn' context on Linux to avoid OpenMP fork issues with Numba.
 """
 
 import os
+import sys
+import multiprocessing as mp
 from typing import List, Dict, Any, Callable, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from spkmc.utils.hardware import ParallelizationStrategy
+
+
+def _get_mp_context():
+    """
+    Get appropriate multiprocessing context for the current platform.
+
+    On Linux, 'fork' is the default but causes issues with OpenMP/Numba.
+    We use 'spawn' or 'forkserver' to avoid:
+    "fork() called from a process already using GNU OpenMP, this is unsafe"
+
+    Returns:
+        Multiprocessing context object
+    """
+    if sys.platform == 'linux':
+        # Use 'spawn' on Linux to avoid OpenMP fork issues
+        # 'spawn' starts a fresh Python interpreter for each worker
+        try:
+            return mp.get_context('spawn')
+        except ValueError:
+            # Fallback to forkserver if spawn unavailable
+            try:
+                return mp.get_context('forkserver')
+            except ValueError:
+                # Last resort: use default (will likely fail with OpenMP)
+                return mp.get_context()
+    else:
+        # On macOS/Windows, 'spawn' is already the default
+        return mp.get_context()
 
 
 def _init_worker(numba_threads: int) -> None:
@@ -69,12 +101,14 @@ def run_scenarios_parallel(
                 progress_callback(i + 1, num_scenarios, label)
         return results
 
-    # Parallel execution using ProcessPoolExecutor
+    # Parallel execution using ProcessPoolExecutor with spawn context
     results: List[Optional[ScenarioResult]] = [None] * num_scenarios
     completed = 0
+    mp_context = _get_mp_context()
 
     with ProcessPoolExecutor(
         max_workers=strategy.scenario_workers,
+        mp_context=mp_context,
         initializer=_init_worker,
         initargs=(strategy.numba_threads,)
     ) as executor:
@@ -177,12 +211,14 @@ class ParallelBatchExecutor:
                 if on_progress:
                     on_progress(self._completed, self._total, label)
         else:
-            # Parallel execution
+            # Parallel execution with spawn context to avoid OpenMP fork issues
             def wrapped_executor(scenario: Dict[str, Any], index: int) -> ScenarioResult:
                 return scenario_executor(scenario, index, self.strategy)
 
+            mp_context = _get_mp_context()
             with ProcessPoolExecutor(
                 max_workers=self.strategy.scenario_workers,
+                mp_context=mp_context,
                 initializer=_init_worker,
                 initargs=(self.strategy.numba_threads,)
             ) as executor:

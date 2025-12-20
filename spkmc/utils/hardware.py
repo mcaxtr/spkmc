@@ -106,9 +106,20 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
 
     Returns:
         Tuple of (is_available, gpu_info_dict)
+
+    The gpu_info dict contains:
+        - name: GPU device name
+        - memory_mb: Total GPU memory in MB
+        - cuda_version: CUDA runtime version
+        - compute_capability: GPU compute capability
+        - libs_available: List of available RAPIDS libraries
+        - libs_missing: List of missing RAPIDS libraries (if any)
     """
     gpu_info = None
+    libs_available = []
+    libs_missing = []
 
+    # First, check if CUDA is available via cupy
     try:
         import cupy as cp
 
@@ -122,18 +133,32 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
             'cuda_version': f"{cp.cuda.runtime.runtimeGetVersion() // 1000}.{(cp.cuda.runtime.runtimeGetVersion() % 1000) // 10}",
             'compute_capability': f"{props['major']}.{props['minor']}"
         }
-
-        # Verify cudf and cugraph are also available for full GPU support
-        import cudf
-        import cugraph
-
-        return True, gpu_info
+        libs_available.append('cupy')
 
     except ImportError:
-        return False, None
+        libs_missing.append('cupy')
+        return False, {'libs_missing': libs_missing, 'reason': 'cupy not installed'}
     except Exception as e:
-        warnings.warn(f"GPU detection failed: {e}")
-        return False, None
+        return False, {'reason': f'CUDA initialization failed: {e}'}
+
+    # Check for optional RAPIDS libraries
+    try:
+        import cudf  # noqa: F401
+        libs_available.append('cudf')
+    except ImportError:
+        libs_missing.append('cudf')
+
+    try:
+        import cugraph  # noqa: F401
+        libs_available.append('cugraph')
+    except ImportError:
+        libs_missing.append('cugraph')
+
+    gpu_info['libs_available'] = libs_available
+    gpu_info['libs_missing'] = libs_missing
+
+    # GPU is available if cupy works (cudf/cugraph are optional enhancements)
+    return True, gpu_info
 
 
 def get_hardware_info() -> HardwareInfo:
@@ -187,13 +212,18 @@ def configure_numba_threads(thread_count: Optional[int] = None) -> int:
     return thread_count
 
 
-def format_hardware_box(info: HardwareInfo, strategy: Optional[ParallelizationStrategy] = None) -> str:
+def format_hardware_box(
+    info: HardwareInfo,
+    strategy: Optional[ParallelizationStrategy] = None,
+    gpu_details: Optional[Dict[str, Any]] = None
+) -> str:
     """
     Format hardware info as a rich box for CLI display.
 
     Args:
         info: Hardware information
         strategy: Optional parallelization strategy
+        gpu_details: Optional detailed GPU info from detect_gpu()
 
     Returns:
         Formatted string for CLI output
@@ -210,9 +240,23 @@ def format_hardware_box(info: HardwareInfo, strategy: Optional[ParallelizationSt
     # GPU info
     if info.gpu_available and info.gpu_name:
         memory_str = f"{info.gpu_memory_mb // 1024}GB" if info.gpu_memory_mb and info.gpu_memory_mb >= 1024 else f"{info.gpu_memory_mb}MB"
-        gpu_line = f"  GPU: {info.gpu_name} ({memory_str}) → Dijkstra acceleration"
+        gpu_line = f"  GPU: {info.gpu_name} ({memory_str}) → CUDA acceleration"
+
+        # Show available/missing RAPIDS libraries if provided
+        if gpu_details:
+            libs_available = gpu_details.get('libs_available', [])
+            libs_missing = gpu_details.get('libs_missing', [])
+            if libs_missing:
+                gpu_line += f" (missing: {', '.join(libs_missing)})"
     else:
-        gpu_line = "  GPU: Not available → CPU mode"
+        # Show reason for GPU unavailability if known
+        reason = ""
+        if gpu_details:
+            if 'reason' in gpu_details:
+                reason = f" ({gpu_details['reason']})"
+            elif gpu_details.get('libs_missing'):
+                reason = f" (install: {', '.join(gpu_details['libs_missing'])})"
+        gpu_line = f"  GPU: Not available{reason} → CPU mode"
     lines.append(gpu_line)
 
     # Numba threads

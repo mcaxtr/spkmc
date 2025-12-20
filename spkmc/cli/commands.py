@@ -27,6 +27,7 @@ from spkmc.visualization.plots import Visualizer
 from spkmc.io.export import ExportManager
 from spkmc.utils.hardware import (
     get_hardware_info,
+    detect_gpu,
     ParallelizationStrategy,
     format_hardware_box,
     HardwareInfo
@@ -338,7 +339,6 @@ def _execute_single_scenario(
 def _display_hardware_panel(hardware: HardwareInfo, strategy: ParallelizationStrategy) -> None:
     """Display hardware detection panel."""
     from rich.panel import Panel
-    from rich.text import Text
 
     lines = []
 
@@ -348,12 +348,23 @@ def _display_hardware_panel(hardware: HardwareInfo, strategy: ParallelizationStr
         cpu_info += f" → {strategy.scenario_workers} parallel workers"
     lines.append(cpu_info)
 
-    # GPU info
-    if hardware.gpu_available and hardware.gpu_name:
+    # GPU info - get detailed info for better messaging
+    gpu_available, gpu_details = detect_gpu()
+    if gpu_available and hardware.gpu_name:
         memory_str = f"{hardware.gpu_memory_mb // 1024}GB" if hardware.gpu_memory_mb and hardware.gpu_memory_mb >= 1024 else f"{hardware.gpu_memory_mb}MB"
-        gpu_info = f"GPU: {hardware.gpu_name} ({memory_str}) → Dijkstra acceleration"
+        gpu_info = f"GPU: {hardware.gpu_name} ({memory_str}) → CUDA acceleration"
+        # Show missing optional libraries
+        if gpu_details and gpu_details.get('libs_missing'):
+            gpu_info += f" (optional: {', '.join(gpu_details['libs_missing'])})"
     else:
-        gpu_info = "GPU: Not available → CPU mode"
+        # Show reason for GPU unavailability
+        reason = ""
+        if gpu_details:
+            if 'reason' in gpu_details:
+                reason = f" ({gpu_details['reason']})"
+            elif gpu_details.get('libs_missing'):
+                reason = f" (install: {', '.join(gpu_details['libs_missing'])})"
+        gpu_info = f"GPU: Not available{reason} → CPU mode"
     lines.append(gpu_info)
 
     # Numba info

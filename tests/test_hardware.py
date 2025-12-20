@@ -52,14 +52,16 @@ class TestGPUDetection:
     """Tests for GPU detection."""
 
     def test_detect_gpu_no_cupy(self):
-        """Should return False when CuPy is not installed."""
+        """Should return False with reason when CuPy is not installed."""
         with patch.dict('sys.modules', {'cupy': None}):
             available, info = detect_gpu()
             assert available is False
-            assert info is None
+            # Now returns info dict with reason instead of None
+            assert info is not None
+            assert 'reason' in info or 'libs_missing' in info
 
     def test_detect_gpu_no_cudf(self):
-        """Should return False when cuDF is not installed."""
+        """Should return True when CuPy works but cuDF is missing (cudf is optional)."""
         mock_cupy = MagicMock()
         mock_cupy.cuda.Device.return_value = MagicMock()
         mock_cupy.cuda.runtime.getDeviceProperties.return_value = {
@@ -70,9 +72,13 @@ class TestGPUDetection:
         }
         mock_cupy.cuda.runtime.runtimeGetVersion.return_value = 12000
 
-        with patch.dict('sys.modules', {'cupy': mock_cupy, 'cudf': None}):
+        with patch.dict('sys.modules', {'cupy': mock_cupy, 'cudf': None, 'cugraph': None}):
             available, info = detect_gpu()
-            assert available is False
+            # GPU is now available if cupy works (cudf/cugraph are optional)
+            assert available is True
+            assert 'name' in info
+            assert 'libs_missing' in info
+            assert 'cudf' in info['libs_missing']
 
 
 class TestHardwareInfo:
