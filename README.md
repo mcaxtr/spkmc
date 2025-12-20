@@ -105,6 +105,37 @@ pip install -e .
 
 Este comando instalará o SPKMC e todas as suas dependências automaticamente. Após a instalação, o comando `spkmc` estará disponível no seu ambiente virtual.
 
+#### 6. (Opcional) Instalar suporte a GPU
+
+Para habilitar aceleração GPU com CUDA, instale as dependências opcionais:
+
+```bash
+pip install -e ".[gpu]"
+```
+
+**Importante:** As dependências GPU requerem:
+- Driver NVIDIA instalado
+- CUDA Toolkit compatível (versão 12.x)
+
+Se você tem CUDA 11.x, instale manualmente a versão compatível do CuPy:
+
+```bash
+pip install cupy-cuda11x
+```
+
+Para verificar se a GPU foi detectada corretamente:
+
+```bash
+python -c "import cupy; print(cupy.cuda.runtime.getDeviceCount(), 'GPU(s) detectada(s)')"
+```
+
+Ou execute o SPKMC e verifique o painel de hardware:
+
+```bash
+spkmc batch
+# Deve mostrar: GPU: <nome-da-gpu> (XGB) → CUDA acceleration
+```
+
 ## Uso Básico
 
 Após a instalação, você terá acesso ao comando `spkmc` que fornece uma interface de linha de comando completa para executar simulações, visualizar resultados e obter informações.
@@ -287,6 +318,32 @@ matplotlib.use('TkAgg')  # ou outro backend compatível
 
 #### Erro ao salvar resultados
 - **Solução**: Verifique se você tem permissões de escrita no diretório de destino. Use o parâmetro `--output` para especificar um caminho alternativo.
+
+### Problemas de GPU
+
+#### GPU não detectada ("GPU: Not available")
+- **Solução**: Instale as dependências GPU com `pip install -e ".[gpu]"` ou `pip install cupy-cuda12x`. Verifique se os drivers NVIDIA estão instalados com `nvidia-smi`.
+
+#### Erro: "cupy not installed"
+- **Solução**: O CuPy não está instalado. Execute:
+```bash
+pip install cupy-cuda12x  # Para CUDA 12.x
+# ou
+pip install cupy-cuda11x  # Para CUDA 11.x
+```
+
+#### Erro: "CUDA initialization failed"
+- **Solução**: Verifique se os drivers NVIDIA estão instalados e funcionando:
+```bash
+nvidia-smi
+```
+Se o comando falhar, instale os drivers NVIDIA apropriados para sua GPU.
+
+#### Versão do CUDA incompatível
+- **Solução**: Verifique sua versão do CUDA com `nvidia-smi` e instale a versão correspondente do CuPy:
+  - CUDA 12.x: `pip install cupy-cuda12x`
+  - CUDA 11.x: `pip install cupy-cuda11x`
+  - CUDA 10.x: `pip install cupy-cuda10x`
 
 ## Documentação
 
