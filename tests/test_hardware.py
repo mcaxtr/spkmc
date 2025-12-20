@@ -234,4 +234,6 @@ class TestFormatHardwareBox:
 
         output = format_hardware_box(hardware, strategy)
 
-        assert "4 parallel workers" in output
+        # Strategy is passed but we no longer show parallel workers count
+        assert "8 cores" in output
+        assert "4 physical" in output

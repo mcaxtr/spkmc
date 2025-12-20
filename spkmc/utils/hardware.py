@@ -231,10 +231,7 @@ def format_hardware_box(
     lines = []
 
     # CPU info
-    if strategy:
-        cpu_line = f"  CPU: {info.cpu_count} cores ({info.cpu_count_physical} physical) → {strategy.scenario_workers} parallel workers"
-    else:
-        cpu_line = f"  CPU: {info.cpu_count} cores ({info.cpu_count_physical} physical)"
+    cpu_line = f"  CPU: {info.cpu_count} cores ({info.cpu_count_physical} physical)"
     lines.append(cpu_line)
 
     # GPU info
@@ -280,9 +277,6 @@ def get_hardware_summary(info: HardwareInfo, strategy: ParallelizationStrategy) 
     Returns:
         Short summary string
     """
-    parts = [f"{strategy.scenario_workers}x parallel"]
-
     if strategy.use_gpu:
-        parts.append("GPU")
-
-    return " | ".join(parts)
+        return "GPU"
+    return "CPU"

@@ -32,7 +32,7 @@ from spkmc.utils.hardware import (
     format_hardware_box,
     HardwareInfo
 )
-from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult
+from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult, _get_mp_context
 from spkmc.cli.formatting import (
     colorize, format_title, format_param, format_success, format_error,
     format_warning, format_info, create_progress_bar, print_rich_table,
@@ -344,8 +344,6 @@ def _display_hardware_panel(hardware: HardwareInfo, strategy: ParallelizationStr
 
     # CPU info
     cpu_info = f"CPU: {hardware.cpu_count} cores ({hardware.cpu_count_physical} physical)"
-    if strategy.scenario_workers > 1:
-        cpu_info += f" → {strategy.scenario_workers} parallel workers"
     lines.append(cpu_info)
 
     # GPU info - get detailed info for better messaging
@@ -425,21 +423,21 @@ def run_experiment_scenarios(
 
     # Determine execution mode
     use_parallel = strategy.scenario_workers > 1 and num_scenarios > 1
-
-    if use_parallel:
-        # Parallel execution
-        parallel_label = f"Executando {num_scenarios} cenários [{strategy.scenario_workers}x parallel]"
-    else:
-        parallel_label = f"Executando {num_scenarios} cenários"
+    parallel_label = f"Executando {num_scenarios} cenários"
 
     with create_progress_bar(parallel_label, num_scenarios, verbose) as progress:
         task = progress.add_task("Processando cenários...", total=num_scenarios)
 
         if use_parallel:
-            # Parallel execution using ProcessPoolExecutor
+            # Parallel execution using ProcessPoolExecutor with spawn context
+            # to avoid OpenMP fork issues on Linux
             futures_results: List[Optional[Tuple]] = [None] * num_scenarios
+            mp_context = _get_mp_context()
 
-            with ProcessPoolExecutor(max_workers=strategy.scenario_workers) as executor:
+            with ProcessPoolExecutor(
+                max_workers=strategy.scenario_workers,
+                mp_context=mp_context
+            ) as executor:
                 future_to_index = {}
 
                 for i, scenario in enumerate(experiment.scenarios):
@@ -523,8 +521,7 @@ def run_experiment_scenarios(
             log_error(f"Erro ao gerar gráfico comparativo: {e}")
 
     # Show execution summary
-    mode_str = f"{strategy.scenario_workers}x parallel" if use_parallel else "sequential"
-    log_success(f"Concluído em {execution_time:.1f}s ({mode_str})")
+    log_success(f"Concluído em {execution_time:.1f}s")
 
     return result_files
 
