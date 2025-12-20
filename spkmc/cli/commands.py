@@ -1418,6 +1418,10 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
 @cli.command(help="Executar múltiplos cenários de simulação a partir de um arquivo JSON ou experimento")
 @click.option("--simple", is_flag=True, help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)")
 @click.argument("scenarios_file", type=str, default=None, required=False)
+@click.option("--all", "-a", "run_all", is_flag=True, default=False,
+              help="Executar todos os experimentos em ordem (sem menu interativo)")
+@click.option("--override", is_flag=True, default=False,
+              help="Limpar resultados existentes e forçar re-execução completa")
 @click.option("--experiments-dir", "-e", type=str, default=None,
               help="Diretório base para experimentos (padrão: experiments)")
 @click.option("--output-dir", "-o", type=str, default="./results",
@@ -1434,7 +1438,7 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
               help="Criar um arquivo zip com os resultados de cada cenário")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a execução")
-def batch(simple, scenarios_file, experiments_dir, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
+def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
     """
     Executa múltiplos cenários de simulação a partir de um arquivo JSON ou experimento.
 
@@ -1469,53 +1473,93 @@ def batch(simple, scenarios_file, experiments_dir, output_dir, prefix, compare, 
             log_info("Crie um experimento em experiments/<nome>/data.json ou especifique um arquivo de cenários.")
             return
 
-        # Exibir menu de experimentos
-        selected = display_experiments_menu(experiments)
+        # Determinar quais experimentos executar
+        if run_all:
+            # Executar todos os experimentos em ordem
+            experiments_to_run = experiments
+            log_info(f"Executando todos os {len(experiments)} experimentos em ordem...")
+        else:
+            # Exibir menu de experimentos
+            selected = display_experiments_menu(experiments)
 
-        if selected is None:
-            log_info("Operação cancelada pelo usuário.")
-            return
+            if selected is None:
+                log_info("Operação cancelada pelo usuário.")
+                return
 
-        experiment = experiments[selected - 1]
-        log_info(f"Experimento selecionado: {experiment.name}")
+            experiments_to_run = [experiments[selected - 1]]
+            log_info(f"Experimento selecionado: {experiments_to_run[0].name}")
 
-        # Verificar se há resultados existentes
-        force_rerun = False
-        if experiment.has_results:
-            log_warning(f"O experimento '{experiment.name}' já possui {experiment.result_count} resultado(s).")
-            if click.confirm("Deseja limpar os resultados existentes e re-executar?", default=False):
-                experiment.clean_results()
-                force_rerun = True  # Force re-execution of all scenarios
-                log_success("Resultados anteriores removidos. Forçando re-execução completa.")
-            else:
-                log_info("Mantendo resultados existentes. Cenários já executados serão ignorados.")
+        # Executar cada experimento
+        total_start_time = time.time()
+        total_scenarios_processed = 0
+        experiments_completed = 0
 
-        # Executar o experimento
-        start_time = time.time()
-        log_debug(f"Iniciando execução do experimento em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", verbose_only=False)
+        for exp_index, experiment in enumerate(experiments_to_run):
+            if run_all:
+                console.print()
+                console.print(format_title(f"Experimento {exp_index + 1}/{len(experiments_to_run)}: {experiment.name}"))
 
-        result_files = run_experiment_scenarios(
-            experiment=experiment,
-            verbose=verbose,
-            use_simple=use_simple,
-            create_zip=zip,
-            no_plot=no_plot,
-            save_plot=save_plot,
-            force_rerun=force_rerun
-        )
+            # Verificar se há resultados existentes
+            force_rerun = False
+            if experiment.has_results:
+                if override:
+                    # Com --override, limpa resultados e força re-execução
+                    experiment.clean_results()
+                    force_rerun = True
+                    log_info(f"Resultados anteriores de '{experiment.name}' removidos. Forçando re-execução.")
+                elif run_all:
+                    # No modo --all sem --override, pula cenários já executados
+                    log_info(f"Experimento '{experiment.name}' possui {experiment.result_count} resultado(s). Cenários existentes serão ignorados.")
+                else:
+                    # Modo interativo: pergunta ao usuário
+                    log_warning(f"O experimento '{experiment.name}' já possui {experiment.result_count} resultado(s).")
+                    if click.confirm("Deseja limpar os resultados existentes e re-executar?", default=False):
+                        experiment.clean_results()
+                        force_rerun = True
+                        log_success("Resultados anteriores removidos. Forçando re-execução completa.")
+                    else:
+                        log_info("Mantendo resultados existentes. Cenários já executados serão ignorados.")
 
-        # Resumo final
-        end_time = time.time()
-        total_execution_time = end_time - start_time
+            # Executar o experimento
+            start_time = time.time()
+            log_debug(f"Iniciando execução do experimento em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", verbose_only=False)
 
-        console.print(format_title("Resumo da Execução do Experimento"))
-        console.print(f"  {format_param('Experimento', experiment.name)}")
-        console.print(f"  {format_param('Total de cenários', len(experiment.scenarios))}")
-        console.print(f"  {format_param('Cenários processados', len(result_files))}")
-        console.print(f"  {format_param('Tempo total de execução', f'{total_execution_time:.2f} segundos')}")
-        console.print(f"  {format_param('Diretório de resultados', str(experiment.results_dir))}")
+            result_files = run_experiment_scenarios(
+                experiment=experiment,
+                verbose=verbose,
+                use_simple=use_simple,
+                create_zip=zip,
+                no_plot=no_plot,
+                save_plot=save_plot,
+                force_rerun=force_rerun
+            )
 
-        log_success(f"Experimento concluído. {len(result_files)} cenário(s) processado(s).")
+            # Resumo do experimento
+            end_time = time.time()
+            execution_time = end_time - start_time
+            total_scenarios_processed += len(result_files)
+            experiments_completed += 1
+
+            if not run_all:
+                console.print(format_title("Resumo da Execução do Experimento"))
+                console.print(f"  {format_param('Experimento', experiment.name)}")
+                console.print(f"  {format_param('Total de cenários', len(experiment.scenarios))}")
+                console.print(f"  {format_param('Cenários processados', len(result_files))}")
+                console.print(f"  {format_param('Tempo total de execução', f'{execution_time:.2f} segundos')}")
+                console.print(f"  {format_param('Diretório de resultados', str(experiment.results_dir))}")
+
+            log_success(f"Experimento '{experiment.name}' concluído. {len(result_files)} cenário(s) processado(s) em {execution_time:.1f}s.")
+
+        # Resumo final para --all
+        if run_all:
+            total_execution_time = time.time() - total_start_time
+            console.print()
+            console.print(format_title("Resumo Final - Todos os Experimentos"))
+            console.print(f"  {format_param('Experimentos executados', experiments_completed)}")
+            console.print(f"  {format_param('Total de cenários processados', total_scenarios_processed)}")
+            console.print(f"  {format_param('Tempo total de execução', f'{total_execution_time:.2f} segundos')}")
+            log_success(f"Todos os {experiments_completed} experimentos concluídos.")
+
         return
 
     # ============================================================
@@ -1585,6 +1629,13 @@ def batch(simple, scenarios_file, experiments_dir, output_dir, prefix, compare, 
         scenarios=scenarios
     )
 
+    # Handle --override for file mode
+    force_rerun = False
+    if override and experiment.has_results:
+        experiment.clean_results()
+        force_rerun = True
+        log_info(f"Resultados anteriores removidos. Forçando re-execução.")
+
     # Use parallelized execution
     result_files = run_experiment_scenarios(
         experiment=experiment,
@@ -1592,7 +1643,8 @@ def batch(simple, scenarios_file, experiments_dir, output_dir, prefix, compare, 
         use_simple=use_simple,
         create_zip=zip,
         no_plot=no_plot,
-        save_plot=save_plot
+        save_plot=save_plot,
+        force_rerun=force_rerun
     )
 
     # Summary
