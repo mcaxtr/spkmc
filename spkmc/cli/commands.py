@@ -1509,12 +1509,11 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
                 console.print(format_title(f"Experimento {exp_index + 1}/{len(experiments_to_run)}: {experiment.name}"))
 
             # Verificar se há resultados existentes
-            force_rerun = False
+            force_rerun = override  # --override sempre força re-execução
             if experiment.has_results:
                 if override:
-                    # Com --override, limpa resultados e força re-execução
+                    # Com --override, limpa resultados
                     experiment.clean_results()
-                    force_rerun = True
                     log_info(f"Resultados anteriores de '{experiment.name}' removidos. Forçando re-execução.")
                 elif run_all:
                     # No modo --all sem --override, pula cenários já executados
@@ -1639,10 +1638,9 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
     )
 
     # Handle --override for file mode
-    force_rerun = False
+    force_rerun = override  # --override sempre força re-execução
     if override and experiment.has_results:
         experiment.clean_results()
-        force_rerun = True
         log_info(f"Resultados anteriores removidos. Forçando re-execução.")
 
     # Use parallelized execution
