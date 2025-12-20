@@ -5,13 +5,33 @@ Este módulo contém funções auxiliares que são otimizadas usando a bibliotec
 para melhorar o desempenho das simulações SPKMC.
 """
 
+import os
+
+# Suppress OpenMP deprecation warning (omp_set_nested -> omp_set_max_active_levels)
+# Must be set before Numba imports OpenMP
+# KMP_WARNINGS=0 suppresses Intel OpenMP informational messages
+os.environ.setdefault('KMP_WARNINGS', '0')
+os.environ.setdefault('OMP_MAX_ACTIVE_LEVELS', '1')
+
+import multiprocessing
 import numpy as np
 from numba import njit, prange, set_num_threads, config
 from typing import Optional, Tuple
 
 # Configurando Numba para usar o máximo nível de paralelismo
 config.THREADING_LAYER = 'omp'
-set_num_threads(8)  # Ajuste este número conforme necessário para o seu sistema
+
+# Dynamic thread count based on available CPU cores
+# Can be overridden with NUMBA_NUM_THREADS environment variable
+_env_threads = os.environ.get('NUMBA_NUM_THREADS')
+if _env_threads:
+    _num_threads = int(_env_threads)
+else:
+    # Use physical core count, capped at 16 for efficiency
+    _cpu_count = os.cpu_count() or 1
+    _num_threads = min(_cpu_count, 16)
+
+set_num_threads(_num_threads)
 
 
 @njit

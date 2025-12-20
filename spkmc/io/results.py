@@ -21,30 +21,34 @@ class ResultManager:
     BASE_DIR = "data/spkmc"
     
     @staticmethod
-    def get_result_path(network_type: str, distribution: Distribution, N: int, samples: int, 
-                       exponent: Optional[float] = None) -> str:
+    def get_result_path(network_type: str, distribution: Distribution, N: int, samples: int,
+                       exponent: Optional[float] = None, k_avg: Optional[float] = None) -> str:
         """
         Gera o caminho para o arquivo de resultados.
-        
+
         Args:
             network_type: Tipo de rede (ER, CN, CG, RRN)
             distribution: Objeto de distribuição
             N: Número de nós
             samples: Número de amostras
             exponent: Expoente para redes complexas
-            
+            k_avg: Grau médio da rede
+
         Returns:
             Caminho para o arquivo de resultados
         """
         base_path = f"{ResultManager.BASE_DIR}/{distribution.get_distribution_name()}/{network_type}/"
-        
+
         # Cria diretórios se não existirem
         Path(base_path).mkdir(parents=True, exist_ok=True)
-        
+
+        # Build filename with all relevant parameters
+        k_avg_str = f"_k{int(k_avg)}" if k_avg is not None else ""
+
         if network_type == "CN" and exponent is not None:
-            return f"{base_path}results_{str(exponent).replace('.', '')}_{N}_{samples}_{distribution.get_params_string()}.json"
+            return f"{base_path}results_{str(exponent).replace('.', '')}_{N}_{samples}{k_avg_str}_{distribution.get_params_string()}.json"
         else:
-            return f"{base_path}results_{N}_{samples}_{distribution.get_params_string()}.json"
+            return f"{base_path}results_{N}_{samples}{k_avg_str}_{distribution.get_params_string()}.json"
     
     @staticmethod
     def load_result(file_path: str) -> Dict[str, Any]:
