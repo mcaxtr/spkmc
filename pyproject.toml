@@ -33,6 +33,8 @@ dependencies = [
     "rich>=10.0.0",
     "openpyxl>=3.0.7",
     "joblib>=1.0.1",
+    "questionary>=1.10.0",
+    "psutil>=5.8.0",
     "pytest>=6.0.0",
     "pytest-cov>=2.12.1",
 ]
@@ -43,6 +45,11 @@ dev = [
     "isort>=5.9.0",
     "mypy>=0.900",
     "flake8>=3.9.0",
+]
+gpu = [
+    "cupy-cuda12x>=12.0.0",
+    "cudf-cu12>=24.0.0",
+    "cugraph-cu12>=24.0.0",
 ]
 
 [project.scripts]
