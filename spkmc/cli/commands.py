@@ -428,6 +428,11 @@ def run_experiment_scenarios(
     # Display hardware panel
     _display_hardware_panel(hardware, strategy)
 
+    # If force_rerun, clean ALL existing results first
+    if force_rerun and experiment.results_dir.exists():
+        import shutil
+        shutil.rmtree(experiment.results_dir)
+
     # Ensure results directory exists
     results_dir = experiment.ensure_results_dir()
 
@@ -1680,28 +1685,39 @@ def clean(experiments_dir, yes):
     Este comando limpa o diretório 'results/' de cada experimento,
     permitindo re-executar todas as simulações do zero.
     """
+    import shutil
+    from pathlib import Path
+
     # Criar gerenciador de experimentos
     exp_manager = ExperimentManager(experiments_dir)
     experiments = exp_manager.list_experiments()
 
-    if not experiments:
-        log_error("Nenhum experimento encontrado.")
+    # Check for root results/ directory too
+    root_results = Path("results")
+    has_root_results = root_results.exists() and any(root_results.glob("*.json"))
+
+    if not experiments and not has_root_results:
+        log_error("Nenhum experimento ou resultado encontrado.")
         return
 
     # Contar resultados existentes
     total_results = sum(exp.result_count for exp in experiments)
     experiments_with_results = [exp for exp in experiments if exp.has_results]
 
-    if not experiments_with_results:
+    if not experiments_with_results and not has_root_results:
         log_info("Nenhum resultado para limpar. Todos os experimentos estão vazios.")
         return
 
     # Mostrar o que será removido
-    console.print(format_title("Experimentos com Resultados"))
+    console.print(format_title("Resultados Encontrados"))
     for exp in experiments_with_results:
         console.print(f"  • {exp.name}: {exp.result_count} resultado(s)")
+    if has_root_results:
+        root_count = len(list(root_results.glob("*.json")))
+        console.print(f"  • [root]/results/: {root_count} arquivo(s)")
+        total_results += root_count
     console.print()
-    console.print(f"Total: {total_results} resultado(s) em {len(experiments_with_results)} experimento(s)")
+    console.print(f"Total: {total_results} resultado(s)")
     console.print()
 
     # Confirmar
@@ -1720,5 +1736,14 @@ def clean(experiments_dir, yes):
         except Exception as e:
             log_error(f"Erro ao limpar '{exp.name}': {e}")
 
+    # Clean root results/ directory
+    if has_root_results:
+        try:
+            shutil.rmtree(root_results)
+            log_success("Resultados de '[root]/results/' removidos.")
+            cleaned_count += 1
+        except Exception as e:
+            log_error(f"Erro ao limpar '[root]/results/': {e}")
+
     console.print()
-    log_success(f"Limpeza concluída. {cleaned_count} experimento(s) limpo(s).")
+    log_success(f"Limpeza concluída. {cleaned_count} local(is) limpo(s).")
