@@ -18,19 +18,18 @@ os.environ.setdefault('OMP_MAX_ACTIVE_LEVELS', '1')
 
 import numpy as np
 from numba import njit, prange, get_num_threads, config
-from typing import Tuple
 
 # Debug flag - set SPKMC_DEBUG=1 for verbose logging
 _DEBUG = os.environ.get('SPKMC_DEBUG', '0') == '1'
 
 
-def _log(msg: str) -> None:
+def _log(msg):
     """Print debug message if debugging is enabled."""
     if _DEBUG:
         print(f"[NUMBA DEBUG] {msg}", file=sys.stderr)
 
 
-def get_numba_info() -> dict:
+def get_numba_info():
     """Get information about Numba configuration."""
     info = {
         'num_threads': get_num_threads(),
@@ -41,9 +40,8 @@ def get_numba_info() -> dict:
     return info
 
 
-def clear_numba_cache() -> None:
+def clear_numba_cache():
     """Clear Numba's compilation cache."""
-    import shutil
     from pathlib import Path
 
     # Clear __pycache__ directories with .nbc/.nbi files
@@ -65,55 +63,39 @@ def clear_numba_cache() -> None:
 
 
 # =============================================================================
-# CORE COMPUTATION FUNCTIONS (parallelized where beneficial)
+# CORE COMPUTATION FUNCTIONS
+# Note: No type hints on njit functions to avoid Numba typing issues
 # =============================================================================
 
-@njit(cache=False)  # Disable cache to avoid stale compilations
-def get_states(
-    time_to_infect: np.ndarray, time_to_recover: np.ndarray, time: float
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Calcula os estados (S, I, R) para cada nó em um determinado tempo.
+@njit(cache=False)
+def _get_states_at_time(time_to_infect, time_to_recover, time):
+    """Calculate S, I, R counts at a specific time."""
+    n = len(time_to_infect)
+    s_count = 0
+    i_count = 0
+    r_count = 0
 
-    Args:
-        time_to_infect: Tempo para infecção de cada nó
-        time_to_recover: Tempo para recuperação de cada nó
-        time: Tempo atual da simulação
+    for i in range(n):
+        if time_to_infect[i] > time:
+            s_count += 1
+        elif time_to_infect[i] + time_to_recover[i] > time:
+            i_count += 1
+        else:
+            r_count += 1
 
-    Returns:
-        Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó
-    """
-    S = time_to_infect > time
-    I = ~S & (time_to_infect + time_to_recover > time)
-    R = ~S & ~I
-    return S, I, R
+    return s_count, i_count, r_count
 
 
 @njit(parallel=True, cache=False)
-def compute_infection_times_gamma(
-    shape: float, scale: float, recovery_times: np.ndarray, edges: np.ndarray
-) -> np.ndarray:
-    """
-    Calcula os tempos de infecção usando a distribuição Gamma.
-
-    Random numbers are pre-generated, then parallel loop does deterministic work.
-
-    Args:
-        shape: Parâmetro de forma da distribuição Gamma
-        scale: Parâmetro de escala da distribuição Gamma
-        recovery_times: Tempos de recuperação para cada nó
-        edges: Arestas do grafo como matriz (u, v)
-
-    Returns:
-        Tempos de infecção para cada aresta
-    """
+def compute_infection_times_gamma(shape, scale, recovery_times, edges):
+    """Compute infection times using Gamma distribution."""
     num_edges = edges.shape[0]
 
-    # Pre-generate all random numbers (sequential, thread-safe)
+    # Pre-generate all random numbers (thread-safe)
     random_times = np.random.gamma(shape, scale, num_edges)
 
     # Parallel loop for deterministic comparison
-    infection_times = np.empty(num_edges)
+    infection_times = np.empty(num_edges, dtype=np.float64)
     for i in prange(num_edges):
         u = edges[i, 0]
         if random_times[i] >= recovery_times[u]:
@@ -125,29 +107,15 @@ def compute_infection_times_gamma(
 
 
 @njit(parallel=True, cache=False)
-def compute_infection_times_exponential(
-    beta: float, recovery_times: np.ndarray, edges: np.ndarray
-) -> np.ndarray:
-    """
-    Calcula os tempos de infecção usando a distribuição Exponencial.
-
-    Random numbers are pre-generated, then parallel loop does deterministic work.
-
-    Args:
-        beta: Parâmetro da distribuição Exponencial (lambda)
-        recovery_times: Tempos de recuperação para cada nó
-        edges: Arestas do grafo como matriz (u, v)
-
-    Returns:
-        Tempos de infecção para cada aresta
-    """
+def compute_infection_times_exponential(beta, recovery_times, edges):
+    """Compute infection times using Exponential distribution."""
     num_edges = edges.shape[0]
 
-    # Pre-generate all random numbers (sequential, thread-safe)
+    # Pre-generate all random numbers (thread-safe)
     random_times = np.random.exponential(1.0 / beta, num_edges)
 
     # Parallel loop for deterministic comparison
-    infection_times = np.empty(num_edges)
+    infection_times = np.empty(num_edges, dtype=np.float64)
     for i in prange(num_edges):
         u = edges[i, 0]
         if random_times[i] >= recovery_times[u]:
@@ -158,42 +126,42 @@ def compute_infection_times_exponential(
     return infection_times
 
 
-@njit(parallel=True, cache=False)
-def _calculate_parallel(
-    N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray,
-    time_steps: np.ndarray, steps: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Parallel implementation of calculate."""
-    S_time = np.zeros(steps)
-    I_time = np.zeros(steps)
-    R_time = np.zeros(steps)
+@njit(cache=False)
+def _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps):
+    """Sequential implementation - no prange, no parallel."""
+    steps = len(time_steps)
+    S_time = np.empty(steps, dtype=np.float64)
+    I_time = np.empty(steps, dtype=np.float64)
+    R_time = np.empty(steps, dtype=np.float64)
 
-    for idx in prange(steps):
-        time = time_steps[idx]
-        S, I, R = get_states(time_to_infect, recovery_times, time)
-        S_time[idx] = np.sum(S) / N
-        I_time[idx] = np.sum(I) / N
-        R_time[idx] = np.sum(R) / N
+    n_float = float(N)
+
+    for idx in range(steps):
+        t = time_steps[idx]
+        s, i, r = _get_states_at_time(time_to_infect, recovery_times, t)
+        S_time[idx] = s / n_float
+        I_time[idx] = i / n_float
+        R_time[idx] = r / n_float
 
     return S_time, I_time, R_time
 
 
-@njit(cache=False)
-def _calculate_sequential(
-    N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray,
-    time_steps: np.ndarray, steps: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Sequential implementation of calculate (fallback)."""
-    S_time = np.zeros(steps)
-    I_time = np.zeros(steps)
-    R_time = np.zeros(steps)
+@njit(parallel=True, cache=False)
+def _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps):
+    """Parallel implementation using prange over time steps."""
+    steps = len(time_steps)
+    S_time = np.empty(steps, dtype=np.float64)
+    I_time = np.empty(steps, dtype=np.float64)
+    R_time = np.empty(steps, dtype=np.float64)
 
-    for idx in range(steps):
-        time = time_steps[idx]
-        S, I, R = get_states(time_to_infect, recovery_times, time)
-        S_time[idx] = np.sum(S) / N
-        I_time[idx] = np.sum(I) / N
-        R_time[idx] = np.sum(R) / N
+    n_float = float(N)
+
+    for idx in prange(steps):
+        t = time_steps[idx]
+        s, i, r = _get_states_at_time(time_to_infect, recovery_times, t)
+        S_time[idx] = s / n_float
+        I_time[idx] = i / n_float
+        R_time[idx] = r / n_float
 
     return S_time, I_time, R_time
 
@@ -202,24 +170,11 @@ def _calculate_sequential(
 _parallel_failed = False
 
 
-def calculate(
-    N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray,
-    time_steps: np.ndarray, steps: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def calculate(N, time_to_infect, recovery_times, time_steps, steps):
     """
-    Calcula a proporção de indivíduos em cada estado (S, I, R) para cada passo de tempo.
+    Calculate S, I, R proportions over time.
 
-    Tries parallel execution first, falls back to sequential if it fails.
-
-    Args:
-        N: Número de nós no grafo
-        time_to_infect: Tempo para infecção de cada nó
-        recovery_times: Tempo para recuperação de cada nó
-        time_steps: Array com os passos de tempo
-        steps: Número de passos de tempo
-
-    Returns:
-        Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado
+    Tries parallel first, falls back to sequential if it fails.
     """
     global _parallel_failed
 
@@ -235,11 +190,11 @@ def calculate(
 
     if _parallel_failed:
         _log("Using sequential execution (parallel previously failed)")
-        return _calculate_sequential(N, time_to_infect, recovery_times, time_steps, steps)
+        return _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
 
     try:
         _log(f"Attempting parallel execution with {get_num_threads()} threads")
-        result = _calculate_parallel(N, time_to_infect, recovery_times, time_steps, steps)
+        result = _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps)
         _log("Parallel execution succeeded")
         return result
     except Exception as e:
@@ -250,7 +205,7 @@ def calculate(
         print(f"[WARNING] Traceback:\n{tb}", file=sys.stderr)
         print("[WARNING] Falling back to sequential execution\n", file=sys.stderr)
         _log(f"Parallel failed, using sequential: {error_msg}")
-        return _calculate_sequential(N, time_to_infect, recovery_times, time_steps, steps)
+        return _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
 
 
 # =============================================================================
@@ -258,33 +213,14 @@ def calculate(
 # =============================================================================
 
 @njit(cache=False)
-def gamma_sampling(shape: float, scale: float, size: int) -> np.ndarray:
-    """
-    Sample an array from Gamma distribution.
-
-    Args:
-        shape: Shape parameter of Gamma distribution
-        scale: Scale parameter of Gamma distribution
-        size: Number of samples
-
-    Returns:
-        Array of samples from Gamma distribution
-    """
+def gamma_sampling(shape, scale, size):
+    """Sample an array from Gamma distribution."""
     return np.random.gamma(shape, scale, size)
 
 
 @njit(cache=False)
-def get_weight_exponential(param: float, size: int) -> np.ndarray:
-    """
-    Sample an array from Exponential distribution.
-
-    Args:
-        param: Rate parameter (mu) of Exponential distribution
-        size: Number of samples
-
-    Returns:
-        Array of samples from Exponential distribution
-    """
+def get_weight_exponential(param, size):
+    """Sample an array from Exponential distribution."""
     return np.random.exponential(1.0 / param, size)
 
 
@@ -292,7 +228,7 @@ def get_weight_exponential(param: float, size: int) -> np.ndarray:
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def get_numba_thread_count() -> int:
+def get_numba_thread_count():
     """Return the number of threads Numba is using."""
     return get_num_threads()
 
