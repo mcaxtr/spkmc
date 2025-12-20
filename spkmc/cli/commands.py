@@ -439,7 +439,9 @@ def run_experiment_scenarios(
     num_scenarios = len(experiment.scenarios)
 
     # Determine execution mode
-    use_parallel = strategy.scenario_workers > 1 and num_scenarios > 1
+    # NOTE: Parallel scenario execution is disabled because Numba's @njit(parallel=True)
+    # conflicts with ProcessPoolExecutor on Linux. Numba handles inner-loop parallelism.
+    use_parallel = False  # Disabled: strategy.scenario_workers > 1 and num_scenarios > 1
     parallel_label = f"Executando {num_scenarios} cenários"
 
     with create_progress_bar(parallel_label, num_scenarios, verbose) as progress:
@@ -1666,3 +1668,59 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
     console.print(f"  {format_param('Diretório de resultados', output_dir)}")
 
     log_success(f"Execução concluída. {len(result_files)} cenário(s) processado(s).")
+
+
+@cli.command(help="Limpar resultados de todos os experimentos")
+@click.option("--experiments-dir", "-e", type=str, default=None,
+              help="Diretório base para experimentos (padrão: experiments)")
+@click.option("--yes", "-y", is_flag=True, default=False,
+              help="Confirmar automaticamente sem perguntar")
+def clean(experiments_dir, yes):
+    """
+    Remove todos os resultados de todos os experimentos.
+
+    Este comando limpa o diretório 'results/' de cada experimento,
+    permitindo re-executar todas as simulações do zero.
+    """
+    # Criar gerenciador de experimentos
+    exp_manager = ExperimentManager(experiments_dir)
+    experiments = exp_manager.list_experiments()
+
+    if not experiments:
+        log_error("Nenhum experimento encontrado.")
+        return
+
+    # Contar resultados existentes
+    total_results = sum(exp.result_count for exp in experiments)
+    experiments_with_results = [exp for exp in experiments if exp.has_results]
+
+    if not experiments_with_results:
+        log_info("Nenhum resultado para limpar. Todos os experimentos estão vazios.")
+        return
+
+    # Mostrar o que será removido
+    console.print(format_title("Experimentos com Resultados"))
+    for exp in experiments_with_results:
+        console.print(f"  • {exp.name}: {exp.result_count} resultado(s)")
+    console.print()
+    console.print(f"Total: {total_results} resultado(s) em {len(experiments_with_results)} experimento(s)")
+    console.print()
+
+    # Confirmar
+    if not yes:
+        if not click.confirm("Deseja remover todos os resultados?", default=False):
+            log_info("Operação cancelada.")
+            return
+
+    # Limpar resultados
+    cleaned_count = 0
+    for exp in experiments_with_results:
+        try:
+            exp.clean_results()
+            cleaned_count += 1
+            log_success(f"Resultados de '{exp.name}' removidos.")
+        except Exception as e:
+            log_error(f"Erro ao limpar '{exp.name}': {e}")
+
+    console.print()
+    log_success(f"Limpeza concluída. {cleaned_count} experimento(s) limpo(s).")
