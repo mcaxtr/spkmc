@@ -535,7 +535,16 @@ def run_experiment_scenarios(
                         all_labels.append(scenario.get("label", label))
 
                 except Exception as e:
+                    import traceback
+                    tb = traceback.format_exc()
                     log_error(f"Erro ao executar cenário {i+1}: {e}")
+                    # Show file and line number from traceback
+                    tb_lines = tb.strip().split('\n')
+                    for line in tb_lines:
+                        if 'File "' in line:
+                            console.print(f"[dim]{line.strip()}[/dim]")
+                    if os.environ.get('SPKMC_DEBUG', '0') == '1':
+                        console.print(f"[dim]{tb}[/dim]")
 
                 progress.update(task, advance=1)
 
@@ -1452,7 +1461,11 @@ def compare(simple, result_files, labels, output, format, dpi, export, verbose):
               help="Criar um arquivo zip com os resultados de cada cenário")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas durante a execução")
-def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir, prefix, compare, no_plot, save_plot, zip, verbose):
+@click.option("--debug", is_flag=True, default=False,
+              help="Ativar modo de depuração com logs detalhados do Numba")
+@click.option("--clear-cache", is_flag=True, default=False,
+              help="Limpar cache do Numba antes de executar")
+def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir, prefix, compare, no_plot, save_plot, zip, verbose, debug, clear_cache):
     """
     Executa múltiplos cenários de simulação a partir de um arquivo JSON ou experimento.
 
@@ -1473,6 +1486,16 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
+
+    # Configurar o modo de debug
+    if debug:
+        os.environ["SPKMC_DEBUG"] = "1"
+        log_info("Modo de depuração ativado - logs detalhados do Numba habilitados")
+
+    # Limpar cache do Numba se solicitado
+    if clear_cache:
+        from spkmc.utils.numba_utils import clear_numba_cache
+        clear_numba_cache()
 
     # ============================================================
     # EXPERIMENT MODE: Se nenhum arquivo foi especificado
@@ -1678,7 +1701,9 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
               help="Diretório base para experimentos (padrão: experiments)")
 @click.option("--yes", "-y", is_flag=True, default=False,
               help="Confirmar automaticamente sem perguntar")
-def clean(experiments_dir, yes):
+@click.option("--numba-cache", is_flag=True, default=False,
+              help="Também limpar o cache de compilação do Numba")
+def clean(experiments_dir, yes, numba_cache):
     """
     Remove todos os resultados de todos os experimentos.
 
@@ -1744,6 +1769,12 @@ def clean(experiments_dir, yes):
             cleaned_count += 1
         except Exception as e:
             log_error(f"Erro ao limpar '[root]/results/': {e}")
+
+    # Clean Numba cache if requested
+    if numba_cache:
+        from spkmc.utils.numba_utils import clear_numba_cache
+        clear_numba_cache()
+        log_success("Cache do Numba limpo.")
 
     console.print()
     log_success(f"Limpeza concluída. {cleaned_count} local(is) limpo(s).")
