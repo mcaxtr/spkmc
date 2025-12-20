@@ -50,13 +50,15 @@ def _init_worker(numba_threads: int) -> None:
     Initialize worker process with proper Numba configuration.
 
     Called at worker process start to configure threading.
+    Sets NUMBA_NUM_THREADS env var which Numba reads on first import.
 
     Args:
         numba_threads: Number of threads for Numba to use
     """
+    # Set environment variable BEFORE any Numba import
+    # Numba reads NUMBA_NUM_THREADS when first imported
     os.environ['NUMBA_NUM_THREADS'] = str(numba_threads)
-    from numba import set_num_threads
-    set_num_threads(numba_threads)
+    os.environ['OMP_NUM_THREADS'] = str(numba_threads)
 
 
 @dataclass

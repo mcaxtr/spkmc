@@ -451,6 +451,11 @@ def run_experiment_scenarios(
             futures_results: List[Optional[Tuple]] = [None] * num_scenarios
             mp_context = _get_mp_context()
 
+            # Set NUMBA_NUM_THREADS BEFORE creating workers
+            # Child processes inherit parent's environment variables
+            os.environ['NUMBA_NUM_THREADS'] = str(strategy.numba_threads)
+            os.environ['OMP_NUM_THREADS'] = str(strategy.numba_threads)
+
             with ProcessPoolExecutor(
                 max_workers=strategy.scenario_workers,
                 mp_context=mp_context,

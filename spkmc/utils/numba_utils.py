@@ -15,23 +15,15 @@ os.environ.setdefault('OMP_MAX_ACTIVE_LEVELS', '1')
 
 import multiprocessing
 import numpy as np
-from numba import njit, prange, set_num_threads, config
+from numba import njit, prange, config
 from typing import Optional, Tuple
 
 # Configurando Numba para usar o máximo nível de paralelismo
 config.THREADING_LAYER = 'omp'
 
-# Dynamic thread count based on available CPU cores
-# Can be overridden with NUMBA_NUM_THREADS environment variable
-_env_threads = os.environ.get('NUMBA_NUM_THREADS')
-if _env_threads:
-    _num_threads = int(_env_threads)
-else:
-    # Use physical core count, capped at 16 for efficiency
-    _cpu_count = os.cpu_count() or 1
-    _num_threads = min(_cpu_count, 16)
-
-set_num_threads(_num_threads)
+# NOTE: Thread count is set via NUMBA_NUM_THREADS environment variable
+# or by calling configure_numba_threads() from hardware.py
+# Do NOT call set_num_threads() here - it causes conflicts with multiprocessing
 
 
 @njit
