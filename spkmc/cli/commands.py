@@ -32,7 +32,7 @@ from spkmc.utils.hardware import (
     format_hardware_box,
     HardwareInfo
 )
-from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult, _get_mp_context
+from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult, _get_mp_context, _init_worker
 from spkmc.cli.formatting import (
     colorize, format_title, format_param, format_success, format_error,
     format_warning, format_info, create_progress_bar, print_rich_table,
@@ -453,7 +453,9 @@ def run_experiment_scenarios(
 
             with ProcessPoolExecutor(
                 max_workers=strategy.scenario_workers,
-                mp_context=mp_context
+                mp_context=mp_context,
+                initializer=_init_worker,
+                initargs=(strategy.numba_threads,)
             ) as executor:
                 future_to_index = {}
 
