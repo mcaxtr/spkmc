@@ -539,7 +539,7 @@ python spkmc_cli.py batch [ARQUIVO_CENÁRIOS] [OPÇÕES]
 
 Argumento | Descrição |
 |-----------|-----------|
-`ARQUIVO_CENÁRIOS` | Caminho para o arquivo JSON contendo os cenários (padrão: batches.json) |
+`ARQUIVO_CENÁRIOS` | Caminho para o arquivo JSON contendo os cenários (opcional - se omitido, mostra menu de experimentos) |
 
 #### Opções
 
@@ -617,8 +617,8 @@ Parâmetro | Tipo | Padrão | Descrição |
 #### Exemplos
 
 ```bash
-# Executar cenários do arquivo padrão (batches.json)
-python spkmc_cli.py batch
+# Executar experimentos (mostra menu interativo)
+spkmc batch
 
 # Executar cenários de um arquivo específico
 python spkmc_cli.py batch experimentos/cenarios_teste.json

@@ -207,10 +207,14 @@ spkmc run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -i 0.01 --t-max 10
 
 ### Execução em Lote
 
-Você pode executar múltiplos cenários de simulação a partir de um arquivo JSON:
+Você pode executar múltiplos cenários de simulação usando experimentos estruturados:
 
 ```bash
-spkmc batch --scenarios-file batches.json --output-dir results/batch_test
+# Menu interativo de experimentos
+spkmc batch
+
+# Ou especifique um arquivo JSON de cenários
+spkmc batch scenarios.json --output-dir results/batch_test
 ```
 
 Para exemplos mais detalhados, consulte o diretório `examples/`:

@@ -20,8 +20,8 @@ pytest --cov=spkmc --cov-report=term-missing
 # Run a simulation
 python -m spkmc.cli run -n er -d gamma --nodes 1000 --samples 50
 
-# Run batch scenarios
-python -m spkmc.cli batch --scenarios-file batches.json
+# Run batch scenarios (interactive experiment menu)
+python -m spkmc.cli batch
 
 # List saved results
 python -m spkmc.cli info --list
@@ -50,7 +50,7 @@ spkmc/
 ├── tests/                    # Comprehensive test suite
 ├── docs/                     # Documentation
 ├── examples/                 # Usage examples
-└── batches.json              # Batch execution scenarios
+└── experiments/              # Structured experiments with data.json configs
 ```
 
 ## Core Concepts
@@ -179,7 +179,8 @@ spkmc compare <file1> <file2> ... [-o output]
 
 ### `batch` - Run multiple scenarios
 ```bash
-spkmc batch --scenarios-file batches.json [--parallel]
+spkmc batch                                    # Interactive experiment menu
+spkmc batch scenarios.json --output-dir out/   # File mode
 ```
 
 ## Result Storage
@@ -201,7 +202,7 @@ data/spkmc/
 | `spkmc/core/networks.py` | Network topology factory |
 | `spkmc/cli/commands.py` | All CLI command definitions |
 | `spkmc/utils/numba_utils.py` | Performance-critical JIT functions |
-| `batches.json` | Batch scenario configuration |
+| `experiments/*/data.json` | Experiment configurations |
 
 ## Development Guidelines
 

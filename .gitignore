@@ -122,4 +122,7 @@ dmypy.json
 # Project specific
 data/spkmc/**/*.json
 !data/spkmc/**/example_*.json
-!results/**
+
+# Simulation results
+results/
+experiments/*/results/
