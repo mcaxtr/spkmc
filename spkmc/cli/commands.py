@@ -203,11 +203,25 @@ def _execute_single_scenario(
                 existing_result = json.load(f)
             existing_metadata = existing_result.get("metadata", {})
 
+            # Check ALL parameters that affect simulation results
+            existing_time = existing_result.get("time", [])
+            existing_steps = len(existing_time) if existing_time else 0
+            existing_t_max = max(existing_time) if existing_time else 0
+
             params_match = (
                 existing_metadata.get("network_type", "").lower() == network_type.lower() and
                 existing_metadata.get("distribution", "").lower() == dist_type.lower() and
                 existing_metadata.get("N") == nodes and
-                abs(existing_metadata.get("initial_perc", 0) - initial_perc) < 1e-6
+                existing_metadata.get("samples") == samples and
+                existing_metadata.get("num_runs", 1) == num_runs and
+                existing_metadata.get("k_avg", DEFAULT_K_AVG) == k_avg and
+                existing_steps == steps and
+                abs(existing_t_max - t_max) < 1e-6 and
+                abs(existing_metadata.get("initial_perc", 0) - initial_perc) < 1e-6 and
+                abs(existing_metadata.get("shape", DEFAULT_SHAPE) - shape) < 1e-6 and
+                abs(existing_metadata.get("scale", DEFAULT_SCALE) - scale) < 1e-6 and
+                abs(existing_metadata.get("mu", DEFAULT_MU) - mu) < 1e-6 and
+                abs(existing_metadata.get("lambda", DEFAULT_LAMBDA) - lambda_val) < 1e-6
             )
 
             if params_match:
