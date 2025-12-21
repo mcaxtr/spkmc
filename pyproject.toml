@@ -37,6 +37,7 @@ dependencies = [
     "psutil>=5.8.0",
     "pytest>=6.0.0",
     "pytest-cov>=2.12.1",
+    "openai>=1.0.0",
 ]
 
 [project.optional-dependencies]

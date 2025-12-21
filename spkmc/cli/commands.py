@@ -586,6 +586,18 @@ def run_experiment_scenarios(
         except Exception as e:
             log_error(f"Erro ao gerar gráfico comparativo: {e}")
 
+    # Generate AI analysis if available
+    if experiment.description and all_results:
+        from spkmc.analysis import try_generate_analysis
+        analysis_path = try_generate_analysis(
+            experiment_name=experiment.name,
+            experiment_description=experiment.description,
+            results=all_results,
+            results_dir=results_dir
+        )
+        if analysis_path:
+            log_success(f"Análise AI gerada em: {analysis_path}")
+
     # Show execution summary
     log_success(f"Concluído em {execution_time:.1f}s")
 
@@ -1621,6 +1633,44 @@ def batch(simple, scenarios_file, run_all, override, experiments_dir, output_dir
             console.print(f"  {format_param('Total de cenários processados', total_scenarios_processed)}")
             console.print(f"  {format_param('Tempo total de execução', f'{total_execution_time:.2f} segundos')}")
             log_success(f"Todos os {experiments_completed} experimentos concluídos.")
+
+            # Generate AI collection summary for --all mode
+            from spkmc.analysis import AIAnalyzer, extract_experiment_metrics
+
+            if AIAnalyzer.is_available():
+                all_exp_metrics = []
+                for exp in experiments_to_run:
+                    if exp.has_results and exp.description:
+                        # Load results and extract metrics
+                        results = []
+                        for json_file in exp.results_dir.glob("*.json"):
+                            if not json_file.name.startswith("comparison"):
+                                try:
+                                    with open(json_file) as f:
+                                        results.append(json.load(f))
+                                except Exception:
+                                    continue
+
+                        if results:
+                            metrics = extract_experiment_metrics(
+                                exp.name, exp.description, results
+                            )
+                            all_exp_metrics.append(metrics)
+
+                # Generate and display collection summary
+                if all_exp_metrics:
+                    try:
+                        analyzer = AIAnalyzer()
+                        summary = analyzer.generate_collection_summary(all_exp_metrics)
+
+                        if summary:
+                            console.print()
+                            console.print(format_title("AI Summary - All Experiments"))
+                            print_markdown(summary)
+                            console.print()
+                    except Exception:
+                        # AI analysis is optional - fail silently
+                        pass
 
         return
 
