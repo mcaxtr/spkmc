@@ -149,7 +149,8 @@ def _execute_single_scenario(
     no_plot: bool,
     save_plot: bool,
     use_gpu: bool = False,
-    force_rerun: bool = False
+    force_rerun: bool = False,
+    progress_callback: Optional[callable] = None
 ) -> Tuple[Optional[Dict[str, Any]], str, str]:
     """
     Execute a single scenario and return the result.
@@ -167,6 +168,7 @@ def _execute_single_scenario(
         save_plot: Save plots to files
         use_gpu: Use GPU acceleration if available
         force_rerun: Force re-execution even if cached results exist
+        progress_callback: Optional callback called per sample (called with 1 to advance by 1)
 
     Returns:
         Tuple of (result_dict, output_file_path, scenario_label)
@@ -225,6 +227,14 @@ def _execute_single_scenario(
             )
 
             if params_match:
+                # Advance progress bar for cached result
+                if progress_callback is not None:
+                    # Calculate expected samples for this scenario
+                    if network_type == "cg":
+                        cached_samples = samples
+                    else:
+                        cached_samples = num_runs * samples
+                    progress_callback(cached_samples)
                 return (existing_result, output_file, scenario_label)
         except Exception:
             pass
@@ -262,8 +272,8 @@ def _execute_single_scenario(
     # Disable inner progress bars during batch execution
     simulation_params["show_progress"] = False
 
-    # Execute simulation
-    result = simulator.run_simulation(network_type, time_steps, **simulation_params)
+    # Execute simulation with progress callback for per-sample updates
+    result = simulator.run_simulation(network_type, time_steps, progress_callback=progress_callback, **simulation_params)
 
     # Extract results
     S = result["S_val"]
@@ -443,14 +453,31 @@ def run_experiment_scenarios(
     start_time = time.time()
     num_scenarios = len(experiment.scenarios)
 
+    # Calculate total work units (samples) for granular progress
+    total_samples = 0
+    for scenario in experiment.scenarios:
+        num_runs = scenario.get("num_runs", DEFAULT_NUM_RUNS)
+        samples = scenario.get("samples", DEFAULT_SAMPLES)
+        network_type = scenario.get("network_type", "er")
+        # CG doesn't have num_runs, it runs samples directly
+        if network_type == "cg":
+            total_samples += samples
+        else:
+            total_samples += num_runs * samples
+
     # Determine execution mode
     # NOTE: Parallel scenario execution is disabled because Numba's @njit(parallel=True)
     # conflicts with ProcessPoolExecutor on Linux. Numba handles inner-loop parallelism.
     use_parallel = False  # Disabled: strategy.scenario_workers > 1 and num_scenarios > 1
-    parallel_label = f"Executando {num_scenarios} cenários"
+    parallel_label = f"Executando {num_scenarios} cenários ({total_samples} amostras)"
 
-    with create_progress_bar(parallel_label, num_scenarios, verbose) as progress:
-        task = progress.add_task("Processando cenários...", total=num_scenarios)
+    with create_progress_bar(parallel_label, total_samples, verbose) as progress:
+        task = progress.add_task("Processando amostras...", total=total_samples)
+
+        # Create a callback function to update the progress bar per sample
+        def sample_progress_callback(advance: int) -> None:
+            """Callback to update progress bar per sample completion."""
+            progress.update(task, advance=advance)
 
         if use_parallel:
             # Parallel execution using ProcessPoolExecutor with spawn context
@@ -525,7 +552,8 @@ def run_experiment_scenarios(
                         no_plot,
                         save_plot,
                         strategy.use_gpu,
-                        force_rerun
+                        force_rerun,
+                        progress_callback=sample_progress_callback
                     )
 
                     if result_tuple is not None:
@@ -545,8 +573,6 @@ def run_experiment_scenarios(
                             console.print(f"[dim]{line.strip()}[/dim]")
                     if os.environ.get('SPKMC_DEBUG', '0') == '1':
                         console.print(f"[dim]{tb}[/dim]")
-
-                progress.update(task, advance=1)
 
     # Calculate execution time
     execution_time = time.time() - start_time

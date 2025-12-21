@@ -12,9 +12,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from scipy.sparse.csgraph import dijkstra
 from scipy.sparse import csr_matrix
 import os
-from typing import Dict, List, Tuple, Union, Optional, Any
+from typing import Dict, List, Tuple, Union, Optional, Any, Callable
 
 from spkmc.core.distributions import Distribution
+
+# Type alias for progress callback: called with (completed_units, total_units)
+ProgressCallback = Optional[Callable[[int, int], None]]
 from spkmc.core.networks import NetworkFactory
 from spkmc.io.results import ResultManager
 from spkmc.utils.numba_utils import calculate
@@ -145,30 +148,32 @@ class SPKMC:
         steps = time_steps.shape[0]
         return calculate(N, time_to_infect, recovery_times, time_steps, steps)
     
-    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray, 
-                                samples: int, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray,
+                                samples: int, show_progress: bool = True,
+                                progress_callback: ProgressCallback = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa múltiplas simulações SPKMC e retorna a média.
-        
+
         Args:
             G: Grafo da rede
             sources: Nós de origem
             time_steps: Array com os passos de tempo
             samples: Número de amostras
             show_progress: Se True, mostra barra de progresso
-            
+            progress_callback: Optional callback called after each sample
+
         Returns:
             Tupla com (S_mean, I_mean, R_mean) contendo a média da proporção de indivíduos em cada estado
         """
         steps = time_steps.shape[0]
-        
+
         S_values = np.zeros((samples, steps))
         I_values = np.zeros((samples, steps))
         R_values = np.zeros((samples, steps))
-        
+
         edges = np.array(G.edges())
         N = G.number_of_nodes()
-        
+
         # Executa as simulações
         with _create_progress("Amostras", samples, show_progress) as progress:
             task = progress.add_task("Amostras", total=samples)
@@ -178,17 +183,21 @@ class SPKMC:
                 I_values[sample, :] = I
                 R_values[sample, :] = R
                 progress.update(task, advance=1)
-        
+                # Call external progress callback if provided
+                if progress_callback is not None:
+                    progress_callback(1)
+
         # Calcula as médias
         S_mean = np.mean(S_values, axis=0)
         I_mean = np.mean(I_values, axis=0)
         R_mean = np.mean(R_values, axis=0)
-        
+
         return S_mean, I_mean, R_mean
     
     def simulate_erdos_renyi(self, num_runs: int, time_steps: np.ndarray, N: int = 3000,
                             k_avg: float = 10, samples: int = 100, initial_perc: float = 0.01,
-                            load_if_exists: bool = True, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
+                            load_if_exists: bool = True, show_progress: bool = True,
+                            progress_callback: ProgressCallback = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
                                                                 np.ndarray, np.ndarray, np.ndarray]:
         """
         Simula a propagação em múltiplas redes Erdos-Renyi.
@@ -202,12 +211,13 @@ class SPKMC:
             initial_perc: Porcentagem inicial de infectados
             load_if_exists: Se True, carrega resultados existentes
             show_progress: Se True, mostra barra de progresso
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
         S_list, I_list, R_list = [], [], []
-        
+
         # Verifica se já existem resultados salvos
         if load_if_exists:
             result_path = ResultManager.get_result_path("ER", self.distribution, N, samples, k_avg=k_avg)
@@ -215,16 +225,16 @@ class SPKMC:
                 try:
                     result = ResultManager.load_result(result_path)
                     return (
-                        np.array(result.get('S_val', [])), 
-                        np.array(result.get('I_val', [])), 
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
                         np.array(result.get('R_val', [])),
-                        np.array(result.get('S_err', [])), 
-                        np.array(result.get('I_err', [])), 
+                        np.array(result.get('S_err', [])),
+                        np.array(result.get('I_err', [])),
                         np.array(result.get('R_err', []))
                     )
                 except Exception as e:
                     print(f"Erro ao carregar resultados existentes: {e}")
-        
+
         # Executa as simulações
         with _create_progress("Execuções", num_runs, show_progress) as progress:
             task = progress.add_task("Execuções (ER)", total=num_runs)
@@ -239,7 +249,8 @@ class SPKMC:
                 sources = np.random.randint(0, N, init_infect)
 
                 # Executa a simulação
-                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples,
+                                                        show_progress=False, progress_callback=progress_callback)
 
                 S_list.append(S)
                 I_list.append(I)
@@ -284,7 +295,8 @@ class SPKMC:
     def simulate_complex_network(self, num_runs: int, exponent: float, time_steps: np.ndarray,
                                N: int = 3000, k_avg: float = 10, samples: int = 100,
                                initial_perc: float = 0.01, load_if_exists: bool = True,
-                               show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray,
+                               show_progress: bool = True,
+                               progress_callback: ProgressCallback = None) -> Tuple[np.ndarray, np.ndarray,
                                                                     np.ndarray, np.ndarray,
                                                                     np.ndarray, np.ndarray]:
         """
@@ -300,12 +312,13 @@ class SPKMC:
             initial_perc: Porcentagem inicial de infectados
             load_if_exists: Se True, carrega resultados existentes
             show_progress: Se True, mostra barra de progresso
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
         S_list, I_list, R_list = [], [], []
-        
+
         # Verifica se já existem resultados salvos
         if load_if_exists:
             result_path = ResultManager.get_result_path("CN", self.distribution, N, samples, exponent=exponent, k_avg=k_avg)
@@ -313,16 +326,16 @@ class SPKMC:
                 try:
                     result = ResultManager.load_result(result_path)
                     return (
-                        np.array(result.get('S_val', [])), 
-                        np.array(result.get('I_val', [])), 
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
                         np.array(result.get('R_val', [])),
-                        np.array(result.get('S_err', [])), 
-                        np.array(result.get('I_err', [])), 
+                        np.array(result.get('S_err', [])),
+                        np.array(result.get('I_err', [])),
                         np.array(result.get('R_err', []))
                     )
                 except Exception as e:
                     print(f"Erro ao carregar resultados existentes: {e}")
-        
+
         # Executa as simulações
         with _create_progress("Execuções", num_runs, show_progress) as progress:
             task = progress.add_task(f"Execuções (CN γ={exponent})", total=num_runs)
@@ -337,7 +350,8 @@ class SPKMC:
                 sources = np.random.randint(0, N, init_infect)
 
                 # Executa a simulação
-                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples,
+                                                        show_progress=False, progress_callback=progress_callback)
 
                 S_list.append(S)
                 I_list.append(I)
@@ -380,18 +394,20 @@ class SPKMC:
 
         return S_avg, I_avg, R_avg, S_err, I_err, R_err
 
-    def simulate_complete_graph(self, time_steps: np.ndarray, N: int = 3000, samples: int = 100, 
-                              initial_perc: float = 0.01, overwrite: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def simulate_complete_graph(self, time_steps: np.ndarray, N: int = 3000, samples: int = 100,
+                              initial_perc: float = 0.01, overwrite: bool = False,
+                              progress_callback: ProgressCallback = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Simula a propagação em um grafo completo.
-        
+
         Args:
             time_steps: Array com os passos de tempo
             N: Número de nós
             samples: Número de amostras
             initial_perc: Porcentagem inicial de infectados
             overwrite: Se True, sobrescreve resultados existentes
-            
+            progress_callback: Optional callback for progress updates
+
         Returns:
             Tupla com (S, I, R) contendo a proporção de indivíduos em cada estado
         """
@@ -402,24 +418,25 @@ class SPKMC:
                 try:
                     result = ResultManager.load_result(result_path)
                     return (
-                        np.array(result.get('S_val', [])), 
-                        np.array(result.get('I_val', [])), 
+                        np.array(result.get('S_val', [])),
+                        np.array(result.get('I_val', [])),
                         np.array(result.get('R_val', []))
                     )
                 except Exception as e:
                     print(f"Erro ao carregar resultados existentes: {e}")
-        
+
         # Cria a rede
         G = NetworkFactory.create_complete_graph(N)
-        
+
         # Configura os nós inicialmente infectados
         init_infect = int(N * initial_perc)
         if init_infect < 1:
             raise ValueError(f"Número de nós inicialmente infectados menor que 1: N * initial_perc = {init_infect}")
         sources = np.random.randint(0, N, init_infect)
-        
+
         # Executa a simulação
-        S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=True)
+        S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples,
+                                                show_progress=True, progress_callback=progress_callback)
         
         # Salva os resultados
         result = {
@@ -442,18 +459,20 @@ class SPKMC:
         
         return S, I, R
     
-    def run_simulation(self, network_type: str, time_steps: np.ndarray, **kwargs) -> Dict[str, Any]:
+    def run_simulation(self, network_type: str, time_steps: np.ndarray,
+                       progress_callback: ProgressCallback = None, **kwargs) -> Dict[str, Any]:
         """
         Executa uma simulação com base no tipo de rede e parâmetros fornecidos.
-        
+
         Args:
             network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             time_steps: Array com os passos de tempo
+            progress_callback: Optional callback for granular progress updates
             **kwargs: Parâmetros adicionais para a simulação
-        
+
         Returns:
             Dicionário com os resultados da simulação
-        
+
         Raises:
             ValueError: Se o tipo de rede for desconhecido
         """
@@ -478,7 +497,8 @@ class SPKMC:
                 samples=samples,
                 initial_perc=initial_perc,
                 load_if_exists=load_if_exists,
-                show_progress=show_progress
+                show_progress=show_progress,
+                progress_callback=progress_callback
             )
             
             return {
@@ -506,7 +526,8 @@ class SPKMC:
                 samples=samples,
                 initial_perc=initial_perc,
                 load_if_exists=load_if_exists,
-                show_progress=show_progress
+                show_progress=show_progress,
+                progress_callback=progress_callback
             )
             
             return {
@@ -526,7 +547,8 @@ class SPKMC:
                 N=N,
                 samples=samples,
                 initial_perc=initial_perc,
-                overwrite=not load_if_exists
+                overwrite=not load_if_exists,
+                progress_callback=progress_callback
             )
             
             return {
@@ -549,7 +571,8 @@ class SPKMC:
                 samples=samples,
                 initial_perc=initial_perc,
                 load_if_exists=load_if_exists,
-                show_progress=show_progress
+                show_progress=show_progress,
+                progress_callback=progress_callback
             )
             
             return {
@@ -568,7 +591,8 @@ class SPKMC:
             
     def simulate_random_regular_network(self, num_runs: int, time_steps: np.ndarray, N: int = 3000,
                                       k_avg: int = 10, samples: int = 100, initial_perc: float = 0.01,
-                                      load_if_exists: bool = True, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
+                                      load_if_exists: bool = True, show_progress: bool = True,
+                                      progress_callback: ProgressCallback = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray,
                                                                           np.ndarray, np.ndarray, np.ndarray]:
         """
         Simula a propagação em múltiplas redes regulares aleatórias.
@@ -582,6 +606,7 @@ class SPKMC:
             initial_perc: Porcentagem inicial de infectados
             load_if_exists: Se True, carrega resultados existentes
             show_progress: Se True, mostra barra de progresso
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
@@ -619,7 +644,8 @@ class SPKMC:
                 sources = np.random.randint(0, N, init_infect)
 
                 # Executa a simulação
-                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples, show_progress=False)
+                S, I, R = self.run_multiple_simulations(G, sources, time_steps, samples,
+                                                        show_progress=False, progress_callback=progress_callback)
 
                 S_list.append(S)
                 I_list.append(I)
@@ -630,11 +656,11 @@ class SPKMC:
         S_avg = np.mean(np.array(S_list), axis=0)
         I_avg = np.mean(np.array(I_list), axis=0)
         R_avg = np.mean(np.array(R_list), axis=0)
-        
+
         S_err = np.std(np.array(S_list) / np.sqrt(N), axis=0)
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
-        
+
         # Salva os resultados
         result = {
             "S_val": list(S_avg),
@@ -655,7 +681,7 @@ class SPKMC:
                 "initial_perc": initial_perc
             }
         }
-        
+
         result_path = ResultManager.get_result_path("RRN", self.distribution, N, samples, k_avg=k_avg)
         ResultManager.save_result(result_path, result)
 
