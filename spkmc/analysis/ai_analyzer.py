@@ -186,7 +186,8 @@ def try_generate_analysis(
     experiment_name: str,
     experiment_description: Optional[str],
     results: List[Dict[str, Any]],
-    results_dir: Path
+    results_dir: Path,
+    verbose: bool = False
 ) -> Optional[str]:
     """
     Convenience function to attempt AI analysis generation.
@@ -199,38 +200,53 @@ def try_generate_analysis(
         experiment_description: The hypothesis (may be None)
         results: List of result dictionaries
         results_dir: Path to results directory
+        verbose: If True, print debug information
 
     Returns:
         Path to analysis file if generated, None otherwise
     """
+    import sys
+
+    def _debug(msg: str) -> None:
+        if verbose or os.environ.get('SPKMC_DEBUG', '0') == '1':
+            print(f"[AI DEBUG] {msg}", file=sys.stderr)
+
     # Skip if AI not available
     if not AIAnalyzer.is_available():
+        _debug("Skipping: OPENAI_API_KEY not set")
         return None
 
     # Skip if no description (hypothesis)
     if not experiment_description:
+        _debug("Skipping: No experiment description")
         return None
 
     # Skip if analysis.md already exists
     analysis_path = results_dir / "analysis.md"
     if analysis_path.exists():
+        _debug(f"Skipping: analysis.md already exists at {analysis_path}")
         return None
 
     # Skip if no results
     if not results:
+        _debug("Skipping: No results provided")
         return None
+
+    _debug(f"Generating analysis for '{experiment_name}' with {len(results)} results")
 
     try:
         analyzer = AIAnalyzer()
-        return analyzer.analyze_experiment(
+        result = analyzer.analyze_experiment(
             experiment_name,
             experiment_description,
             results,
             results_dir
         )
-    except ImportError:
-        # openai package not installed
+        _debug(f"Analysis generated successfully: {result}")
+        return result
+    except ImportError as e:
+        _debug(f"Import error: {e}")
         return None
-    except Exception:
-        # Any other error - fail silently
+    except Exception as e:
+        _debug(f"Error generating analysis: {type(e).__name__}: {e}")
         return None

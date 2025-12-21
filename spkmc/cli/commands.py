@@ -593,7 +593,8 @@ def run_experiment_scenarios(
             experiment_name=experiment.name,
             experiment_description=experiment.description,
             results=all_results,
-            results_dir=results_dir
+            results_dir=results_dir,
+            verbose=verbose
         )
         if analysis_path:
             log_success(f"Análise AI gerada em: {analysis_path}")
