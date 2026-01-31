@@ -26,7 +26,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 2.0,
       "shape": 2.0,
@@ -42,7 +42,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 2.25,
       "shape": 2.0,
@@ -58,7 +58,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 2.5,
       "shape": 2.0,
@@ -74,7 +74,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 2.75,
       "shape": 2.0,
@@ -90,7 +90,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 3.0,
       "shape": 2.0,
@@ -106,7 +106,7 @@
     {
       "distribution": "gamma",
       "network_type": "cn",
-      "network_size": 5000,
+      "network_size": 10000,
       "k_avg": 10,
       "exponent": 3.5,
       "shape": 2.0,
