@@ -27,7 +27,7 @@ def test_gamma_distribution_creation():
     assert dist.scale == scale
     assert dist.lmbd == lmbd
     assert dist.get_distribution_name() == "gamma"
-    assert dist.get_params_string() == "2.0"
+    assert dist.get_params_string() == "sh2_sc1_l1"
 
 
 def test_exponential_distribution_creation():
@@ -40,7 +40,7 @@ def test_exponential_distribution_creation():
     assert dist.mu == mu
     assert dist.lmbd == lmbd
     assert dist.get_distribution_name() == "exponential"
-    assert dist.get_params_string() == ""
+    assert dist.get_params_string() == "mu1_l1"
 
 
 def test_create_distribution_gamma():
