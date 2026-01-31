@@ -80,7 +80,7 @@ except ImportError:
 # Importações condicionais para rich
 try:
     from rich.console import Console
-    from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
+    from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TimeElapsedColumn, MofNCompleteColumn
     from rich.table import Table
     from rich.markdown import Markdown
     from rich.panel import Panel
@@ -290,22 +290,30 @@ def create_progress_bar(description: str, total: int, verbose: bool = False) -> 
         return DummyProgress()
         
     if verbose:
+        # Verbose mode: show all details including items completed and elapsed time
         return Progress(
             TextColumn("[bold blue]{task.description}"),
             BarColumn(bar_width=None),
             "[progress.percentage]{task.percentage:>3.0f}%",
             "•",
-            TaskProgressColumn(),
+            MofNCompleteColumn(),
             "•",
+            TimeElapsedColumn(),
+            "<",
             TimeRemainingColumn(),
             console=console,
             expand=True
         )
     else:
+        # Default mode: show percentage, elapsed time, and ETA
         return Progress(
             TextColumn("[bold blue]{task.description}"),
             BarColumn(bar_width=None),
             "[progress.percentage]{task.percentage:>3.0f}%",
+            "•",
+            TimeElapsedColumn(),
+            "<",
+            TimeRemainingColumn(),
             console=console,
             expand=True
         )

@@ -126,3 +126,5 @@ data/spkmc/**/*.json
 # Simulation results
 results/
 experiments/*/results/
+
+**/.DS_Store

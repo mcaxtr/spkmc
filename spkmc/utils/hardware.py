@@ -41,10 +41,12 @@ class ParallelizationStrategy:
         """
         Automatically configure parallelization based on hardware and workload.
 
-        Strategy to avoid nested parallelism conflicts:
-        - If many scenarios: parallelize at scenario level, sequential simulations
-        - If few scenarios: sequential scenarios, parallel simulations
-        - Numba threads always reserved for inner loops
+        Strategy for two-level parallelism:
+        - Level 1: ProcessPoolExecutor for scenarios (using spawn context)
+        - Level 2: Numba parallel prange for inner loops (CPU) or GPU kernels
+
+        For CPU mode: balance scenario_workers * numba_threads <= physical_cores
+        For GPU mode: limit scenario_workers to avoid GPU memory contention
 
         Args:
             hardware: Detected hardware information
@@ -55,22 +57,37 @@ class ParallelizationStrategy:
         """
         available_cores = hardware.cpu_count_physical
 
-        # Reserve cores for Numba inner loops (25% of cores, min 2, max 8)
-        numba_threads = max(2, min(available_cores // 4, 8))
-        remaining_cores = max(1, available_cores - numba_threads)
-
-        if num_scenarios >= 4 and num_scenarios >= remaining_cores:
-            # Many scenarios: parallelize at scenario level
-            scenario_workers = min(num_scenarios, remaining_cores)
+        if hardware.gpu_available:
+            # GPU mode: limit parallel workers to avoid GPU memory contention
+            # Each process loads cupy/cudf/cugraph (~200-500MB GPU memory each)
+            # GPU driver handles time-slicing, but too many processes cause thrashing
+            max_gpu_workers = 4  # Conservative limit for GPU memory
+            if num_scenarios >= 2:
+                scenario_workers = min(num_scenarios, max_gpu_workers)
+            else:
+                scenario_workers = 1
+            # In GPU mode, most computation happens on GPU, so CPU threads are less critical
+            # Give more threads per worker since they won't be the bottleneck
+            numba_threads = max(4, min(available_cores // 2, 8))
+            simulation_workers = 1
+        elif num_scenarios >= 4:
+            # CPU mode, many scenarios: parallelize at scenario level
+            # Limit scenario workers and reduce Numba threads per worker
+            scenario_workers = min(num_scenarios, max(2, available_cores // 4))
+            # Each worker gets fewer Numba threads to avoid oversubscription
+            numba_threads = max(2, min(available_cores // scenario_workers, 8))
             simulation_workers = 1
         elif num_scenarios > 1:
-            # Few scenarios: balance between levels
-            scenario_workers = min(num_scenarios, max(1, remaining_cores // 2))
-            simulation_workers = max(1, remaining_cores // (scenario_workers * 2))
+            # CPU mode, few scenarios (2-3): balance between levels
+            scenario_workers = min(num_scenarios, 2)
+            numba_threads = max(2, min(available_cores // scenario_workers, 8))
+            simulation_workers = 1
         else:
-            # Single scenario: all parallelism at simulation level
+            # Single scenario: all parallelism at Numba level
             scenario_workers = 1
-            simulation_workers = remaining_cores
+            # Use 75% of physical cores for Numba, max 16
+            numba_threads = max(2, min((available_cores * 3) // 4, 16))
+            simulation_workers = 1
 
         return cls(
             scenario_workers=scenario_workers,
@@ -157,8 +174,10 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
     gpu_info['libs_available'] = libs_available
     gpu_info['libs_missing'] = libs_missing
 
-    # GPU is available if cupy works (cudf/cugraph are optional enhancements)
-    return True, gpu_info
+    # GPU acceleration requires ALL libraries (cupy, cudf, cugraph) for SSSP calculation
+    # If any are missing, GPU mode won't work - only report as available if all present
+    gpu_fully_available = len(libs_missing) == 0
+    return gpu_fully_available, gpu_info
 
 
 def get_hardware_info() -> HardwareInfo:

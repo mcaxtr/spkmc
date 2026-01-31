@@ -14,6 +14,21 @@ import numpy as np
 from spkmc.core.distributions import Distribution
 
 
+class NumpyJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, (np.int32, np.int64)):
+            return int(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
+
+
 class ResultManager:
     """Gerencia o salvamento e carregamento de resultados de simulações."""
     
@@ -88,7 +103,7 @@ class ResultManager:
         
         try:
             with open(file_path, 'w') as f:
-                json.dump(result, f, indent=2)
+                json.dump(result, f, indent=2, cls=NumpyJSONEncoder)
         except Exception as e:
             raise IOError(f"Erro ao salvar resultados: {e}")
     

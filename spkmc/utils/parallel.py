@@ -45,7 +45,11 @@ def _get_mp_context():
         return mp.get_context()
 
 
-def _init_worker(numba_threads: int) -> None:
+# Global reference to progress queue (set by _init_worker in child processes)
+_worker_progress_queue = None
+
+
+def _init_worker(numba_threads: int, progress_queue=None) -> None:
     """
     Initialize worker process with proper Numba configuration.
 
@@ -54,11 +58,46 @@ def _init_worker(numba_threads: int) -> None:
 
     Args:
         numba_threads: Number of threads for Numba to use
+        progress_queue: Optional Queue for progress updates (inherited from parent)
     """
+    global _worker_progress_queue
     # Set environment variable BEFORE any Numba import
     # Numba reads NUMBA_NUM_THREADS when first imported
     os.environ['NUMBA_NUM_THREADS'] = str(numba_threads)
     os.environ['OMP_NUM_THREADS'] = str(numba_threads)
+    # Store the progress queue for use by worker functions
+    _worker_progress_queue = progress_queue
+
+
+def worker_progress_callback(advance: int) -> None:
+    """
+    Send progress update from worker process to main process.
+
+    This function is safe to call from any worker - it will do nothing
+    if no progress queue was configured.
+
+    Args:
+        advance: Number of units to advance the progress bar
+    """
+    global _worker_progress_queue
+    if _worker_progress_queue is not None:
+        try:
+            _worker_progress_queue.put(advance)
+        except Exception:
+            pass  # Ignore queue errors
+
+
+def get_worker_progress_callback():
+    """
+    Get a progress callback function for use in worker processes.
+
+    Returns:
+        A callback function if progress queue is available, None otherwise
+    """
+    global _worker_progress_queue
+    if _worker_progress_queue is not None:
+        return worker_progress_callback
+    return None
 
 
 @dataclass

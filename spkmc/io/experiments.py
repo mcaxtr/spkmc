@@ -61,6 +61,7 @@ class Experiment:
     description: Optional[str] = None
     plot_config: PlotConfig = field(default_factory=PlotConfig)
     scenarios: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def results_dir(self) -> Path:
@@ -170,12 +171,39 @@ class ExperimentManager:
         # Parse plot config
         plot_config = PlotConfig.from_dict(data.get("plot", {}))
 
+        # Extract global parameters (used as defaults for scenarios)
+        global_params = data.get("parameters", {})
+
+        # Normalize parameter key names (data.json format -> internal format)
+        key_mapping = {
+            "time_max": "t_max",
+            "time_points": "steps",
+        }
+
+        def normalize_params(params: Dict[str, Any]) -> Dict[str, Any]:
+            """Normalize parameter keys to internal format."""
+            normalized = {}
+            for key, value in params.items():
+                normalized_key = key_mapping.get(key, key)
+                normalized[normalized_key] = value
+            return normalized
+
+        normalized_global = normalize_params(global_params)
+
+        # Merge global parameters into each scenario (scenario values override global)
+        merged_scenarios = []
+        for scenario in scenarios:
+            normalized_scenario = normalize_params(scenario)
+            merged = {**normalized_global, **normalized_scenario}
+            merged_scenarios.append(merged)
+
         return Experiment(
             name=data["name"],
             path=exp_path,
             description=data.get("description"),
             plot_config=plot_config,
-            scenarios=scenarios
+            scenarios=merged_scenarios,
+            parameters=global_params
         )
 
     def get_experiment_by_index(self, index: int) -> Optional[Experiment]:

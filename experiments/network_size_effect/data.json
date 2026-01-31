@@ -112,6 +112,36 @@
       "num_runs": 10,
       "initial_perc": 0.01,
       "label": "N_25000"
+    },
+    {
+      "distribution": "gamma",
+      "network_type": "er",
+      "network_size": 50000,
+      "k_avg": 10,
+      "shape": 2.0,
+      "scale": 0.5,
+      "lambda": 0.5,
+      "t_max": 20,
+      "steps": 500,
+      "samples": 100,
+      "num_runs": 10,
+      "initial_perc": 0.01,
+      "label": "N_50000"
+    },
+    {
+      "distribution": "gamma",
+      "network_type": "er",
+      "network_size": 100000,
+      "k_avg": 10,
+      "shape": 2.0,
+      "scale": 0.5,
+      "lambda": 0.5,
+      "t_max": 20,
+      "steps": 500,
+      "samples": 100,
+      "num_runs": 10,
+      "initial_perc": 0.01,
+      "label": "N_100000"
     }
   ]
 }
