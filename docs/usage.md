@@ -1,327 +1,327 @@
-# Guia de Uso do SPKMC
+# SPKMC Usage Guide
 
-Este documento fornece informações detalhadas sobre como usar o pacote SPKMC para simulações de propagação de epidemias em redes complexas.
+This document provides detailed information on how to use the SPKMC package for epidemic spread simulations on complex networks.
 
-## Instalação
+## Installation
 
-### Requisitos
+### Requirements
 
-- Python 3.8 ou superior
-- Dependências listadas em `requirements.txt`:
-  - NumPy: Operações numéricas eficientes
-  - SciPy: Algoritmos científicos e matemáticos
-  - NetworkX: Criação e manipulação de redes complexas
-  - Matplotlib: Visualização de resultados
-  - Numba: Aceleração de código Python
-  - tqdm: Barras de progresso
-  - Click: Interface de linha de comando
-  - Pandas: Manipulação e exportação de dados
-  - Colorama: Coloração da saída no terminal
-  - Rich: Formatação avançada da saída no terminal
-  - openpyxl: Exportação para Excel
-  - joblib: Paralelização de tarefas
+- Python 3.8 or newer
+- Dependencies listed in `requirements.txt`:
+  - NumPy: Efficient numerical operations
+  - SciPy: Scientific and mathematical algorithms
+  - NetworkX: Creation and manipulation of complex networks
+  - Matplotlib: Result visualization
+  - Numba: Python code acceleration
+  - tqdm: Progress bars
+  - Click: Command-line interface
+  - Pandas: Data manipulation and export
+  - Colorama: Colored terminal output
+  - Rich: Advanced terminal formatting
+  - openpyxl: Excel export
+  - joblib: Task parallelization
 
-### Instalação via pip
+### Install via pip
 
 ```bash
-# Instalar dependências
+# Install dependencies
 pip install -r requirements.txt
 
-# Instalar o pacote em modo de desenvolvimento
+# Install the package in development mode
 pip install -e .
 ```
 
-### Dependências Opcionais
+### Optional Dependencies
 
-Algumas funcionalidades do SPKMC dependem de pacotes específicos:
+Some SPKMC features depend on specific packages:
 
-- **Exportação de dados**: Requer `pandas` e `openpyxl` para exportação para CSV e Excel
-- **Interface de linha de comando avançada**: Requer `colorama` e `rich` para formatação e coloração da saída
-- **Paralelização**: Requer `joblib` para execução paralela de simulações
+- **Data export**: Requires `pandas` and `openpyxl` to export to CSV and Excel
+- **Advanced CLI**: Requires `colorama` and `rich` for formatted/colorized output
+- **Parallelization**: Requires `joblib` for parallel simulation runs
 
-Se alguma dessas dependências não estiver disponível, o SPKMC continuará funcionando, mas com funcionalidades reduzidas. Mensagens de aviso serão exibidas quando uma funcionalidade não estiver disponível devido à falta de uma dependência.
+If any of these dependencies are missing, SPKMC will still run with reduced functionality. Warning messages will be shown when a feature is unavailable due to a missing dependency.
 
-### Solução de Problemas de Dependências
+### Dependency Troubleshooting
 
-Se você encontrar erros relacionados a dependências ausentes, como `ModuleNotFoundError: No module named 'pandas'`, certifique-se de que todas as dependências estão instaladas:
+If you see errors related to missing dependencies, such as `ModuleNotFoundError: No module named 'pandas'`, ensure all dependencies are installed:
 
 ```bash
-# Verificar se todas as dependências estão instaladas
+# Install all dependencies
 pip install -r requirements.txt
 
-# Ou instalar uma dependência específica
+# Or install a specific dependency
 pip install pandas
 ```
 
-## Interface de Linha de Comando (CLI)
+## Command-Line Interface (CLI)
 
-A CLI do SPKMC fornece uma interface completa para executar simulações, visualizar resultados e obter informações sobre simulações anteriores.
+The SPKMC CLI provides a complete interface to run simulations, visualize results, and retrieve information about previous simulations.
 
-### Opções Globais
+### Global Options
 
-As seguintes opções estão disponíveis para todos os comandos da CLI:
+The following options are available for all CLI commands:
 
-| Opção | Descrição |
-|-------|-----------|
-| `--verbose`, `-v` | Ativar modo verboso para depuração |
-| `--no-color` | Desativar cores na saída |
-| `--simple` | Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro). Pode ser usado de duas formas:
-|           | - Como opção global antes do comando: `spkmc --simple batch ...`
-|           | - Como opção específica após o comando: `spkmc batch ... --simple`
-|           | Ambas as formas têm o mesmo efeito. |
+| Option | Description |
+|--------|-------------|
+| `--verbose`, `-v` | Enable verbose mode for debugging |
+| `--no-color` | Disable colors in output |
+| `--simple` | Generate a simplified CSV result file (time, infected, error). It can be used in two ways:
+|            | - As a global option before the command: `spkmc --simple batch ...`
+|            | - As a command-specific option after the command: `spkmc batch ... --simple`
+|            | Both forms have the same effect. |
 
-### Comandos Disponíveis
+### Available Commands
 
-A CLI do SPKMC possui os seguintes comandos principais:
+The SPKMC CLI provides the following main commands:
 
-- `run`: Executa uma simulação SPKMC
-- `plot`: Visualiza resultados de simulações anteriores
-- `info`: Mostra informações sobre simulações salvas
-- `compare`: Compara resultados de múltiplas simulações
+- `run`: Run an SPKMC simulation
+- `plot`: Visualize results from previous simulations
+- `info`: Show information about saved simulations
+- `compare`: Compare results from multiple simulations
 
-### Comando `run`
+### `run` Command
 
-O comando `run` executa uma simulação SPKMC com os parâmetros especificados.
+The `run` command executes an SPKMC simulation with the specified parameters.
 
-#### Sintaxe
+#### Syntax
 
 ```bash
-python spkmc_cli.py run [OPÇÕES]
+python spkmc_cli.py run [OPTIONS]
 ```
 
-#### Opções
+#### Options
 
-| Opção | Abreviação | Tipo | Padrão | Descrição |
-|-------|------------|------|--------|-----------|
-| `--network-type` | `-n` | string | `er` | Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg), Random Regular Network (rrn) |
-| `--dist-type` | `-d` | string | `gamma` | Tipo de distribuição: Gamma ou Exponential |
-| `--shape` | | float | `2.0` | Parâmetro de forma para distribuição Gamma |
-| `--scale` | | float | `1.0` | Parâmetro de escala para distribuição Gamma |
-| `--mu` | | float | `1.0` | Parâmetro mu para distribuição Exponencial (recuperação) |
-| `--lambda` | | float | `1.0` | Parâmetro lambda para tempos de infecção |
-| `--exponent` | | float | `2.5` | Expoente para redes complexas (CN) |
-| `--nodes` | `-N` | int | `1000` | Número de nós na rede |
-| `--k-avg` | | float | `10` | Grau médio da rede |
-| `--samples` | `-s` | int | `50` | Número de amostras por execução |
-| `--num-runs` | `-r` | int | `2` | Número de execuções (para médias) |
-| `--initial-perc` | `-i` | float | `0.01` | Porcentagem inicial de infectados |
-| `--t-max` | | float | `10.0` | Tempo máximo de simulação |
-| `--steps` | | int | `100` | Número de passos de tempo |
-| `--output` | `-o` | string | | Caminho para salvar os resultados (opcional) |
-| `--no-plot` | | flag | `False` | Não exibir o gráfico dos resultados |
-| `--overwrite` | | flag | `False` | Sobrescrever resultados existentes |
-| `--zip` | | flag | `False` | Criar um arquivo zip com os resultados |
+| Option | Abbrev | Type | Default | Description |
+|--------|--------|------|---------|-------------|
+| `--network-type` | `-n` | string | `er` | Network type: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg), Random Regular Network (rrn) |
+| `--dist-type` | `-d` | string | `gamma` | Distribution type: Gamma or Exponential |
+| `--shape` | | float | `2.0` | Shape parameter for Gamma distribution |
+| `--scale` | | float | `1.0` | Scale parameter for Gamma distribution |
+| `--mu` | | float | `1.0` | Mu parameter for Exponential distribution (recovery) |
+| `--lambda` | | float | `1.0` | Lambda parameter for infection times |
+| `--exponent` | | float | `2.5` | Exponent for complex networks (CN) |
+| `--nodes` | `-N` | int | `1000` | Number of nodes in the network |
+| `--k-avg` | | float | `10` | Average degree of the network |
+| `--samples` | `-s` | int | `50` | Number of samples per run |
+| `--num-runs` | `-r` | int | `2` | Number of runs (for averages) |
+| `--initial-perc` | `-i` | float | `0.01` | Initial percentage of infected |
+| `--t-max` | | float | `10.0` | Maximum simulation time |
+| `--steps` | | int | `100` | Number of time steps |
+| `--output` | `-o` | string | | Path to save results (optional) |
+| `--no-plot` | | flag | `False` | Do not display the results plot |
+| `--overwrite` | | flag | `False` | Overwrite existing results |
+| `--zip` | | flag | `False` | Create a zip file with results |
 
-#### Exemplos
+#### Examples
 
 ```bash
-# Simulação básica com rede Erdos-Renyi e distribuição Gamma
+# Basic simulation with Erdos-Renyi network and Gamma distribution
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
 
-# Simulação com rede complexa e distribuição Exponencial
+# Simulation with complex network and Exponential distribution
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
-# Simulação com grafo completo, salvando resultados
+# Simulation with complete graph, saving results
 python spkmc_cli.py run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -o results/cg_gamma.json
 
-# Simulação com geração de arquivo CSV simplificado (como opção global antes do comando)
+# Simulation with simplified CSV (as a global option before the command)
 python spkmc_cli.py --simple run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma_simple.json
 
-# Simulação com geração de arquivo CSV simplificado (como opção específica após o comando)
+# Simulation with simplified CSV (as an option after the command)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma_simple.json --simple
 
-# Simulação com geração de arquivo zip contendo os resultados
+# Simulation with zip file generation
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma.json --zip
 
-# Simulação com geração de arquivo CSV simplificado e arquivo zip
+# Simulation with simplified CSV and zip file
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o results/er_gamma.json --simple --zip
 
-# Ambas as formas acima têm o mesmo efeito: gerar um arquivo CSV simplificado com tempo, infectados e erro
+# Both forms above generate a simplified CSV with time, infected, and error
 ```
 
-### Comando `plot`
+### `plot` Command
 
-O comando `plot` visualiza os resultados de uma simulação anterior.
+The `plot` command visualizes results from a previous simulation.
 
-#### Sintaxe
+#### Syntax
 
 ```bash
-python spkmc_cli.py plot RESULT_FILE [OPÇÕES]
+python spkmc_cli.py plot RESULT_FILE [OPTIONS]
 ```
 
-#### Argumentos
+#### Arguments
 
-| Argumento | Descrição |
-|-----------|-----------|
-| `RESULT_FILE` | Caminho para o arquivo de resultados |
+| Argument | Description |
+|----------|-------------|
+| `RESULT_FILE` | Path to the results file |
 
-#### Opções
+#### Options
 
-| Opção | Abreviação | Tipo | Padrão | Descrição |
-|-------|------------|------|--------|-----------|
-| `--with-error` | `-e` | flag | `False` | Mostrar barras de erro (se disponíveis) |
-| `--output` | `-o` | string | | Salvar o gráfico em um arquivo (opcional) |
+| Option | Abbrev | Type | Default | Description |
+|--------|--------|------|---------|-------------|
+| `--with-error` | `-e` | flag | `False` | Show error bars (if available) |
+| `--output` | `-o` | string | | Save the plot to a file (optional) |
 
-#### Exemplos
+#### Examples
 
 ```bash
-# Visualizar resultados básicos
+# Visualize basic results
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json
 
-# Visualizar com barras de erro
+# Visualize with error bars
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json --with-error
 
-# Salvar o gráfico em um arquivo
+# Save the plot to a file
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json -o plots/er_gamma.png
 ```
 
-### Comando `info`
+### `info` Command
 
-O comando `info` mostra informações sobre simulações salvas.
+The `info` command shows information about saved simulations.
 
-#### Sintaxe
+#### Syntax
 
 ```bash
-python spkmc_cli.py info [OPÇÕES]
+python spkmc_cli.py info [OPTIONS]
 ```
 
-#### Opções
+#### Options
 
-| Opção | Abreviação | Tipo | Padrão | Descrição |
-|-------|------------|------|--------|-----------|
-| `--result-file` | `-f` | string | | Arquivo de resultados específico (opcional) |
-| `--list` | `-l` | flag | `False` | Listar todos os arquivos de resultados disponíveis |
+| Option | Abbrev | Type | Default | Description |
+|--------|--------|------|---------|-------------|
+| `--result-file` | `-f` | string | | Specific results file (optional) |
+| `--list` | `-l` | flag | `False` | List all available results files |
 
-#### Exemplos
+#### Examples
 
 ```bash
-# Listar todos os arquivos de resultados disponíveis
+# List all available result files
 python spkmc_cli.py info --list
 
-# Mostrar informações sobre um arquivo específico
+# Show information for a specific file
 python spkmc_cli.py info -f data/spkmc/gamma/ER/results_1000_50_2.0.json
 ```
 
-### Comando `compare`
+### `compare` Command
 
-O comando `compare` compara os resultados de múltiplas simulações.
+The `compare` command compares results from multiple simulations.
 
-#### Sintaxe
+#### Syntax
 
 ```bash
-python spkmc_cli.py compare RESULT_FILES... [OPÇÕES]
+python spkmc_cli.py compare RESULT_FILES... [OPTIONS]
 ```
 
-#### Argumentos
+#### Arguments
 
-| Argumento | Descrição |
-|-----------|-----------|
-| `RESULT_FILES` | Caminhos para os arquivos de resultados (pelo menos um) |
+| Argument | Description |
+|----------|-------------|
+| `RESULT_FILES` | Paths to results files (at least one) |
 
-#### Opções
+#### Options
 
-| Opção | Abreviação | Tipo | Padrão | Descrição |
-|-------|------------|------|--------|-----------|
-| `--labels` | `-l` | string (múltiplo) | | Rótulos para cada arquivo (opcional) |
-| `--output` | `-o` | string | | Salvar o gráfico em um arquivo (opcional) |
+| Option | Abbrev | Type | Default | Description |
+|--------|--------|------|---------|-------------|
+| `--labels` | `-l` | string (multiple) | | Labels for each file (optional) |
+| `--output` | `-o` | string | | Save the plot to a file (optional) |
 
-#### Exemplos
+#### Examples
 
 ```bash
-# Comparar dois arquivos de resultados
+# Compare two results files
 python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json
 
-# Comparar com rótulos personalizados
-python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json -l "Gamma" "Exponencial"
+# Compare with custom labels
+python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json -l "Gamma" "Exponential"
 
-# Salvar o gráfico comparativo
+# Save the comparison plot
 python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json -o plots/comparison.png
 ```
 
-## Uso Programático
+## Programmatic Usage
 
-Além da CLI, o SPKMC pode ser usado programaticamente em seus próprios scripts Python.
+In addition to the CLI, SPKMC can be used programmatically in your own Python scripts.
 
-### Importação
+### Imports
 
 ```python
 from spkmc import SPKMC, GammaDistribution, ExponentialDistribution, NetworkFactory
 import numpy as np
 ```
 
-### Criação de Distribuições
+### Creating Distributions
 
-#### Distribuição Gamma
+#### Gamma Distribution
 
 ```python
-# Parâmetros: shape, scale, lambda
+# Parameters: shape, scale, lambda
 gamma_dist = GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
 ```
 
-#### Distribuição Exponencial
+#### Exponential Distribution
 
 ```python
-# Parâmetros: mu, lambda
+# Parameters: mu, lambda
 exp_dist = ExponentialDistribution(mu=1.0, lmbd=1.0)
 ```
 
-### Criação de Redes
+### Creating Networks
 
-#### Rede Erdos-Renyi
+#### Erdos-Renyi Network
 
 ```python
-# Parâmetros: número de nós, grau médio
+# Parameters: number of nodes, average degree
 G = NetworkFactory.create_erdos_renyi(N=1000, k_avg=10)
 ```
 
-#### Rede Complexa
+#### Complex Network
 
 ```python
-# Parâmetros: número de nós, expoente, grau médio
+# Parameters: number of nodes, exponent, average degree
 G = NetworkFactory.create_complex_network(N=1000, exponent=2.5, k_avg=10)
 ```
 
-#### Grafo Completo
+#### Complete Graph
 
 ```python
-# Parâmetros: número de nós
+# Parameters: number of nodes
 G = NetworkFactory.create_complete_graph(N=100)
 ```
 
-### Execução de Simulações
+### Running Simulations
 
-#### Inicialização do Simulador
+#### Simulator Initialization
 
 ```python
-# Inicializa o simulador com uma distribuição
+# Initialize the simulator with a distribution
 simulator = SPKMC(distribution=gamma_dist)
 ```
 
-#### Configuração dos Parâmetros
+#### Parameter Configuration
 
 ```python
-# Número de nós
+# Number of nodes
 N = 1000
 
-# Grau médio
+# Average degree
 k_avg = 10
 
-# Número de amostras
+# Number of samples
 samples = 50
 
-# Porcentagem inicial de infectados
+# Initial percentage of infected
 initial_perc = 0.01
 
-# Configuração do tempo
+# Time configuration
 t_max = 10.0
 steps = 100
 time_steps = np.linspace(0, t_max, steps)
 ```
 
-#### Simulação em Rede Erdos-Renyi
+#### Erdos-Renyi Simulation
 
 ```python
-# Executa a simulação
+# Run the simulation
 S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
     num_runs=2,
     time_steps=time_steps,
@@ -332,10 +332,10 @@ S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
 )
 ```
 
-#### Simulação em Rede Complexa
+#### Complex Network Simulation
 
 ```python
-# Executa a simulação
+# Run the simulation
 S, I, R, S_err, I_err, R_err = simulator.simulate_complex_network(
     num_runs=2,
     exponent=2.5,
@@ -347,10 +347,10 @@ S, I, R, S_err, I_err, R_err = simulator.simulate_complex_network(
 )
 ```
 
-#### Simulação em Grafo Completo
+#### Complete Graph Simulation
 
 ```python
-# Executa a simulação
+# Run the simulation
 S, I, R = simulator.simulate_complete_graph(
     time_steps=time_steps,
     N=N,
@@ -359,12 +359,12 @@ S, I, R = simulator.simulate_complete_graph(
 )
 ```
 
-#### Simulação Genérica
+#### Generic Simulation
 
 ```python
-# Executa a simulação com base no tipo de rede
+# Run the simulation based on the network type
 result = simulator.run_simulation(
-    network_type="er",  # ou "cn", "cg"
+    network_type="er",  # or "cn", "cg"
     time_steps=time_steps,
     N=N,
     k_avg=k_avg,
@@ -374,7 +374,7 @@ result = simulator.run_simulation(
     overwrite=False
 )
 
-# Extrair os resultados
+# Extract results
 S = result["S_val"]
 I = result["I_val"]
 R = result["R_val"]
@@ -386,21 +386,21 @@ if has_error:
     R_err = result["R_err"]
 ```
 
-### Visualização de Resultados
+### Result Visualization
 
-#### Visualização Básica
+#### Basic Visualization
 
 ```python
 import matplotlib.pyplot as plt
 
 plt.figure(figsize=(10, 6))
-plt.plot(time_steps, S, 'b-', label='Suscetíveis')
-plt.plot(time_steps, I, 'r-', label='Infectados')
-plt.plot(time_steps, R, 'g-', label='Recuperados')
+plt.plot(time_steps, S, 'b-', label='Susceptible')
+plt.plot(time_steps, I, 'r-', label='Infected')
+plt.plot(time_steps, R, 'g-', label='Recovered')
 
-plt.xlabel('Tempo')
-plt.ylabel('Proporção de Indivíduos')
-plt.title('Dinâmica do Modelo SIR ao Longo do Tempo')
+plt.xlabel('Time')
+plt.ylabel('Proportion of Individuals')
+plt.title('SIR Model Dynamics Over Time')
 plt.legend()
 plt.grid(True, alpha=0.3)
 
@@ -408,39 +408,39 @@ plt.tight_layout()
 plt.show()
 ```
 
-#### Visualização com Barras de Erro
+#### Visualization with Error Bars
 
 ```python
 from spkmc.visualization.plots import Visualizer
 
 Visualizer.plot_result_with_error(S, I, R, S_err, I_err, R_err, time_steps,
-                                 title="Simulação SPKMC com Barras de Erro")
+                                 title="SPKMC Simulation with Error Bars")
 ```
 
-#### Visualização de Rede
+#### Network Visualization
 
 ```python
-Visualizer.plot_network(G, title="Visualização da Rede")
+Visualizer.plot_network(G, title="Network Visualization")
 ```
 
-#### Comparação de Resultados
+#### Results Comparison
 
 ```python
-# Resultados de múltiplas simulações
+# Results from multiple simulations
 results = [result1, result2]
-labels = ["Simulação 1", "Simulação 2"]
+labels = ["Simulation 1", "Simulation 2"]
 
-Visualizer.compare_results(results, labels, title="Comparação de Simulações")
+Visualizer.compare_results(results, labels, title="SPKMC Simulation Comparison")
 ```
 
-### Gerenciamento de Resultados
+### Results Management
 
-#### Salvamento de Resultados
+#### Saving Results
 
 ```python
 from spkmc.io.results import ResultManager
 
-# Cria um dicionário com os resultados
+# Create a results dictionary
 result = {
     "S_val": list(S),
     "I_val": list(I),
@@ -455,109 +455,109 @@ result = {
     }
 }
 
-# Salva os resultados
+# Save results
 ResultManager.save_result("results/my_simulation.json", result)
 ```
 
-#### Carregamento de Resultados
+#### Loading Results
 
 ```python
-# Carrega os resultados
+# Load results
 result = ResultManager.load_result("results/my_simulation.json")
 
-# Extrai os dados
+# Extract data
 S = np.array(result["S_val"])
 I = np.array(result["I_val"])
 R = np.array(result["R_val"])
 time_steps = np.array(result["time"])
 ```
 
-#### Listagem de Resultados
+#### Listing Results
 
 ```python
-# Lista todos os resultados disponíveis
+# List all available results
 result_files = ResultManager.list_results()
 
-# Lista resultados com filtro
+# List results with filter
 gamma_results = ResultManager.list_results(filter_by={"metadata.distribution": "gamma"})
 ```
 
-#### Extração de Metadados
+#### Metadata Extraction
 
 ```python
-# Extrai metadados do caminho do arquivo
+# Extract metadata from file path
 metadata = ResultManager.get_metadata_from_path("data/spkmc/gamma/ER/results_1000_50_2.0.json")
 
-# Formata o resultado para exibição na CLI
+# Format result for CLI display
 formatted = ResultManager.format_result_for_cli(result)
 ```
 
-## Exemplos Completos
+## Complete Examples
 
-Para exemplos completos de uso, consulte os seguintes arquivos:
+For complete usage examples, see the following files:
 
-- [Exemplos de uso da CLI](../examples/cli_examples.md)
-- [Exemplo básico de simulação](../examples/basic_example.py)
-- [Exemplo de uso programático da CLI](../examples/basic_simulation.py)
+- [CLI usage examples](../examples/cli_examples.md)
+- [Basic simulation example](../examples/basic_example.py)
+- [Programmatic CLI example](../examples/basic_simulation.py)
 
-## Dicas e Boas Práticas
+## Tips and Best Practices
 
-### Escolha do Tipo de Rede
+### Choosing Network Type
 
-- **Erdos-Renyi (ER)**: Bom para simulações iniciais e testes, pois é uma rede aleatória simples.
-- **Rede Complexa (CN)**: Mais realista para modelar redes sociais e biológicas, pois segue uma distribuição de lei de potência.
-- **Grafo Completo (CG)**: Útil para casos extremos onde todos os nós estão conectados entre si.
+- **Erdos-Renyi (ER)**: Good for initial simulations and tests, as it is a simple random network.
+- **Complex Network (CN)**: More realistic for social and biological networks, as it follows a power-law distribution.
+- **Complete Graph (CG)**: Useful for extreme cases where all nodes are connected.
 
-### Escolha da Distribuição
+### Choosing Distribution
 
-- **Gamma**: Oferece mais flexibilidade na modelagem dos tempos de recuperação, permitindo ajustar a forma e a escala.
-- **Exponencial**: Mais simples, assume que os eventos ocorrem a uma taxa constante.
+- **Gamma**: More flexible for modeling recovery times, allowing shape and scale adjustments.
+- **Exponential**: Simpler, assumes events occur at a constant rate.
 
-### Otimização de Desempenho
+### Performance Optimization
 
-- Para redes grandes (N > 10000), considere reduzir o número de amostras e execuções.
-- O parâmetro `--k-avg` (grau médio) afeta significativamente o tempo de execução; valores maiores resultam em mais conexões e cálculos mais demorados.
-- Utilize o parâmetro `--no-plot` para evitar a geração de gráficos durante a execução, o que pode economizar tempo e recursos.
+- For large networks (N > 10000), consider reducing the number of samples and runs.
+- The `--k-avg` parameter (average degree) significantly affects runtime; higher values result in more connections and more expensive calculations.
+- Use `--no-plot` to avoid generating plots during execution, which can save time and resources.
 
-### Análise de Resultados
+### Results Analysis
 
-- Compare diferentes tipos de redes com os mesmos parâmetros para entender o impacto da estrutura da rede na propagação.
-- Varie os parâmetros da distribuição para observar como os tempos de recuperação e infecção afetam a dinâmica da epidemia.
-- Utilize o comando `compare` para visualizar múltiplas simulações em um único gráfico.
+- Compare different network types with the same parameters to understand how network structure affects spread.
+- Vary distribution parameters to observe how recovery and infection times affect epidemic dynamics.
+- Use the `compare` command to visualize multiple simulations in a single plot.
 
-### Comando `batch`
+### `batch` Command
 
-O comando `batch` permite executar múltiplos cenários de simulação a partir de um arquivo JSON, facilitando a execução de experimentos em lote.
+The `batch` command runs multiple simulation scenarios from a JSON file, making it easier to execute experiments in bulk.
 
-#### Sintaxe
+#### Syntax
 
 ```bash
-python spkmc_cli.py batch [ARQUIVO_CENÁRIOS] [OPÇÕES]
+python spkmc_cli.py batch [SCENARIOS_FILE] [OPTIONS]
 ```
 
-#### Argumentos
+#### Arguments
 
-Argumento | Descrição |
-|-----------|-----------|
-`ARQUIVO_CENÁRIOS` | Caminho para o arquivo JSON contendo os cenários (opcional - se omitido, mostra menu de experimentos) |
+Argument | Description |
+|--------|-------------|
+`SCENARIOS_FILE` | Path to the JSON file containing scenarios (optional - if omitted, shows the experiment menu) |
 
-#### Opções
+#### Options
 
-Opção | Abreviação | Tipo | Padrão | Descrição |
-|-------|------------|------|--------|-----------|
-`--output-dir` | `-o` | string | `./results` | Diretório para salvar os resultados |
-`--prefix` | `-p` | string | | Prefixo para os nomes dos arquivos de saída |
-`--compare` | `-c` | flag | `False` | Gerar visualização comparativa dos resultados |
-`--no-plot` | | flag | `False` | Desativar a geração de gráficos individuais |
-`--save-plot` | | flag | `False` | Salvar os gráficos em arquivos |
-`--zip` | | flag | `False` | Criar um arquivo zip com os resultados de cada cenário |
-`--verbose` | `-v` | flag | `False` | Mostrar informações detalhadas durante a execução |
+Option | Abbrev | Type | Default | Description |
+|-------|--------|------|---------|-------------|
+`--output-dir` | `-o` | string | `./results` | Directory to save results |
+`--prefix` | `-p` | string | | Prefix for output filenames |
+`--compare` | `-c` | flag | `False` | Generate comparative visualization of results |
+`--no-plot` | | flag | `False` | Disable individual plot generation |
+`--save-plot` | | flag | `False` | Save plots to files |
+`--zip` | | flag | `False` | Create a zip file with results for each scenario |
+`--verbose` | `-v` | flag | `False` | Show detailed information during execution |
 
-#### Formato do Arquivo JSON de Cenários
+#### Scenario JSON File Format
 
-O arquivo JSON deve conter uma lista de objetos, cada um representando um cenário com parâmetros para a simulação. Cada cenário será executado sequencialmente e os resultados serão salvos em arquivos separados no diretório especificado.
+The JSON file must contain a list of objects, each representing a simulation scenario. Each scenario runs sequentially and results are saved to separate files in the specified directory.
 
-Exemplo de arquivo JSON:
+Example JSON file:
 
 ```json
 [
@@ -594,80 +594,80 @@ Exemplo de arquivo JSON:
 ]
 ```
 
-Parâmetros disponíveis para cada cenário:
+Available parameters for each scenario:
 
-Parâmetro | Tipo | Padrão | Descrição |
-|-----------|------|--------|-----------|
-`network_type` | string | `er` | Tipo de rede: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg) |
-`dist_type` | string | `gamma` | Tipo de distribuição: Gamma ou Exponential |
-`nodes` | int | `1000` | Número de nós na rede |
-`k_avg` | float | `10` | Grau médio da rede (para er e cn) |
-`shape` | float | `2.0` | Parâmetro de forma para distribuição Gamma |
-`scale` | float | `1.0` | Parâmetro de escala para distribuição Gamma |
-`mu` | float | `1.0` | Parâmetro mu para distribuição Exponencial |
-`lambda_val` | float | `1.0` | Parâmetro lambda para tempos de infecção |
-`exponent` | float | `2.5` | Expoente para redes complexas (CN) |
-`samples` | int | `50` | Número de amostras por execução |
-`num_runs` | int | `2` | Número de execuções (para médias) |
-`initial_perc` | float | `0.01` | Porcentagem inicial de infectados |
-`t_max` | float | `10.0` | Tempo máximo de simulação |
-`steps` | int | `100` | Número de passos de tempo |
-`label` | string | | Rótulo opcional para identificar o cenário (usado no nome do arquivo) |
+Parameter | Type | Default | Description |
+|----------|------|---------|-------------|
+`network_type` | string | `er` | Network type: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg) |
+`dist_type` | string | `gamma` | Distribution type: Gamma or Exponential |
+`nodes` | int | `1000` | Number of nodes in the network |
+`k_avg` | float | `10` | Average degree (for er and cn) |
+`shape` | float | `2.0` | Shape parameter for Gamma distribution |
+`scale` | float | `1.0` | Scale parameter for Gamma distribution |
+`mu` | float | `1.0` | Mu parameter for Exponential distribution |
+`lambda_val` | float | `1.0` | Lambda parameter for infection times |
+`exponent` | float | `2.5` | Exponent for complex networks (CN) |
+`samples` | int | `50` | Number of samples per run |
+`num_runs` | int | `2` | Number of runs (for averages) |
+`initial_perc` | float | `0.01` | Initial percentage of infected |
+`t_max` | float | `10.0` | Maximum simulation time |
+`steps` | int | `100` | Number of time steps |
+`label` | string | | Optional label to identify the scenario (used in filenames) |
 
-#### Exemplos
+#### Examples
 
 ```bash
-# Executar experimentos (mostra menu interativo)
+# Run experiments (shows interactive menu)
 spkmc batch
 
-# Executar cenários de um arquivo específico
-python spkmc_cli.py batch experimentos/cenarios_teste.json
+# Run scenarios from a specific file
+python spkmc_cli.py batch experiments/test_scenarios.json
 
-# Executar cenários e salvar resultados em um diretório específico
-python spkmc_cli.py batch --output-dir resultados/experimento1
+# Run scenarios and save results to a specific directory
+python spkmc_cli.py batch --output-dir results/experiment1
 
-# Executar cenários com um prefixo para os arquivos de saída
+# Run scenarios with an output prefix
 python spkmc_cli.py batch --prefix "exp1_"
 
-# Executar cenários e gerar uma visualização comparativa
+# Run scenarios and generate a comparison visualization
 python spkmc_cli.py batch --compare
 
-# Executar cenários, salvar gráficos e não exibi-los na tela
+# Run scenarios, save plots, and do not show them on screen
 python spkmc_cli.py batch --save-plot --no-plot
 
-# Executar cenários com informações detalhadas durante a execução
+# Run scenarios with verbose output
 python spkmc_cli.py batch --verbose
 
-# Executar cenários e gerar arquivos CSV simplificados (como opção global antes do comando)
-python spkmc_cli.py --simple batch --output-dir resultados/csv_simples
+# Run scenarios and generate simplified CSVs (global option)
+python spkmc_cli.py --simple batch --output-dir results/simple_csv
 
-# Executar cenários e gerar arquivos CSV simplificados (como opção específica após o comando)
-python spkmc_cli.py batch --output-dir resultados/csv_simples --simple
+# Run scenarios and generate simplified CSVs (after the command)
+python spkmc_cli.py batch --output-dir results/simple_csv --simple
 
-# Executar cenários e criar arquivos zip com os resultados
-python spkmc_cli.py batch --output-dir resultados/zip_results --zip
+# Run scenarios and create zip files
+python spkmc_cli.py batch --output-dir results/zip_results --zip
 
-# Executar cenários, gerar arquivos CSV simplificados e criar arquivos zip
-python spkmc_cli.py batch --output-dir resultados/completo --simple --zip
+# Run scenarios, generate simplified CSVs, and create zip files
+python spkmc_cli.py batch --output-dir results/complete --simple --zip
 
-# Ambas as formas acima têm o mesmo efeito: gerar arquivos CSV simplificados com tempo, infectados e erro para cada cenário
+# Both forms above generate simplified CSVs with time, infected, and error for each scenario
 ```
 
-#### Dicas e Boas Práticas para o Comando `batch`
+#### Tips and Best Practices for `batch`
 
-- **Organização de cenários**: Agrupe cenários relacionados em um mesmo arquivo JSON para facilitar a comparação e análise.
-- **Uso de rótulos**: Utilize o parâmetro `label` para identificar claramente cada cenário nos arquivos de saída.
-- **Comparação automática**: Use a opção `--compare` para gerar automaticamente um gráfico comparativo de todos os cenários executados.
-- **Execuções em lote**: Para experimentos extensos, considere dividir os cenários em múltiplos arquivos JSON e executá-los separadamente.
-- **Prefixos significativos**: Utilize prefixos que indiquem o propósito do experimento (ex: `gamma_vs_exp_`, `network_size_test_`).
-- **Modo silencioso**: Para execuções longas, use `--no-plot` para evitar a exibição de gráficos durante a execução, melhorando o desempenho.
-- **Documentação de experimentos**: Salve os arquivos JSON de cenários junto com os resultados para documentar completamente o experimento.
-- **Arquivos CSV simplificados**: Use a opção `--simple` para gerar arquivos CSV simplificados com apenas três colunas (tempo, infectados, erro). Esta opção pode ser usada de duas formas:
-  - Como opção global antes do comando: `spkmc --simple batch ...`
-  - Como opção específica após o comando: `spkmc batch ... --simple`
-  Ambas as formas têm o mesmo efeito. Estes arquivos são úteis para análises rápidas ou importação em outras ferramentas de visualização.
-- **Arquivos zipados**: Use a opção `--zip` para criar arquivos zip contendo os resultados de cada cenário. Isso é útil para:
-  - Compartilhar resultados de forma mais organizada
-  - Economizar espaço em disco ao armazenar múltiplos resultados
-  - Facilitar o download e transferência de resultados
-  Quando usado com o comando `batch`, além de criar um arquivo zip para cada cenário, também será criado um arquivo zip contendo todos os resultados do lote.
+- **Scenario organization**: Group related scenarios in the same JSON file for easier comparison and analysis.
+- **Label usage**: Use the `label` parameter to clearly identify each scenario in output files.
+- **Automatic comparison**: Use the `--compare` option to automatically generate a comparative plot of all scenarios.
+- **Batch runs**: For large experiments, consider splitting scenarios across multiple JSON files and running them separately.
+- **Meaningful prefixes**: Use prefixes that indicate the experiment purpose (e.g., `gamma_vs_exp_`, `network_size_test_`).
+- **Silent mode**: For long runs, use `--no-plot` to avoid displaying plots and improve performance.
+- **Experiment documentation**: Save scenario JSON files alongside results to fully document the experiment.
+- **Simplified CSV files**: Use `--simple` to generate simplified CSVs with three columns (time, infected, error). This option can be used in two ways:
+  - As a global option before the command: `spkmc --simple batch ...`
+  - As a command-specific option after the command: `spkmc batch ... --simple`
+  Both forms have the same effect. These files are useful for quick analyses or importing into visualization tools.
+- **Zipped files**: Use `--zip` to create zip files containing each scenario's results. This is useful for:
+  - Sharing results more neatly
+  - Saving disk space when storing multiple results
+  - Simplifying download and transfer of results
+  When used with `batch`, in addition to creating a zip for each scenario, a single zip containing all batch results is also created.

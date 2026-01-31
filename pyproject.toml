@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spkmc"
 dynamic = ["version"]
-description = "Shortest Path Kinetic Monte Carlo (SPKMC) para simulação de propagação de epidemias em redes"
+description = "Shortest Path Kinetic Monte Carlo (SPKMC) for simulating epidemic spread on networks"
 readme = "README.md"
 authors = [
     {name = "SPKMC Team", email = "example@example.com"}

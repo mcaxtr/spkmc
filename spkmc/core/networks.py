@@ -1,8 +1,8 @@
 """
-Classes de redes para o algoritmo SPKMC.
+Network classes for the SPKMC algorithm.
 
-Este módulo contém implementações de diferentes tipos de redes que podem ser
-utilizadas nas simulações SPKMC, como redes Erdos-Renyi, redes complexas e grafos completos.
+This module contains implementations of different network types that can be
+used in SPKMC simulations, such as Erdos-Renyi networks, complex networks, and complete graphs.
 
 Includes fast edge-list generators that bypass NetworkX for GPU workflows.
 """
@@ -14,24 +14,24 @@ import numpy as np
 
 
 class NetworkFactory:
-    """Fábrica para criar diferentes tipos de redes."""
+    """Factory for creating different network types."""
 
-    NETWORK_TYPES = ["er", "cn", "cg", "rrn"]  # Tipos de rede suportados
+    NETWORK_TYPES = ["er", "cn", "cg", "rrn"]  # Supported network types
 
     @staticmethod
     def create_network(network_type: str, **kwargs: Any) -> nx.DiGraph:
         """
-        Cria uma rede com base no tipo e parâmetros fornecidos.
+        Create a network based on the type and provided parameters.
 
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
-            **kwargs: Parâmetros específicos do tipo de rede
+            network_type: Network type ('er', 'cn', 'cg', 'rrn')
+            **kwargs: Network-specific parameters
 
         Returns:
-            Grafo direcionado da rede solicitada
+            Directed graph of the requested network
 
         Raises:
-            ValueError: Se o tipo de rede for desconhecido
+            ValueError: If the network type is unknown
         """
         network_type = network_type.lower()
 
@@ -56,19 +56,19 @@ class NetworkFactory:
             return NetworkFactory.create_random_regular_network(N, k_avg)
 
         else:
-            raise ValueError(f"Tipo de rede desconhecido: {network_type}")
+            raise ValueError(f"Unknown network type: {network_type}")
 
     @staticmethod
     def create_erdos_renyi(N: int, k_avg: float) -> nx.DiGraph:
         """
-        Cria uma rede Erdos-Renyi.
+        Create an Erdos-Renyi network.
 
         Args:
-            N: Número de nós
-            k_avg: Grau médio
+            N: Number of nodes
+            k_avg: Average degree
 
         Returns:
-            Grafo direcionado Erdos-Renyi
+            Directed Erdos-Renyi graph
         """
         p = k_avg / (N - 1)
         return nx.erdos_renyi_graph(N, p, directed=True)
@@ -76,16 +76,16 @@ class NetworkFactory:
     @staticmethod
     def generate_discrete_power_law(n: int, alpha: float, xmin: int, xmax: float) -> np.ndarray:
         """
-        Gera uma sequência de lei de potência discreta.
+        Generate a discrete power-law sequence.
 
         Args:
-            n: Número de elementos
-            alpha: Expoente da lei de potência
-            xmin: Valor mínimo
-            xmax: Valor máximo
+            n: Number of elements
+            alpha: Power-law exponent
+            xmin: Minimum value
+            xmax: Maximum value
 
         Returns:
-            Array com a sequência de lei de potência
+            Array with the power-law sequence
         """
         rand_nums = np.random.uniform(size=n)
         power_law_seq = (xmax ** (1 - alpha) - xmin ** (1 - alpha)) * rand_nums + xmin ** (
@@ -106,15 +106,15 @@ class NetworkFactory:
     @staticmethod
     def create_complex_network(N: int, exponent: float, k_avg: float) -> nx.DiGraph:
         """
-        Cria uma rede complexa com distribuição de grau seguindo lei de potência.
+        Create a complex network with a power-law degree distribution.
 
         Args:
-            N: Número de nós
-            exponent: Expoente da lei de potência
-            k_avg: Grau médio
+            N: Number of nodes
+            exponent: Power-law exponent
+            k_avg: Average degree
 
         Returns:
-            Grafo direcionado complexo
+            Directed complex graph
         """
         degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
         degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
@@ -130,27 +130,27 @@ class NetworkFactory:
     @staticmethod
     def create_complete_graph(N: int) -> nx.DiGraph:
         """
-        Cria um grafo completo.
+        Create a complete graph.
 
         Args:
-            N: Número de nós
+            N: Number of nodes
 
         Returns:
-            Grafo direcionado completo
+            Directed complete graph
         """
         return nx.complete_graph(N, create_using=nx.DiGraph())
 
     @staticmethod
     def create_random_regular_network(N: int, k_avg: float) -> nx.DiGraph:
         """
-        Cria uma rede regular aleatória (random regular network).
+        Create a random regular network.
 
         Args:
-            N: Número de nós
-            k_avg: Grau regular (número de conexões por nó, will be converted to int)
+            N: Number of nodes
+            k_avg: Regular degree (connections per node, will be converted to int)
 
         Returns:
-            Grafo direcionado regular aleatório
+            Directed random regular graph
         """
         # k_avg must be int for random_regular_graph
         G = nx.random_regular_graph(int(k_avg), N)
@@ -159,14 +159,14 @@ class NetworkFactory:
     @staticmethod
     def get_network_info(network_type: str, **kwargs: Any) -> Dict[str, Any]:
         """
-        Retorna informações sobre a rede para uso em metadados.
+        Return network information for metadata.
 
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
-            **kwargs: Parâmetros específicos do tipo de rede
+            network_type: Network type ('er', 'cn', 'cg', 'rrn')
+            **kwargs: Network-specific parameters
 
         Returns:
-            Dicionário com informações sobre a rede
+            Dictionary with network information
         """
         network_type = network_type.lower()
 

@@ -12,49 +12,49 @@ from tqdm import tqdm
 
 
 def get_dist_gpu(N, edges, sources, params):
-    # 1. Transferência das arestas para GPU
+    # 1. Transfer edges to the GPU
     edges_gpu = cp.asarray(edges, dtype=cp.int32)
 
-    # 2. Amostragem de tempos de recuperação e infecção na GPU
+    # 2. Sample recovery and infection times on the GPU
     if params["distribution"] == "gamma":
         recovery_times = cp.random.gamma(
             params["shape"], params["scale"], size=N
-        )  # Gamma na GPU :contentReference[oaicite:5]{index=5}
+        )  # Gamma on the GPU :contentReference[oaicite:5]{index=5}
         times = cp.random.gamma(params["shape"], params["scale"], size=edges_gpu.shape[0])
     else:
         recovery_times = cp.random.exponential(
             1 / params["mu"], size=N
-        )  # Exponencial na GPU :contentReference[oaicite:6]{index=6}
+        )  # Exponential on the GPU :contentReference[oaicite:6]{index=6}
         times = cp.random.exponential(params["lmbd"], size=edges_gpu.shape[0])
 
-    # 3. Condição de infecção vs. recuperação
+    # 3. Infection vs. recovery condition
     u = edges_gpu[:, 0]
     infection_times = cp.where(times >= recovery_times[u], cp.inf, times)
 
-    # 4. Super-nó para múltiplas fontes
+    # 4. Super-node for multiple sources
     super_node = N
     super_src = cp.full_like(sources, super_node, dtype=cp.int32)
     dummy_edges = cp.stack([super_src, sources], axis=1)
     dummy_weights = cp.zeros_like(sources, dtype=cp.float32)
 
-    # 5. Concatenação das arestas originais + super-nó
+    # 5. Concatenate original edges + super-node
     src = cp.concatenate([edges_gpu[:, 0], dummy_edges[:, 0]])
     dst = cp.concatenate([edges_gpu[:, 1], dummy_edges[:, 1]])
     weight = cp.concatenate([infection_times.astype(cp.float32), dummy_weights])
 
-    # 6. Construção do DataFrame cuDF diretamente na GPU
+    # 6. Build cuDF DataFrame directly on the GPU
     df = cudf.DataFrame({"src": src, "dst": dst, "weight": weight})
 
-    # 7. Criação do grafo e execução de SSSP em GPU
+    # 7. Build the graph and run SSSP on the GPU
     G = cugraph.Graph(directed=True)
     G.from_cudf_edgelist(
         df, source="src", destination="dst", edge_attr="weight"
-    )  # criação eficiente :contentReference[oaicite:7]{index=7}
+    )  # efficient construction :contentReference[oaicite:7]{index=7}
     result = cugraph.sssp(
         G, source=super_node, weight="weight"
-    )  # Dijkstra em GPU :contentReference[oaicite:8]{index=8}
+    )  # Dijkstra on the GPU :contentReference[oaicite:8]{index=8}
 
-    # 8. Extração das distâncias de volta ao host
+    # 8. Extract distances back to the host
     dist_gpu = result["distance"].to_numpy()[:N]
     return dist_gpu, recovery_times.get()
 
@@ -90,7 +90,7 @@ def spkmc_avg_gpu(G, sources, params, time_steps, samples, use_tqdm=True):
     S_vals = cp.zeros((samples, steps))
     I_vals = cp.zeros((samples, steps))
     R_vals = cp.zeros((samples, steps))
-    # Coleta das arestas do NetworkX para GPU
+    # Collect NetworkX edges for the GPU
     edges = cp.asarray(list(G.edges()), dtype=cp.int32)
     iterator = tqdm(range(samples)) if use_tqdm else range(samples)
     for i in iterator:
@@ -108,7 +108,7 @@ def spkmc_avg_gpu(G, sources, params, time_steps, samples, use_tqdm=True):
 def multiple_erdos_renyi_gpu(
     num, params, time_steps, N=3000, k_avg=10, samples=100, initial_perc=0.01, overwrite=False
 ):
-    # Igual lógica de checagem de cache em disco...
+    # Same on-disk cache check logic...
     S_list, I_list, R_list = [], [], []
     for _ in tqdm(range(num)):
         p = k_avg / (N - 1)
@@ -119,8 +119,8 @@ def multiple_erdos_renyi_gpu(
         S_list.append(S)
         I_list.append(I)
         R_list.append(R)
-    # Agregações finais como na versão CPU...
-    # (média, erro padrão, escrita em JSON, etc.)
+    # Final aggregations as in the CPU version...
+    # (mean, standard error, JSON output, etc.)
 
 
 def plot_result_with_error_gpu(S, I, R, S_err, I_err, R_err, time_steps):

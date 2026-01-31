@@ -1,7 +1,7 @@
 """
-Testes para o módulo de resultados do SPKMC.
+Tests for the SPKMC results module.
 
-Este módulo contém testes para a classe ResultManager e suas funcionalidades.
+This module contains tests for the ResultManager class and its functionality.
 """
 
 import json
@@ -17,19 +17,19 @@ from spkmc.io.results import ResultManager
 
 @pytest.fixture
 def gamma_distribution():
-    """Fixture para uma distribuição Gamma."""
+    """Fixture for a Gamma distribution."""
     return GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
 
 
 @pytest.fixture
 def exponential_distribution():
-    """Fixture para uma distribuição Exponencial."""
+    """Fixture for an Exponential distribution."""
     return ExponentialDistribution(mu=1.0, lmbd=1.0)
 
 
 @pytest.fixture
 def sample_result():
-    """Fixture para um resultado de exemplo."""
+    """Fixture for a sample result."""
     return {
         "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
         "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
@@ -48,24 +48,24 @@ def sample_result():
 
 @pytest.fixture
 def temp_result_file(sample_result):
-    """Fixture para criar um arquivo de resultados temporário."""
-    # Cria um arquivo temporário em modo texto para JSON
+    """Fixture to create a temporary results file."""
+    # Create a temporary file in text mode for JSON
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
-        # Salva os dados no arquivo
+        # Save data to the file
         json.dump(sample_result, f)
 
-        # Retorna o caminho do arquivo
+        # Return the file path
         path = f.name
 
     yield path
 
-    # Remove o arquivo após o teste
+    # Remove the file after the test
     if os.path.exists(path):
         os.remove(path)
 
 
 def test_get_result_path_er(gamma_distribution):
-    """Testa a geração de caminho para resultados de rede Erdos-Renyi."""
+    """Test result path generation for an Erdos-Renyi network."""
     path = ResultManager.get_result_path("er", gamma_distribution, 1000, 50)
 
     assert isinstance(path, str)
@@ -77,7 +77,7 @@ def test_get_result_path_er(gamma_distribution):
 
 
 def test_get_result_path_cn(gamma_distribution):
-    """Testa a geração de caminho para resultados de rede complexa."""
+    """Test result path generation for a complex network."""
     path = ResultManager.get_result_path("cn", gamma_distribution, 1000, 50, 2.5)
 
     assert isinstance(path, str)
@@ -85,12 +85,12 @@ def test_get_result_path_cn(gamma_distribution):
     assert "gamma" in path.lower()
     assert "1000" in path
     assert "50" in path
-    assert "2.5" in path or "25" in path  # Pode ser formatado como 2.5 ou 25
+    assert "2.5" in path or "25" in path  # May be formatted as 2.5 or 25
     assert path.endswith(".json")
 
 
 def test_load_result(temp_result_file, sample_result):
-    """Testa o carregamento de resultados."""
+    """Test loading results."""
     result = ResultManager.load_result(temp_result_file)
 
     assert isinstance(result, dict)
@@ -105,25 +105,25 @@ def test_load_result(temp_result_file, sample_result):
 
 
 def test_load_result_nonexistent():
-    """Testa o carregamento de um arquivo inexistente."""
+    """Test loading a nonexistent file."""
     with pytest.raises(FileNotFoundError):
         ResultManager.load_result("nonexistent_file.json")
 
 
 def test_save_result(sample_result):
-    """Testa o salvamento de resultados."""
-    # Cria um arquivo temporário
+    """Test saving results."""
+    # Create a temporary file
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
 
     try:
-        # Salva os resultados
+        # Save the results
         ResultManager.save_result(path, sample_result)
 
-        # Verifica se o arquivo foi criado
+        # Verify the file was created
         assert os.path.exists(path)
 
-        # Carrega os resultados e verifica
+        # Load the results and verify
         with open(path, "r") as f:
             loaded_result = json.load(f)
 
@@ -133,25 +133,25 @@ def test_save_result(sample_result):
         assert loaded_result["time"] == sample_result["time"]
         assert loaded_result["metadata"] == sample_result["metadata"]
     finally:
-        # Remove o arquivo
+        # Remove the file
         if os.path.exists(path):
             os.remove(path)
 
 
 def test_list_results(monkeypatch):
-    """Testa a listagem de resultados."""
+    """Test listing results."""
 
-    # Mock para Path.exists
+    # Mock Path.exists
     def mock_exists(self):
         return True
 
-    # Mock para Path.iterdir
+    # Mock Path.iterdir
     def mock_iterdir(self):
         paths = [Path("data/spkmc/gamma"), Path("data/spkmc/exponential")]
         for path in paths:
             yield path
 
-    # Mock para o segundo nível de iterdir
+    # Mock the second iterdir level
     def mock_iterdir_level2(self):
         if str(self).endswith("gamma"):
             paths = [Path("data/spkmc/gamma/er"), Path("data/spkmc/gamma/cn")]
@@ -160,7 +160,7 @@ def test_list_results(monkeypatch):
         for path in paths:
             yield path
 
-    # Mock para o terceiro nível de iterdir
+    # Mock the third iterdir level
     def mock_iterdir_level3(self):
         if str(self).endswith("er"):
             paths = [
@@ -172,7 +172,7 @@ def test_list_results(monkeypatch):
         for path in paths:
             yield path
 
-    # Mock para Path.glob
+    # Mock Path.glob
     def mock_glob(self, pattern):
         if str(self).endswith("er"):
             paths = [
@@ -184,12 +184,12 @@ def test_list_results(monkeypatch):
         for path in paths:
             yield path
 
-    # Aplica os mocks
+    # Apply mocks
     monkeypatch.setattr(Path, "exists", mock_exists)
     monkeypatch.setattr(Path, "iterdir", mock_iterdir)
     monkeypatch.setattr(Path, "glob", mock_glob)
 
-    # Substitui o método iterdir para diferentes instâncias
+    # Replace iterdir for different instances
     def patched_iterdir(self):
         if str(self).endswith("spkmc"):
             return mock_iterdir(self)
@@ -200,7 +200,7 @@ def test_list_results(monkeypatch):
 
     monkeypatch.setattr(Path, "iterdir", patched_iterdir)
 
-    # Testa a listagem de resultados
+    # Test listing results
     results = ResultManager.list_results()
 
     assert isinstance(results, list)
@@ -211,7 +211,7 @@ def test_list_results(monkeypatch):
 
 
 def test_get_metadata_from_path():
-    """Testa a extração de metadados do caminho do arquivo."""
+    """Test extracting metadata from a file path."""
     path = "data/spkmc/gamma/er/results_1000_50_2.0.json"
     metadata = ResultManager.get_metadata_from_path(path)
 
@@ -223,7 +223,7 @@ def test_get_metadata_from_path():
 
 
 def test_get_metadata_from_path_cn():
-    """Testa a extração de metadados do caminho do arquivo para rede complexa."""
+    """Test extracting metadata from a file path for a complex network."""
     path = "data/spkmc/gamma/cn/results_25_1000_50_2.0.json"
     metadata = ResultManager.get_metadata_from_path(path)
 
@@ -236,7 +236,7 @@ def test_get_metadata_from_path_cn():
 
 
 def test_format_result_for_cli(sample_result):
-    """Testa a formatação de resultados para a CLI."""
+    """Test formatting results for the CLI."""
     formatted = ResultManager.format_result_for_cli(sample_result)
 
     assert isinstance(formatted, dict)

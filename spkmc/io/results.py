@@ -1,8 +1,8 @@
 """
-Gerenciamento de resultados para o algoritmo SPKMC.
+Result management for the SPKMC algorithm.
 
-Este módulo contém funções e classes para o gerenciamento de resultados de simulações,
-incluindo salvamento, carregamento e manipulação de dados.
+This module contains functions and classes to manage simulation results,
+including saving, loading, and data handling.
 """
 
 import json
@@ -31,9 +31,9 @@ class NumpyJSONEncoder(json.JSONEncoder):
 
 
 class ResultManager:
-    """Gerencia o salvamento e carregamento de resultados de simulações."""
+    """Manage saving and loading of simulation results."""
 
-    # Diretório base para resultados
+    # Base directory for results
     BASE_DIR = "data/spkmc"
 
     @staticmethod
@@ -46,24 +46,24 @@ class ResultManager:
         k_avg: Optional[float] = None,
     ) -> str:
         """
-        Gera o caminho para o arquivo de resultados.
+        Generate the path for the results file.
 
         Args:
-            network_type: Tipo de rede (ER, CN, CG, RRN)
-            distribution: Objeto de distribuição
-            N: Número de nós
-            samples: Número de amostras
-            exponent: Expoente para redes complexas
-            k_avg: Grau médio da rede
+            network_type: Network type (ER, CN, CG, RRN)
+            distribution: Distribution object
+            N: Number of nodes
+            samples: Number of samples
+            exponent: Exponent for complex networks
+            k_avg: Average degree
 
         Returns:
-            Caminho para o arquivo de resultados
+            Path to the results file
         """
         base_path = (
             f"{ResultManager.BASE_DIR}/{distribution.get_distribution_name()}/{network_type}/"
         )
 
-        # Cria diretórios se não existirem
+        # Create directories if they do not exist
         Path(base_path).mkdir(parents=True, exist_ok=True)
 
         # Build filename with all relevant parameters
@@ -80,17 +80,17 @@ class ResultManager:
     @staticmethod
     def load_result(file_path: str) -> Dict[str, Any]:
         """
-        Carrega resultados de um arquivo JSON.
+        Load results from a JSON file.
 
         Args:
-            file_path: Caminho para o arquivo de resultados
+            file_path: Path to the results file
 
         Returns:
-            Dicionário com os resultados
+            Dictionary with results
 
         Raises:
-            FileNotFoundError: Se o arquivo não existir
-            json.JSONDecodeError: Se o arquivo não for um JSON válido
+            FileNotFoundError: If the file does not exist
+            json.JSONDecodeError: If the file is not valid JSON
         """
         try:
             with open(file_path, "r") as f:
@@ -102,34 +102,34 @@ class ResultManager:
     @staticmethod
     def save_result(file_path: str, result: Dict[str, Any]) -> None:
         """
-        Salva resultados em um arquivo JSON.
+        Save results to a JSON file.
 
         Args:
-            file_path: Caminho para o arquivo de resultados
-            result: Dicionário com os resultados
+            file_path: Path to the results file
+            result: Dictionary with results
 
         Raises:
-            IOError: Se ocorrer um erro ao salvar o arquivo
+            IOError: If an error occurs while saving the file
         """
-        # Cria diretório se não existir
+        # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         try:
             with open(file_path, "w") as f:
                 json.dump(result, f, indent=2, cls=NumpyJSONEncoder)
         except Exception as e:
-            raise IOError(f"Erro ao salvar resultados: {e}")
+            raise IOError(f"Error saving results: {e}")
 
     @staticmethod
     def list_results(filter_by: Optional[Dict[str, Any]] = None) -> List[str]:
         """
-        Lista os arquivos de resultados disponíveis.
+        List available results files.
 
         Args:
-            filter_by: Dicionário com critérios de filtragem (opcional)
+            filter_by: Dictionary with filter criteria (optional)
 
         Returns:
-            Lista de caminhos para arquivos de resultados
+            List of paths to results files
         """
         results: List[str] = []
         base_path = Path(ResultManager.BASE_DIR)
@@ -142,15 +142,15 @@ class ResultManager:
                 for network_dir in dist_dir.iterdir():
                     if network_dir.is_dir():
                         for result_file in network_dir.glob("*.json"):
-                            # Se não houver filtro, adiciona todos os resultados
+                            # If there is no filter, add all results
                             if filter_by is None:
                                 results.append(str(result_file))
                             else:
-                                # Verifica se o arquivo atende aos critérios de filtragem
+                                # Check whether the file meets filter criteria
                                 try:
                                     result_data = ResultManager.load_result(str(result_file))
 
-                                    # Verifica se todos os critérios de filtragem são atendidos
+                                    # Check whether all filter criteria are met
                                     match = True
                                     for key, value in filter_by.items():
                                         if key not in result_data or result_data[key] != value:
@@ -160,7 +160,7 @@ class ResultManager:
                                     if match:
                                         results.append(str(result_file))
                                 except (json.JSONDecodeError, OSError, KeyError):
-                                    # Ignora arquivos que não podem ser carregados
+                                    # Ignore files that cannot be loaded
                                     pass
 
         return results
@@ -168,21 +168,21 @@ class ResultManager:
     @staticmethod
     def get_metadata_from_path(file_path: str) -> Dict[str, Any]:
         """
-        Extrai metadados do caminho do arquivo.
+        Extract metadata from a file path.
 
         Args:
-            file_path: Caminho para o arquivo de resultados
+            file_path: Path to the results file
 
         Returns:
-            Dicionário com metadados extraídos
+            Dictionary with extracted metadata
         """
         metadata: Dict[str, Any] = {}
 
         try:
-            # Extrai informações do caminho
+            # Extract path info
             parts = Path(file_path).parts
 
-            # Encontra o índice do diretório base
+            # Find the base directory index
             base_idx = -1
             for i, part in enumerate(parts):
                 if part == "spkmc":
@@ -193,13 +193,13 @@ class ResultManager:
                 metadata["distribution"] = parts[base_idx + 1]
                 metadata["network_type"] = parts[base_idx + 2]
 
-                # Extrai informações do nome do arquivo
+                # Extract info from the filename
                 filename = Path(file_path).stem
                 if filename.startswith("results_"):
                     params = filename.replace("results_", "").split("_")
 
                     if metadata["network_type"].lower() == "cn" and len(params) >= 3:
-                        # Para redes complexas: exponent, N, samples, [params]
+                        # For complex networks: exponent, N, samples, [params]
                         # Exponent is stored without decimal: "25" means "2.5"
                         try:
                             exp_str = params[0]
@@ -213,7 +213,7 @@ class ResultManager:
                         except Exception:
                             pass
                     elif len(params) >= 2:
-                        # Para outras redes: N, samples, [params]
+                        # For other networks: N, samples, [params]
                         try:
                             metadata["N"] = int(params[0])
                             metadata["samples"] = int(params[1])
@@ -227,27 +227,27 @@ class ResultManager:
     @staticmethod
     def format_result_for_cli(result: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Formata o resultado para exibição na CLI.
+        Format results for CLI display.
 
         Args:
-            result: Dicionário com os resultados
+            result: Dictionary with results
 
         Returns:
-            Dicionário formatado para exibição
+            Dictionary formatted for display
         """
         formatted = {}
 
-        # Copia os metadados
+        # Copy metadata
         if "metadata" in result:
             formatted["metadata"] = result["metadata"]
 
-        # Formata os dados de simulação
+        # Format simulation data
         if "S_val" in result and "I_val" in result and "R_val" in result:
             formatted["max_infected"] = max(result["I_val"]) if result["I_val"] else 0
             formatted["final_recovered"] = result["R_val"][-1] if result["R_val"] else 0
             formatted["data_points"] = len(result["S_val"])
 
-        # Adiciona informações sobre erros
+        # Add error info
         if "S_err" in result and "I_err" in result and "R_err" in result:
             formatted["has_error_data"] = True
         else:
@@ -260,29 +260,29 @@ class ResultManager:
         directory: Union[str, Path],
     ) -> List[Tuple[Path, Dict[str, Any]]]:
         """
-        Carrega todos os arquivos JSON de resultados de um diretório.
+        Load all JSON results files from a directory.
 
         Args:
-            directory: Caminho para o diretório
+            directory: Path to the directory
 
         Returns:
-            Lista de tuplas (caminho_arquivo, dados_resultado)
+            List of tuples (file_path, result_data)
 
         Raises:
-            ValueError: Se o diretório não existir ou não contiver arquivos JSON
+            ValueError: If the directory does not exist or contains no JSON files
         """
         dir_path = Path(directory)
 
         if not dir_path.exists():
-            raise ValueError(f"Diretório não encontrado: {directory}")
+            raise ValueError(f"Directory not found: {directory}")
 
         if not dir_path.is_dir():
-            raise ValueError(f"Caminho não é um diretório: {directory}")
+            raise ValueError(f"Path is not a directory: {directory}")
 
         json_files = list(dir_path.glob("*.json"))
 
         if not json_files:
-            raise ValueError(f"Nenhum arquivo JSON encontrado no diretório: {directory}")
+            raise ValueError(f"No JSON files found in directory: {directory}")
 
         results = []
 
@@ -291,11 +291,11 @@ class ResultManager:
                 data = ResultManager.load_result(str(json_file))
                 results.append((json_file, data))
             except Exception as e:
-                # Log do erro mas continua processando outros arquivos
-                print(f"Aviso: Erro ao carregar {json_file}: {e}")
+                # Log error but keep processing other files
+                print(f"Warning: Error loading {json_file}: {e}")
                 continue
 
         if not results:
-            raise ValueError(f"Nenhum arquivo JSON válido encontrado no diretório: {directory}")
+            raise ValueError(f"No valid JSON files found in directory: {directory}")
 
         return results

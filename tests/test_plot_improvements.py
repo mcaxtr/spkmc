@@ -1,8 +1,8 @@
 """
-Testes para as melhorias no comando plot do SPKMC.
+Tests for plot command improvements in SPKMC.
 
-Este módulo contém testes específicos para as novas funcionalidades do comando plot,
-incluindo suporte a diretórios, filtros de estados e múltiplos cenários.
+This module contains specific tests for new plot command features,
+including directory support, state filters, and multiple scenarios.
 """
 
 import json
@@ -21,13 +21,13 @@ from spkmc.visualization.plots import Visualizer
 
 @pytest.fixture
 def runner():
-    """Fixture para o CliRunner do Click."""
+    """Fixture for Click's CliRunner."""
     return CliRunner()
 
 
 @pytest.fixture
 def sample_result_data():
-    """Dados de exemplo para resultados de simulação."""
+    """Sample data for simulation results."""
     return {
         "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
         "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
@@ -46,13 +46,13 @@ def sample_result_data():
 
 @pytest.fixture
 def temp_results_dir(sample_result_data):
-    """Cria um diretório temporário com múltiplos arquivos de resultados."""
+    """Create a temporary directory with multiple result files."""
     temp_dir = tempfile.mkdtemp()
 
-    # Cria 3 arquivos de resultados com pequenas variações
+    # Create 3 result files with small variations
     for i in range(3):
         result = sample_result_data.copy()
-        # Modifica ligeiramente os dados para cada cenário
+        # Slightly modify data for each scenario
         result["I_val"] = [v * (1 + i * 0.1) for v in result["I_val"]]
         result["metadata"]["scenario"] = f"scenario_{i+1}"
 
@@ -62,7 +62,7 @@ def temp_results_dir(sample_result_data):
 
     yield temp_dir
 
-    # Limpa o diretório
+    # Clean up the directory
     import shutil
 
     shutil.rmtree(temp_dir)
@@ -70,7 +70,7 @@ def temp_results_dir(sample_result_data):
 
 @pytest.fixture
 def temp_single_result(sample_result_data):
-    """Cria um arquivo temporário com resultado único."""
+    """Create a temporary file with a single result."""
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
@@ -84,9 +84,9 @@ def temp_single_result(sample_result_data):
 
 
 def test_plot_single_file(runner, temp_single_result, monkeypatch):
-    """Testa o plot de um arquivo único (comportamento original)."""
+    """Test plotting a single file (original behavior)."""
 
-    # Mock para evitar exibição de gráficos
+    # Mock to avoid showing plots
     def mock_plot_result(*args, **kwargs):
         pass
 
@@ -95,14 +95,14 @@ def test_plot_single_file(runner, temp_single_result, monkeypatch):
     result = runner.invoke(cli, ["plot", temp_single_result])
 
     assert result.exit_code == 0
-    assert "Estatísticas da Simulação" in result.output
-    assert "Máximo de infectados" in result.output
+    assert "Simulation Statistics" in result.output
+    assert "Peak infected" in result.output
 
 
 def test_plot_directory(runner, temp_results_dir, monkeypatch):
-    """Testa o plot de um diretório com múltiplos arquivos."""
+    """Test plotting a directory with multiple files."""
 
-    # Mock para evitar exibição de gráficos
+    # Mock to avoid showing plots
     def mock_compare_results(*args, **kwargs):
         pass
 
@@ -111,13 +111,13 @@ def test_plot_directory(runner, temp_results_dir, monkeypatch):
     result = runner.invoke(cli, ["plot", temp_results_dir])
 
     assert result.exit_code == 0
-    assert "Encontrados 3 arquivos JSON no diretório" in result.output
-    assert "Gerando visualização comparativa de 3 cenários" in result.output
+    assert "Found 3 JSON files in directory" in result.output
+    assert "Generating comparison visualization for 3 scenarios" in result.output
 
 
 def test_plot_with_states_filter(runner, temp_single_result, monkeypatch):
-    """Testa o plot com filtro de estados específicos."""
-    # Mock para capturar os argumentos passados
+    """Test plotting with specific state filters."""
+    # Mock to capture passed arguments
     plot_calls = []
 
     def mock_plot_result(s_vals, i_vals, r_vals, time, title, save_path, states_to_plot):
@@ -125,26 +125,26 @@ def test_plot_with_states_filter(runner, temp_single_result, monkeypatch):
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Testa com apenas infectados
+    # Test with only infected
     result = runner.invoke(cli, ["plot", temp_single_result, "--states", "infected"])
     assert result.exit_code == 0
     assert plot_calls[-1]["states_to_plot"] == {"I"}
 
-    # Testa com infectados e recuperados
+    # Test with infected and recovered
     result = runner.invoke(
         cli, ["plot", temp_single_result, "--states", "infected", "--states", "recovered"]
     )
     assert result.exit_code == 0
     assert plot_calls[-1]["states_to_plot"] == {"I", "R"}
 
-    # Testa com abreviações
+    # Test with abbreviations
     result = runner.invoke(cli, ["plot", temp_single_result, "--states", "s", "--states", "i"])
     assert result.exit_code == 0
     assert plot_calls[-1]["states_to_plot"] == {"S", "I"}
 
 
 def test_plot_directory_separate(runner, temp_results_dir, monkeypatch):
-    """Testa o plot de diretório com gráficos separados."""
+    """Test plotting a directory with separate charts."""
     plot_calls = []
 
     def mock_plot_result(*args, **kwargs):
@@ -155,14 +155,14 @@ def test_plot_directory_separate(runner, temp_results_dir, monkeypatch):
     result = runner.invoke(cli, ["plot", temp_results_dir, "--separate", "--output", "test.png"])
 
     assert result.exit_code == 0
-    assert "Processando 3 arquivos de resultados" in result.output
+    assert "Processing 3 result files" in result.output
     assert len(plot_calls) == 3
-    # Verifica se os nomes dos arquivos de saída são únicos
+    # Verify output filenames are unique
     assert all("scenario_" in str(path) for path in plot_calls if path)
 
 
 def test_plot_invalid_state(runner, temp_single_result, monkeypatch):
-    """Testa o plot com estado inválido."""
+    """Test plotting with an invalid state."""
 
     def mock_plot_result(*args, **kwargs):
         pass
@@ -172,29 +172,29 @@ def test_plot_invalid_state(runner, temp_single_result, monkeypatch):
     result = runner.invoke(cli, ["plot", temp_single_result, "--states", "invalid_state"])
 
     assert result.exit_code == 0
-    assert "Estado inválido ignorado: invalid_state" in result.output
+    assert "Invalid state ignored: invalid_state" in result.output
 
 
 def test_plot_empty_directory(runner):
-    """Testa o plot de um diretório vazio."""
+    """Test plotting an empty directory."""
     with tempfile.TemporaryDirectory() as temp_dir:
         result = runner.invoke(cli, ["plot", temp_dir])
 
         assert result.exit_code != 0
-        assert "Nenhum arquivo JSON encontrado no diretório" in result.output
+        assert "No JSON files found in directory" in result.output
 
 
 def test_plot_nonexistent_path(runner):
-    """Testa o plot com caminho inexistente."""
+    """Test plotting with a nonexistent path."""
     result = runner.invoke(cli, ["plot", "/path/that/does/not/exist"])
 
     assert result.exit_code != 0
-    assert "Caminho não encontrado" in result.output
+    assert "Path not found" in result.output
 
 
 def test_plot_with_error_bars(runner, monkeypatch):
-    """Testa o plot com barras de erro."""
-    # Cria resultado com dados de erro
+    """Test plotting with error bars."""
+    # Create a result with error data
     result_with_error = {
         "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
         "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
@@ -229,9 +229,9 @@ def test_plot_with_error_bars(runner, monkeypatch):
 
 
 def test_load_results_from_directory():
-    """Testa a função auxiliar load_results_from_directory."""
+    """Test the load_results_from_directory helper."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Cria alguns arquivos JSON
+        # Create some JSON files
         for i in range(3):
             data = {
                 "S_val": [0.99],
@@ -245,11 +245,11 @@ def test_load_results_from_directory():
             with open(file_path, "w") as f:
                 json.dump(data, f)
 
-        # Cria um arquivo não-JSON que deve ser ignorado
+        # Create a non-JSON file that should be ignored
         with open(os.path.join(temp_dir, "readme.txt"), "w") as f:
             f.write("This is not a JSON file")
 
-        # Testa a função
+        # Test the function
         results = ResultManager.load_results_from_directory(temp_dir)
 
         assert len(results) == 3
@@ -259,7 +259,7 @@ def test_load_results_from_directory():
 
 
 def test_plot_directory_with_export(runner, temp_results_dir, monkeypatch):
-    """Testa o plot de diretório com exportação adicional."""
+    """Test plotting a directory with additional export."""
 
     def mock_compare_results(*args, **kwargs):
         pass
@@ -269,29 +269,27 @@ def test_plot_directory_with_export(runner, temp_results_dir, monkeypatch):
 
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # Não podemos mockar diretamente ExportManager porque ele é importado no topo
-    # Então vamos apenas testar se o comando é executado sem erros
+    # ExportManager is imported at module level; just verify the command runs
     result = runner.invoke(cli, ["plot", temp_results_dir, "--export", "csv"])
 
-    # O comando deve executar sem erros, mas a exportação real pode falhar
-    # porque estamos trabalhando com múltiplos arquivos
+    # The command should run without errors; actual export may fail with multiple files
     assert result.exit_code == 0
 
 
 def test_visualizer_states_filter():
-    """Testa diretamente as funções do Visualizer com filtro de estados."""
+    """Directly test Visualizer functions with state filters."""
     import matplotlib.pyplot as plt
 
-    # Dados de teste
+    # Test data
     s_vals = np.array([0.99, 0.95, 0.90, 0.85, 0.80])
     i_vals = np.array([0.01, 0.04, 0.05, 0.05, 0.04])
     r_vals = np.array([0.00, 0.01, 0.05, 0.10, 0.16])
     time = np.array([0.0, 2.5, 5.0, 7.5, 10.0])
 
-    # Testa plot_result com diferentes filtros
-    # Como não podemos verificar visualmente, apenas garantimos que não há erros
+    # Test plot_result with different filters
+    # We cannot verify visually; just ensure no errors
 
-    # Todos os estados
+    # All states
     Visualizer.plot_result(
         s_vals,
         i_vals,
@@ -303,31 +301,31 @@ def test_visualizer_states_filter():
     )
     plt.close()
 
-    # Apenas infectados
+    # Only infected
     Visualizer.plot_result(
         s_vals, i_vals, r_vals, time, "Test", save_path="test_i.png", states_to_plot={"I"}
     )
     plt.close()
 
-    # Infectados e recuperados
+    # Infected and recovered
     Visualizer.plot_result(
         s_vals, i_vals, r_vals, time, "Test", save_path="test_ir.png", states_to_plot={"I", "R"}
     )
     plt.close()
 
-    # Remove arquivos de teste se foram criados
+    # Remove test files if created
     for file in ["test_all.png", "test_i.png", "test_ir.png"]:
         if os.path.exists(file):
             os.remove(file)
 
 
 def test_plot_help(runner):
-    """Testa a mensagem de ajuda do comando plot."""
+    """Test plot command help text."""
     result = runner.invoke(cli, ["plot", "--help"])
 
     assert result.exit_code == 0
     assert "--states" in result.output
     assert "--separate" in result.output
-    # Verifica partes da mensagem para evitar problemas de codificação
-    assert "Estados" in result.output and "plotar" in result.output
-    assert "separados" in result.output
+    # Check parts of the message
+    assert "Specific states to plot" in result.output
+    assert "separate charts" in result.output

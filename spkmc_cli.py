@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-SPKMC CLI - Interface de linha de comando para o algoritmo SPKMC
+SPKMC CLI - Command-line interface for the SPKMC algorithm
 
-Esta CLI permite executar simulações do algoritmo Shortest Path Kinetic Monte Carlo (SPKMC)
-para modelagem de propagação de epidemias em redes, utilizando o modelo SIR
+This CLI runs simulations of the Shortest Path Kinetic Monte Carlo (SPKMC) algorithm
+to model epidemic spread on networks using the SIR model
 (Susceptible-Infected-Recovered).
 
-Autor: SPKMC Team
+Author: SPKMC Team
 """
 
 from spkmc.cli.commands import cli

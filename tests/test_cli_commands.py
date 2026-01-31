@@ -1,7 +1,7 @@
 """
-Testes para os comandos da CLI do SPKMC.
+Tests for SPKMC CLI commands.
 
-Este módulo contém testes para os comandos da interface de linha de comando do SPKMC.
+This module contains tests for SPKMC CLI commands.
 """
 
 import json
@@ -18,18 +18,18 @@ from spkmc.io.results import ResultManager
 
 @pytest.fixture
 def runner():
-    """Fixture para o CliRunner do Click."""
+    """Fixture for Click's CliRunner."""
     return CliRunner()
 
 
 @pytest.fixture
 def temp_result_file():
-    """Fixture para criar um arquivo de resultados temporário."""
-    # Cria um arquivo temporário
+    """Fixture to create a temporary results file."""
+    # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
-    # Dados de exemplo
+    # Sample data
     result = {
         "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
         "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
@@ -45,19 +45,19 @@ def temp_result_file():
         },
     }
 
-    # Salva os dados no arquivo
+    # Save data to the file
     with open(path, "w") as f:
         json.dump(result, f)
 
     yield path
 
-    # Remove o arquivo após o teste
+    # Remove the file after the test
     if os.path.exists(path):
         os.remove(path)
 
 
 def test_cli_version(runner):
-    """Testa o comando de versão da CLI."""
+    """Test the CLI version command."""
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
     # Version format: "spkmc, version X.Y.Z" or "spkmc, version X.Y.Z.devN"
@@ -65,84 +65,83 @@ def test_cli_version(runner):
 
 
 def test_run_command_help(runner):
-    """Testa a ajuda do comando run."""
+    """Test the help text for the run command."""
     result = runner.invoke(cli, ["run", "--help"])
     assert result.exit_code == 0
-    assert "Executar uma simula" in result.output
+    assert "Run an SPKMC simulation" in result.output
 
 
 def test_plot_command_help(runner):
-    """Testa a ajuda do comando plot."""
+    """Test the help text for the plot command."""
     result = runner.invoke(cli, ["plot", "--help"])
     assert result.exit_code == 0
-    assert "Visualizar resultados" in result.output
+    assert "Visualize results" in result.output
 
 
 def test_info_command_help(runner):
-    """Testa a ajuda do comando info."""
+    """Test the help text for the info command."""
     result = runner.invoke(cli, ["info", "--help"])
     assert result.exit_code == 0
-    assert "Mostrar informa" in result.output
+    assert "Show information" in result.output
 
 
 def test_compare_command_help(runner):
-    """Testa a ajuda do comando compare."""
+    """Test the help text for the compare command."""
     result = runner.invoke(cli, ["compare", "--help"])
     assert result.exit_code == 0
-    assert "Comparar resultados" in result.output
+    assert "Compare results" in result.output
 
 
 def test_run_command_invalid_network(runner):
-    """Testa o comando run com um tipo de rede inválido."""
+    """Test run command with an invalid network type."""
     result = runner.invoke(cli, ["run", "--network-type", "invalid"])
     assert result.exit_code != 0
-    assert "Tipo de rede inválido" in result.output
+    assert "Invalid network type" in result.output
 
 
 def test_run_command_invalid_distribution(runner):
-    """Testa o comando run com um tipo de distribuição inválido."""
+    """Test run command with an invalid distribution type."""
     result = runner.invoke(cli, ["run", "--dist-type", "invalid"])
     assert result.exit_code != 0
-    assert "Tipo de distribuição inválido" in result.output
+    assert "Invalid distribution type" in result.output
 
 
 def test_run_command_invalid_shape(runner):
-    """Testa o comando run com um valor de shape inválido."""
+    """Test run command with an invalid shape value."""
     result = runner.invoke(cli, ["run", "--shape", "-1.0"])
     assert result.exit_code != 0
-    assert "deve ser positivo" in result.output
+    assert "must be positive" in result.output
 
 
 def test_run_command_invalid_nodes(runner):
-    """Testa o comando run com um número de nós inválido."""
+    """Test run command with an invalid node count."""
     result = runner.invoke(cli, ["run", "--nodes", "0"])
     assert result.exit_code != 0
-    assert "deve ser um inteiro positivo" in result.output
+    assert "positive integer" in result.output
 
 
 def test_run_command_invalid_initial_perc(runner):
-    """Testa o comando run com uma porcentagem inicial inválida."""
+    """Test run command with an invalid initial percentage."""
     result = runner.invoke(cli, ["run", "--initial-perc", "1.5"])
     assert result.exit_code != 0
-    assert "porcentagem deve estar entre 0 e 1" in result.output
+    assert "percentage must be between 0 and 1" in result.output
 
 
 def test_plot_command_nonexistent_file(runner):
-    """Testa o comando plot com um arquivo inexistente."""
+    """Test plot command with a nonexistent file."""
     result = runner.invoke(cli, ["plot", "nonexistent.json"])
     assert result.exit_code != 0
-    # Error message: "Caminho não encontrado" or "não existe"
-    assert "não encontrado" in result.output or "não existe" in result.output
+    assert "Path not found" in result.output
 
 
 def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
-    """Testa o comando plot com um arquivo válido."""
+    """Test plot command with a valid file."""
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Mock para a função load_result
+    # Mock load_result
     def mock_load_result(file_path):
         return {
             "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
@@ -159,79 +158,77 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
             },
         }
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.io.results import ResultManager
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
     monkeypatch.setattr(ResultManager, "load_result", mock_load_result)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(cli, ["plot", temp_result_file])
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
 
 
 def test_info_command_list(runner, monkeypatch):
-    """Testa o comando info com a opção --list."""
+    """Test info command with the --list option."""
 
-    # Mock para a função list_results
+    # Mock list_results
     def mock_list_results():
         return ["file1.json", "file2.json"]
 
-    # Aplica o mock
+    # Apply the mock
     monkeypatch.setattr(ResultManager, "list_results", mock_list_results)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(cli, ["info", "--list"])
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
     assert "file1.json" in result.output
     assert "file2.json" in result.output
 
 
 def test_info_command_with_file(runner, temp_result_file):
-    """Testa o comando info com um arquivo válido."""
-    # Executa o comando
+    """Test info command with a valid file."""
+    # Run the command
     result = runner.invoke(cli, ["info", "--result-file", temp_result_file])
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
-    assert "Parâmetros da Simulação" in result.output
+    assert "Simulation Parameters" in result.output
     assert "network_type: er" in result.output.lower()
 
 
-@pytest.mark.skip(
-    reason="Teste desativado temporariamente devido a problemas com o parâmetro --simple"
-)
+@pytest.mark.skip(reason="Test temporarily disabled due to issues with the --simple parameter")
 def test_compare_command_with_files(runner, temp_result_file, monkeypatch):
-    """Testa o comando compare com arquivos válidos."""
+    """Test compare command with valid files."""
 
-    # Mock para a função compare_results para evitar a exibição do gráfico
+    # Mock compare_results to avoid showing the plot
     def mock_compare_results(*args, **kwargs):
         pass
 
-    # Aplica o mock
+    # Apply the mock
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(
         cli, ["compare", temp_result_file, temp_result_file, "--labels", "Test1", "Test2"]
     )
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
 
 
 def test_create_time_steps():
-    """Testa a função create_time_steps."""
+    """Test the create_time_steps function."""
     from spkmc.cli.commands import create_time_steps
 
-    # Testa com valores válidos
+    # Test with valid values
     t_max = 10.0
     steps = 5
     time_steps = create_time_steps(t_max, steps)
@@ -244,20 +241,20 @@ def test_create_time_steps():
 
 
 def test_batch_command_help(runner):
-    """Testa a ajuda do comando batch."""
+    """Test the help text for the batch command."""
     result = runner.invoke(cli, ["batch", "--help"])
     assert result.exit_code == 0
-    assert "Executar múltiplos cenários de simulação" in result.output
+    assert "Run multiple simulation scenarios" in result.output
 
 
 @pytest.fixture
 def temp_batch_file():
-    """Fixture para criar um arquivo de cenários temporário."""
-    # Cria um arquivo temporário
+    """Fixture to create a temporary scenarios file."""
+    # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
-    # Dados de exemplo com dois cenários
+    # Sample data with two scenarios
     scenarios = [
         {
             "network_type": "er",
@@ -289,47 +286,47 @@ def temp_batch_file():
         },
     ]
 
-    # Salva os dados no arquivo
+    # Save data to the file
     with open(path, "w") as f:
         json.dump(scenarios, f)
 
     yield path
 
-    # Remove o arquivo após o teste
+    # Remove the file after the test
     if os.path.exists(path):
         os.remove(path)
 
 
 @pytest.fixture
 def temp_invalid_batch_file():
-    """Fixture para criar um arquivo de cenários inválido."""
-    # Cria um arquivo temporário
+    """Fixture to create an invalid scenarios file."""
+    # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
-    # Dados inválidos (não é uma lista)
+    # Invalid data (not a list)
     invalid_data = {"network_type": "er", "dist_type": "gamma"}
 
-    # Salva os dados no arquivo
+    # Save data to the file
     with open(path, "w") as f:
         json.dump(invalid_data, f)
 
     yield path
 
-    # Remove o arquivo após o teste
+    # Remove the file after the test
     if os.path.exists(path):
         os.remove(path)
 
 
 @pytest.fixture
 def temp_output_dir():
-    """Fixture para criar um diretório de saída temporário."""
-    # Cria um diretório temporário
+    """Fixture to create a temporary output directory."""
+    # Create a temporary directory
     output_dir = tempfile.mkdtemp()
 
     yield output_dir
 
-    # Remove o diretório após o teste
+    # Remove the directory after the test
     import shutil
 
     if os.path.exists(output_dir):
@@ -337,9 +334,9 @@ def temp_output_dir():
 
 
 def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_dir, monkeypatch):
-    """Testa o comando batch com parâmetros padrão."""
+    """Test batch command with default parameters."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -348,15 +345,15 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
             "has_error": False,
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Mock para a função compare_results para evitar a exibição do gráfico comparativo
+    # Mock compare_results to avoid showing the comparison plot
     def mock_compare_results(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
@@ -364,7 +361,7 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(
         cli,
         [
@@ -372,15 +369,14 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
             temp_batch_file,
             "--output-dir",
             temp_output_dir,
-            "--no-plot",  # Evita tentar mostrar gráficos
+            "--no-plot",  # Avoid trying to show plots
         ],
     )
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
-    assert "Carregados 2 cenários para execução" in result.output
-    # Message changed to "Execução concluída. X cenário(s) processado(s)."
-    assert "Execução concluída" in result.output
+    assert "Loaded 2 scenarios for execution" in result.output
+    assert "Execution completed" in result.output
 
     # Note: With mocked run_simulation, files may not be created in temp_output_dir
     # The batch command creates files in its own output directory structure
@@ -388,33 +384,33 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
 
 
 def test_batch_command_with_invalid_json(runner, temp_invalid_batch_file, monkeypatch):
-    """Testa o comando batch com um arquivo JSON inválido."""
-    # Mock para a função json.load para simular um erro de formato
+    """Test batch command with an invalid JSON file."""
+    # Mock json.load to simulate a format error
     original_load = json.load
 
     def mock_load(f):
         data = original_load(f)
-        # Verificamos se é um dicionário (não uma lista) e lançamos um erro
+        # If it's a dict (not a list), raise an error
         if isinstance(data, dict):
-            raise ValueError("O arquivo de cenários deve conter uma lista de objetos JSON.")
+            raise ValueError("The scenarios file must contain a list of JSON objects.")
         return data
 
-    # Aplica o mock
+    # Apply the mock
     monkeypatch.setattr(json, "load", mock_load)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(cli, ["batch", temp_invalid_batch_file])
 
-    # Verifica o resultado
-    assert "O arquivo de cenários deve conter uma lista" in result.output
+    # Verify the result
+    assert "The scenarios file must contain a list of JSON objects" in result.output
 
 
 def test_batch_command_with_multiple_scenarios(
     runner, temp_batch_file, temp_output_dir, monkeypatch
 ):
-    """Testa o comando batch com múltiplos cenários."""
+    """Test batch command with multiple scenarios."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -423,18 +419,18 @@ def test_batch_command_with_multiple_scenarios(
             "has_error": False,
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando
+    # Run the command
     result = runner.invoke(
         cli,
         [
@@ -442,24 +438,23 @@ def test_batch_command_with_multiple_scenarios(
             temp_batch_file,
             "--output-dir",
             temp_output_dir,
-            "--no-plot",  # Evita tentar mostrar gráficos
+            "--no-plot",  # Avoid trying to show plots
         ],
     )
 
-    # Verifica o resultado - with mocked run_simulation, the command should complete
+    # Verify the result - with mocked run_simulation, the command should complete
     # successfully even though files may be created in a different location
     assert result.exit_code == 0
-    assert "Carregados 2 cenários para execução" in result.output
-    # Message is now "Cenários processados: 2" in the summary
-    assert "Cenários processados: 2" in result.output
+    assert "Loaded 2 scenarios for execution" in result.output
+    assert "Scenarios processed: 2" in result.output
 
 
 def test_batch_command_respects_output_options(
     runner, temp_batch_file, temp_output_dir, monkeypatch
 ):
-    """Testa se o comando batch respeita as opções de saída."""
+    """Test that batch command respects output options."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -468,18 +463,18 @@ def test_batch_command_respects_output_options(
             "has_error": False,
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Mock para a função compare_results para criar o arquivo de comparação
+    # Mock compare_results to create the comparison file
     def mock_compare_results(results, labels, title, output_path=None):
-        # Cria um arquivo vazio no caminho especificado
+        # Create an empty file at the specified path
         if output_path:
             with open(output_path, "w") as f:
                 f.write("Mock comparison plot")
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
@@ -487,10 +482,10 @@ def test_batch_command_respects_output_options(
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # Define um prefixo para os arquivos de saída
+    # Define a prefix for output files
     prefix = "test_prefix_"
 
-    # Executa o comando com opções específicas
+    # Run the command with specific options
     result = runner.invoke(
         cli,
         [
@@ -500,50 +495,50 @@ def test_batch_command_respects_output_options(
             temp_output_dir,
             "--prefix",
             prefix,
-            "--compare",  # Gera visualização comparativa
-            "--save-plot",  # Salva os gráficos
-            "--no-plot",  # Não mostra os gráficos na tela
+            "--compare",  # Generate comparison visualization
+            "--save-plot",  # Save plots
+            "--no-plot",  # Do not show plots on screen
         ],
     )
 
-    # Verifica o resultado - with mocked run_simulation, the command should complete
+    # Verify the result - with mocked run_simulation, the command should complete
     # successfully even though actual files may not be created in the mocked environment
     assert result.exit_code == 0
-    assert "Execução concluída" in result.output
+    assert "Execution completed" in result.output
 
 
 def test_simple_parameter_recognition(runner):
-    """Testa se o parâmetro --simple é reconhecido pelo CLI."""
+    """Test that the --simple parameter is recognized by the CLI."""
     result = runner.invoke(cli, ["--simple", "--help"])
     assert result.exit_code == 0
-    assert "Gerar arquivo de resultado simplificado em CSV" in result.output
+    assert "Generate simplified CSV result file" in result.output
 
 
 @pytest.fixture
 def temp_output_file():
-    """Fixture para criar um arquivo de saída temporário."""
-    # Cria um arquivo temporário
+    """Fixture to create a temporary output file."""
+    # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
     yield path
 
-    # Remove o arquivo após o teste
+    # Remove the file after the test
     if os.path.exists(path):
         os.remove(path)
 
-    # Remove também o arquivo CSV simplificado, se existir
+    # Also remove simplified CSV file if present
     csv_path = path.replace(".json", "_simple.csv")
     if os.path.exists(csv_path):
         os.remove(csv_path)
 
 
 def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch):
-    """Testa o comando run com o parâmetro --simple."""
+    """Test run command with the --simple parameter."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
-        # Criar arrays com o mesmo tamanho que time_steps (100 pontos)
+        # Create arrays with the same size as time_steps (100 points)
         size = 100
         s_vals = np.ones(size) * 0.99
         i_vals = np.ones(size) * 0.01
@@ -552,7 +547,7 @@ def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch
         i_err = np.ones(size) * 0.001
         r_err = np.ones(size) * 0.001
 
-        # Modificar alguns valores para simular a dinâmica
+        # Modify some values to simulate dynamics
         for idx in range(1, size):
             factor = min(idx / 20, 1.0)
             s_vals[idx] = max(0.8, 0.99 - 0.19 * factor)
@@ -573,18 +568,18 @@ def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch
             "R_err": r_err,
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando com o parâmetro --simple
+    # Run the command with --simple
     result = runner.invoke(
         cli,
         [
@@ -592,35 +587,35 @@ def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch
             "run",
             "--output",
             temp_output_file,
-            "--no-plot",  # Evita tentar mostrar gráficos
+            "--no-plot",  # Avoid trying to show plots
         ],
     )
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
-    assert "Modo de saída simplificada em CSV ativado" in result.output
-    assert "Simulação concluída com sucesso" in result.output
-    # Simple mode message: "Modo de saída simplificada em CSV ativado"
+    assert "Simplified CSV output mode enabled" in result.output
+    assert "Simulation completed successfully" in result.output
+    # Simple mode message: "Simplified CSV output mode enabled"
     assert (
-        "Modo de saída simplificada em CSV ativado" in result.output
-        or "Execução concluída" in result.output
+        "Simplified CSV output mode enabled" in result.output
+        or "Execution completed" in result.output
     )
 
-    # Verifica se o arquivo CSV simplificado foi criado
+    # Verify the simplified CSV file was created
     csv_path = temp_output_file.replace(".json", "_simple.csv")
     assert os.path.exists(csv_path)
 
-    # Verifica o conteúdo do arquivo CSV simplificado
+    # Verify the simplified CSV file content
     with open(csv_path, "r") as f:
         lines = f.readlines()
-        assert len(lines) == 100  # 100 pontos de tempo
+        assert len(lines) == 100  # 100 time points
 
-        # Verifica o formato de cada linha (tempo,infectados,erro)
+        # Verify the format of each line (time, infected, error)
         for line in lines:
             parts = line.strip().split(",")
             assert len(parts) == 3
 
-            # Verifica se os valores são números válidos
+            # Verify values are valid numbers
             time_val = float(parts[0])
             infected_val = float(parts[1])
             error_val = float(parts[2])
@@ -631,9 +626,9 @@ def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch
 
 
 def test_batch_command_with_simple_parameter(runner, temp_batch_file, temp_output_dir, monkeypatch):
-    """Testa o comando batch com o parâmetro --simple."""
+    """Test batch command with the --simple parameter."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -645,18 +640,18 @@ def test_batch_command_with_simple_parameter(runner, temp_batch_file, temp_outpu
             "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando com o parâmetro --simple
+    # Run the command with --simple
     result = runner.invoke(
         cli,
         [
@@ -665,22 +660,22 @@ def test_batch_command_with_simple_parameter(runner, temp_batch_file, temp_outpu
             temp_batch_file,
             "--output-dir",
             temp_output_dir,
-            "--no-plot",  # Evita tentar mostrar gráficos
+            "--no-plot",  # Avoid trying to show plots
         ],
     )
 
-    # Verifica o resultado - with mocked run_simulation, the command should complete
+    # Verify the result - with mocked run_simulation, the command should complete
     # successfully. File creation tests require non-mocked execution.
     assert result.exit_code == 0
-    assert "Modo de saída simplificada em CSV ativado" in result.output
-    assert "Carregados 2 cenários para execução" in result.output
-    assert "Execução concluída" in result.output
+    assert "Simplified CSV output mode enabled" in result.output
+    assert "Loaded 2 scenarios for execution" in result.output
+    assert "Execution completed" in result.output
 
 
 def test_simple_csv_format(runner, temp_output_file, monkeypatch):
-    """Testa se o CSV simplificado contém as 3 colunas: tempo, infectados, erro."""
+    """Test that the simplified CSV contains 3 columns: time, infected, error."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -692,18 +687,18 @@ def test_simple_csv_format(runner, temp_output_file, monkeypatch):
             "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando com o parâmetro --simple
+    # Run the command with --simple
     result = runner.invoke(
         cli,
         [
@@ -711,46 +706,46 @@ def test_simple_csv_format(runner, temp_output_file, monkeypatch):
             "run",
             "--output",
             temp_output_file,
-            "--no-plot",  # Evita tentar mostrar gráficos
+            "--no-plot",  # Avoid trying to show plots
         ],
     )
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
 
-    # Verifica se o arquivo CSV simplificado foi criado
+    # Verify the simplified CSV file was created
     csv_path = temp_output_file.replace(".json", "_simple.csv")
     assert os.path.exists(csv_path)
 
-    # Lê o arquivo CSV e verifica seu conteúdo
+    # Read the CSV file and verify its contents
     with open(csv_path, "r") as f:
         lines = f.readlines()
 
-        # Verifica se há pelo menos uma linha
+        # Verify there is at least one line
         assert len(lines) > 0
 
-        # Verifica se cada linha tem exatamente 3 colunas (tempo, infectados, erro)
+        # Verify each line has exactly 3 columns (time, infected, error)
         for line in lines:
             parts = line.strip().split(",")
             assert len(parts) == 3
 
-            # Verifica se os valores são números válidos
+            # Verify values are valid numbers
             time_val = float(parts[0])
             infected_val = float(parts[1])
             error_val = float(parts[2])
 
-            # Verifica se os valores estão dentro dos intervalos esperados
-            assert 0 <= time_val <= 10.0  # tempo entre 0 e 10
-            assert 0 <= infected_val <= 1.0  # infectados entre 0 e 1
-            assert 0 <= error_val <= 1.0  # erro entre 0 e 1
+            # Verify values are within expected ranges
+            assert 0 <= time_val <= 10.0  # time between 0 and 10
+            assert 0 <= infected_val <= 1.0  # infected between 0 and 1
+            assert 0 <= error_val <= 1.0  # error between 0 and 1
 
 
 def test_simple_parameter_after_command(runner, temp_output_file, monkeypatch):
-    """Testa se o parâmetro --simple funciona quando usado após o comando."""
+    """Test that --simple works when used after the command."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
-        # Criar arrays com o mesmo tamanho que time_steps (100 pontos)
+        # Create arrays with the same size as time_steps (100 points)
         size = 100
         s_vals = np.ones(size) * 0.99
         i_vals = np.ones(size) * 0.01
@@ -759,7 +754,7 @@ def test_simple_parameter_after_command(runner, temp_output_file, monkeypatch):
         i_err = np.ones(size) * 0.001
         r_err = np.ones(size) * 0.001
 
-        # Modificar alguns valores para simular a dinâmica
+        # Modify some values to simulate dynamics
         for idx in range(1, size):
             factor = min(idx / 20, 1.0)
             s_vals[idx] = max(0.8, 0.99 - 0.19 * factor)
@@ -780,49 +775,49 @@ def test_simple_parameter_after_command(runner, temp_output_file, monkeypatch):
             "R_err": r_err,
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando com o parâmetro --simple após o comando
+    # Run the command with --simple after the command
     result = runner.invoke(
         cli,
-        ["run", "--output", temp_output_file, "--no-plot", "--simple"],  # Parâmetro após o comando
+        ["run", "--output", temp_output_file, "--no-plot", "--simple"],  # Parameter after command
     )
 
-    # Verifica o resultado
+    # Verify the result
     assert result.exit_code == 0
-    assert "Simulação concluída com sucesso" in result.output
-    # Simple mode outputs "Resultados simplificados salvos em CSV" when saving
-    assert "simplificados" in result.output.lower() or "simple" in result.output.lower()
+    assert "Simulation completed successfully" in result.output
+    # Simple mode outputs \"Simplified results saved to CSV\" when saving
+    assert "simplified" in result.output.lower() or "simple" in result.output.lower()
 
-    # Verifica se o arquivo CSV simplificado foi criado
+    # Verify the simplified CSV file was created
     csv_path = temp_output_file.replace(".json", "_simple.csv")
     assert os.path.exists(csv_path)
 
-    # Verifica o conteúdo do arquivo CSV simplificado
+    # Verify the simplified CSV file content
     with open(csv_path, "r") as f:
         lines = f.readlines()
-        assert len(lines) == 100  # 100 pontos de tempo
+        assert len(lines) == 100  # 100 time points
 
-        # Verifica o formato de cada linha (tempo,infectados,erro)
+        # Verify the format of each line (time, infected, error)
         for line in lines:
             parts = line.strip().split(",")
             assert len(parts) == 3
 
-            # Verifica se os valores são números válidos
+            # Verify values are valid numbers
             time_val = float(parts[0])
             infected_val = float(parts[1])
             error_val = float(parts[2])
 
-            # Verifica se os valores estão dentro dos intervalos esperados
+            # Verify values are within expected ranges
             assert 0 <= time_val <= 10.0
             assert 0 <= infected_val <= 1.0
             assert 0 <= error_val <= 1.0
@@ -831,9 +826,9 @@ def test_simple_parameter_after_command(runner, temp_output_file, monkeypatch):
 def test_batch_command_with_simple_parameter_after_command(
     runner, temp_batch_file, temp_output_dir, monkeypatch
 ):
-    """Testa o comando batch com o parâmetro --simple após o comando."""
+    """Test batch command with --simple after the command."""
 
-    # Mock para a função run_simulation para evitar a execução real
+    # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
         return {
             "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
@@ -845,18 +840,18 @@ def test_batch_command_with_simple_parameter_after_command(
             "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
         }
 
-    # Mock para a função plot_result para evitar a exibição do gráfico
+    # Mock plot_result to avoid showing the plot
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Aplica os mocks
+    # Apply mocks
     from spkmc.core.simulation import SPKMC
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Executa o comando com o parâmetro --simple após o comando
+    # Run the command with --simple after the command
     result = runner.invoke(
         cli,
         [
@@ -865,12 +860,12 @@ def test_batch_command_with_simple_parameter_after_command(
             "--output-dir",
             temp_output_dir,
             "--no-plot",
-            "--simple",  # Parâmetro após o comando
+            "--simple",  # Parameter after the command
         ],
     )
 
-    # Verifica o resultado - with mocked run_simulation, the command should complete
+    # Verify the result - with mocked run_simulation, the command should complete
     # successfully. File creation tests require non-mocked execution.
     assert result.exit_code == 0
-    assert "Carregados 2 cenários para execução" in result.output
-    assert "Execução concluída" in result.output
+    assert "Loaded 2 scenarios for execution" in result.output
+    assert "Execution completed" in result.output

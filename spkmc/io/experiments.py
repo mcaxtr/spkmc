@@ -1,8 +1,8 @@
 """
-Gerenciamento de experimentos para o algoritmo SPKMC.
+Experiment management for the SPKMC algorithm.
 
-Este módulo contém funções e classes para o gerenciamento de experimentos,
-incluindo descoberta, carregamento, validação e execução de experimentos.
+This module contains functions and classes for managing experiments,
+including discovery, loading, validation, and execution.
 """
 
 import json
@@ -15,11 +15,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 @dataclass
 class PlotConfig:
-    """Configuração para plotagem de resultados."""
+    """Configuration for plotting results."""
 
     title: Optional[str] = None
-    xlabel: str = "Tempo"
-    ylabel: str = "Proporção de Indivíduos"
+    xlabel: str = "Time"
+    ylabel: str = "Proportion of Individuals"
     legend_position: str = "best"
     figsize: Tuple[float, float] = (10, 6)
     colors: Dict[str, str] = field(default_factory=lambda: {"S": "blue", "I": "red", "R": "green"})
@@ -31,19 +31,19 @@ class PlotConfig:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PlotConfig":
         """
-        Cria PlotConfig a partir de um dicionário.
+        Create PlotConfig from a dictionary.
 
         Args:
-            data: Dicionário com configurações de plot
+            data: Dictionary with plot settings
 
         Returns:
-            Instância de PlotConfig
+            PlotConfig instance
         """
         figsize = data.get("figsize", [10, 6])
         return cls(
             title=data.get("title"),
-            xlabel=data.get("xlabel", "Tempo"),
-            ylabel=data.get("ylabel", "Proporção de Indivíduos"),
+            xlabel=data.get("xlabel", "Time"),
+            ylabel=data.get("ylabel", "Proportion of Individuals"),
             legend_position=data.get("legend_position", "best"),
             figsize=tuple(figsize) if isinstance(figsize, list) else figsize,
             colors=data.get("colors", {"S": "blue", "I": "red", "R": "green"}),
@@ -56,7 +56,7 @@ class PlotConfig:
 
 @dataclass
 class Experiment:
-    """Representa um experimento SPKMC."""
+    """Represents an SPKMC experiment."""
 
     name: str
     path: Path
@@ -67,17 +67,17 @@ class Experiment:
 
     @property
     def results_dir(self) -> Path:
-        """Retorna o caminho do diretório de resultados."""
+        """Return the results directory path."""
         return self.path / "results"
 
     @property
     def has_results(self) -> bool:
-        """Verifica se o experimento tem resultados."""
+        """Check whether the experiment has results."""
         return self.results_dir.exists() and any(self.results_dir.glob("*.json"))
 
     @property
     def result_count(self) -> int:
-        """Retorna o número de arquivos de resultado."""
+        """Return the number of result files."""
         if not self.results_dir.exists():
             return 0
         # Count all JSON files except comparison metadata
@@ -86,28 +86,28 @@ class Experiment:
         )
 
     def clean_results(self) -> None:
-        """Remove todos os resultados do experimento."""
+        """Remove all results from the experiment."""
         if self.results_dir.exists():
             shutil.rmtree(self.results_dir)
 
     def ensure_results_dir(self) -> Path:
-        """Garante que o diretório de resultados exista."""
+        """Ensure the results directory exists."""
         self.results_dir.mkdir(parents=True, exist_ok=True)
         return self.results_dir
 
 
 class ExperimentManager:
-    """Gerencia experimentos SPKMC."""
+    """Manage SPKMC experiments."""
 
     DEFAULT_EXPERIMENTS_DIR = "experiments"
     DATA_FILE_NAME = "data.json"
 
     def __init__(self, experiments_dir: Optional[str] = None):
         """
-        Inicializa o gerenciador de experimentos.
+        Initialize the experiment manager.
 
         Args:
-            experiments_dir: Diretório base para experimentos (opcional)
+            experiments_dir: Base directory for experiments (optional)
         """
         self.experiments_dir = Path(
             experiments_dir
@@ -117,10 +117,10 @@ class ExperimentManager:
 
     def list_experiments(self) -> List[Experiment]:
         """
-        Lista todos os experimentos disponíveis.
+        List all available experiments.
 
         Returns:
-            Lista de objetos Experiment
+            List of Experiment objects
         """
         experiments: List[Experiment] = []
 
@@ -142,32 +142,32 @@ class ExperimentManager:
 
     def load_experiment(self, experiment_name: str) -> Experiment:
         """
-        Carrega um experimento pelo nome.
+        Load an experiment by name.
 
         Args:
-            experiment_name: Nome do diretório do experimento
+            experiment_name: Experiment directory name
 
         Returns:
-            Objeto Experiment
+            Experiment object
 
         Raises:
-            FileNotFoundError: Se o experimento não existir
-            ValueError: Se o data.json for inválido
+            FileNotFoundError: If the experiment does not exist
+            ValueError: If data.json is invalid
         """
         exp_path = self.experiments_dir / experiment_name
         data_file = exp_path / self.DATA_FILE_NAME
 
         if not data_file.exists():
-            raise FileNotFoundError(f"Experimento não encontrado: {experiment_name}")
+            raise FileNotFoundError(f"Experiment not found: {experiment_name}")
 
         with open(data_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # Validate required fields
         if "name" not in data:
-            raise ValueError(f"Campo 'name' obrigatório em {data_file}")
+            raise ValueError(f"Required field 'name' missing in {data_file}")
         if "scenarios" not in data or not data["scenarios"]:
-            raise ValueError(f"Campo 'scenarios' obrigatório e não pode estar vazio em {data_file}")
+            raise ValueError(f"Required field 'scenarios' missing or empty in {data_file}")
 
         # Filter out comment objects from scenarios
         scenarios = [s for s in data["scenarios"] if not s.get("_comment")]
@@ -212,13 +212,13 @@ class ExperimentManager:
 
     def get_experiment_by_index(self, index: int) -> Optional[Experiment]:
         """
-        Obtém um experimento pelo índice na lista.
+        Get an experiment by index in the list.
 
         Args:
-            index: Índice do experimento (1-based)
+            index: Experiment index (1-based)
 
         Returns:
-            Objeto Experiment ou None se não encontrado
+            Experiment object or None if not found
         """
         experiments = self.list_experiments()
         if 1 <= index <= len(experiments):
@@ -227,13 +227,13 @@ class ExperimentManager:
 
     def experiment_exists(self, experiment_name: str) -> bool:
         """
-        Verifica se um experimento existe.
+        Check whether an experiment exists.
 
         Args:
-            experiment_name: Nome do diretório do experimento
+            experiment_name: Experiment directory name
 
         Returns:
-            True se o experimento existir
+            True if the experiment exists
         """
         exp_path = self.experiments_dir / experiment_name
         data_file = exp_path / self.DATA_FILE_NAME

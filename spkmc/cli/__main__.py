@@ -1,8 +1,8 @@
 """
-Ponto de entrada principal para a CLI do SPKMC.
+Main entry point for the SPKMC CLI.
 
-Este módulo é o ponto de entrada para a CLI quando executada como um módulo Python.
-Exemplo de uso: python -m spkmc.cli
+This module is the entry point for the CLI when run as a Python module.
+Example usage: python -m spkmc.cli
 """
 
 from spkmc.cli.commands import cli

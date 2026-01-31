@@ -1,8 +1,8 @@
 """
-Funções auxiliares otimizadas com Numba para o algoritmo SPKMC.
+Numba-optimized helper functions for the SPKMC algorithm.
 
-Este módulo contém funções auxiliares que são otimizadas usando a biblioteca Numba
-para melhorar o desempenho das simulações SPKMC.
+This module contains helper functions optimized with Numba to improve the
+performance of SPKMC simulations.
 
 The parallel implementation pre-generates random numbers before parallel loops
 to avoid thread-safety issues with RNG inside prange.

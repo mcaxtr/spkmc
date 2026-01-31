@@ -1,5 +1,5 @@
 """
-Pacote de testes para o SPKMC.
+Test package for SPKMC.
 
-Este pacote contém testes para os diferentes módulos do SPKMC.
+This package contains tests for the different SPKMC modules.
 """

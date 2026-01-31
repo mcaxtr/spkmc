@@ -1,351 +1,199 @@
-# Exemplos de Uso da CLI do SPKMC
+# SPKMC CLI Usage Examples
 
-Este documento contém exemplos detalhados de uso da interface de linha de comando (CLI) do SPKMC para diferentes cenários de simulação.
+This document contains detailed examples of how to use the SPKMC command-line interface (CLI) for different simulation scenarios.
 
-## Instalação
+## Installation
 
-Antes de usar a CLI, instale as dependências:
+Before using the CLI, install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Ou instale o pacote em modo de desenvolvimento:
+Or install the package in development mode:
 
 ```bash
 pip install -e .
 ```
 
-## Simulação Básica com Rede Erdos-Renyi e Distribuição Gamma
+## Basic Simulation with an Erdos-Renyi Network and Gamma Distribution
 
-A rede Erdos-Renyi é um modelo de rede aleatória onde cada par de nós tem a mesma probabilidade de estar conectado. A distribuição Gamma é frequentemente usada para modelar tempos de recuperação em epidemias.
+An Erdos-Renyi network is a random network model where each pair of nodes has the same probability of being connected. The Gamma distribution is often used to model recovery times in epidemics.
 
-### Exemplo Básico
+### Basic Example
 
 ```bash
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50
 ```
 
-Este comando executa uma simulação com:
-- Rede Erdos-Renyi (`-n er`)
-- Distribuição Gamma (`-d gamma`) com parâmetros de forma (`--shape 2.0`) e escala (`--scale 1.0`)
-- 1000 nós (`-N 1000`)
-- Grau médio de 10 (`--k-avg 10`)
-- 50 amostras por execução (`-s 50`)
-- Parâmetro lambda para tempos de infecção (`--lambda 1.0`)
+This command runs a simulation with:
+- Erdos-Renyi network (`-n er`)
+- Gamma distribution (`-d gamma`) with shape (`--shape 2.0`) and scale (`--scale 1.0`) parameters
+- 1000 nodes (`-N 1000`)
+- Average degree of 10 (`--k-avg 10`)
+- 50 samples per run (`-s 50`)
+- Lambda parameter for infection times (`--lambda 1.0`)
 
-### Variações de Parâmetros
+### Parameter Variations
 
-#### Variando o Tamanho da Rede
+#### Varying Network Size
 
 ```bash
-# Rede pequena (500 nós)
+# Small network (500 nodes)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 500 --k-avg 10 -s 50
 
-# Rede média (2000 nós)
+# Medium network (2000 nodes)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 2000 --k-avg 10 -s 50
 
-# Rede grande (5000 nós)
+# Large network (5000 nodes)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 5000 --k-avg 10 -s 50
 ```
 
-#### Variando o Grau Médio
+#### Varying Average Degree
 
 ```bash
-# Grau médio baixo (5)
+# Low average degree (5)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 5 -s 50
 
-# Grau médio médio (15)
+# Medium average degree (15)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 15 -s 50
 
-# Grau médio alto (30)
+# High average degree (30)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 30 -s 50
 ```
 
-#### Variando os Parâmetros da Distribuição Gamma
+#### Varying Gamma Distribution Parameters
 
 ```bash
-# Forma baixa (1.0)
+# Low shape (1.0)
 python spkmc_cli.py run -n er -d gamma --shape 1.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
 
-# Forma alta (3.0)
+# High shape (3.0)
 python spkmc_cli.py run -n er -d gamma --shape 3.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
 
-# Escala baixa (0.5)
+# Low scale (0.5)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 0.5 -N 1000 --k-avg 10 -s 50
 
-# Escala alta (2.0)
+# High scale (2.0)
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 2.0 -N 1000 --k-avg 10 -s 50
 ```
 
-### Salvando Resultados
+### Saving Results
 
 ```bash
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/er_gamma.json
 ```
 
-## Simulação com Rede Complexa e Distribuição Exponencial
+## Simulation with a Complex Network and Exponential Distribution
 
-As redes complexas seguem uma distribuição de grau de lei de potência, o que as torna mais realistas para modelar muitas redes do mundo real. A distribuição exponencial é frequentemente usada para modelar tempos de eventos aleatórios.
+Complex networks follow a power-law degree distribution, which makes them more realistic for modeling many real-world networks. The exponential distribution is often used to model times of random events.
 
-### Exemplo Básico
+### Basic Example
 
 ```bash
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 ```
 
-Este comando executa uma simulação com:
-- Rede Complexa (`-n cn`)
-- Distribuição Exponencial (`-d exponential`) com parâmetros mu (`--mu 1.0`) e lambda (`--lambda 1.0`)
-- Expoente da lei de potência (`--exponent 2.5`)
-- 1000 nós (`-N 1000`)
-- Grau médio de 10 (`--k-avg 10`)
-- 50 amostras por execução (`-s 50`)
+This command runs a simulation with:
+- Complex network (`-n cn`)
+- Exponential distribution (`-d exponential`) with mu (`--mu 1.0`) and lambda (`--lambda 1.0`) parameters
+- Power-law exponent (`--exponent 2.5`)
+- 1000 nodes (`-N 1000`)
+- Average degree of 10 (`--k-avg 10`)
+- 50 samples per run (`-s 50`)
 
-### Variações de Parâmetros
+### Parameter Variations
 
-#### Variando o Expoente da Lei de Potência
+#### Varying the Power-Law Exponent
 
 ```bash
-# Expoente baixo (2.1) - mais hubs, cauda mais longa
+# Low exponent (2.1) - more hubs, longer tail
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.1 -N 1000 --k-avg 10 -s 50
 
-# Expoente médio (2.5) - típico de muitas redes reais
+# Medium exponent (2.5) - typical for many real networks
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
-# Expoente alto (3.0) - menos hubs, mais homogêneo
+# High exponent (3.0) - fewer hubs, more homogeneous
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 3.0 -N 1000 --k-avg 10 -s 50
 ```
 
-#### Variando os Parâmetros da Distribuição Exponencial
+#### Varying Exponential Distribution Parameters
 
 ```bash
-# Mu baixo (0.5) - recuperação mais lenta
+# Low mu (0.5) - slower recovery
 python spkmc_cli.py run -n cn -d exponential --mu 0.5 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
-# Mu alto (2.0) - recuperação mais rápida
+# High mu (2.0) - faster recovery
 python spkmc_cli.py run -n cn -d exponential --mu 2.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
-# Lambda baixo (0.5) - infecção mais lenta
+# Low lambda (0.5) - slower infection
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 0.5 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
-# Lambda alto (2.0) - infecção mais rápida
+# High lambda (2.0) - faster infection
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 2.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 ```
 
-### Salvando Resultados
+### Saving Results
 
 ```bash
 python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50 -o results/cn_exponential.json
 ```
 
-## Simulação com Rede Regular Aleatória (RRN)
+## Simulation with a Random Regular Network (RRN)
 
-A rede regular aleatória é uma rede onde todos os nós têm exatamente o mesmo número de conexões (grau), mas essas conexões são distribuídas aleatoriamente. Isso cria uma rede homogênea em termos de grau, mas com propriedades aleatórias.
+A random regular network is one where all nodes have exactly the same number of connections (degree), but those connections are distributed randomly. This creates a degree-homogeneous network with random structure.
 
-### Exemplo Básico
+### Basic Example
 
 ```bash
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 --lambda 1.0 -N 1000 --k-avg 10 -s 50
 ```
 
-Este comando executa uma simulação com:
-- Rede Regular Aleatória (`-n rrn`)
-- Distribuição Gamma (`-d gamma`) com parâmetros de forma (`--shape 2.0`) e escala (`--scale 1.0`)
-- 1000 nós (`-N 1000`)
-- Grau regular de 10 (`--k-avg 10`) - deve ser um número par
-- 50 amostras por execução (`-s 50`)
-- Parâmetro lambda para tempos de infecção (`--lambda 1.0`)
+This command runs a simulation with:
+- Random regular network (`-n rrn`)
+- Gamma distribution (`-d gamma`) with shape (`--shape 2.0`) and scale (`--scale 1.0`) parameters
+- 1000 nodes (`-N 1000`)
+- Regular degree of 10 (`--k-avg 10`) - must be an even number
+- 50 samples per run (`-s 50`)
+- Lambda parameter for infection times (`--lambda 1.0`)
 
-### Variações de Parâmetros
+### Parameter Variations
 
-#### Variando o Grau Regular
+#### Varying Regular Degree
 
 ```bash
-# Grau regular baixo (4)
+# Low regular degree (4)
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 4 -s 50
 
-# Grau regular médio (10)
+# Medium regular degree (10)
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
 
-# Grau regular alto (20)
+# High regular degree (20)
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 20 -s 50
 ```
 
-### Salvando Resultados
+### Saving Results
 
 ```bash
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/rrn_gamma.json
 ```
 
-## Comparação entre Diferentes Tipos de Redes
+## Comparison Between Different Network Types
 
-Para comparar diferentes tipos de redes, execute simulações para cada tipo e depois use o comando `compare`.
+To compare different network types, run simulations for each type and then use the `compare` command.
 
-### Executando Simulações para Diferentes Redes
+### Running Simulations for Different Networks
 
 ```bash
-# Rede Erdos-Renyi
+# Erdos-Renyi network
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/er_gamma.json
 
-# Rede Complexa
+# Complex network
 python spkmc_cli.py run -n cn -d gamma --shape 2.0 --scale 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50 -o results/cn_gamma.json
 
-# Grafo Completo
+# Complete graph
 python spkmc_cli.py run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -o results/cg_gamma.json
 
-# Rede Regular Aleatória
+# Random regular network
 python spkmc_cli.py run -n rrn -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50 -o results/rrn_gamma.json
 ```
-
-### Comparando os Resultados
-
-```bash
-python spkmc_cli.py compare results/er_gamma.json results/cn_gamma.json results/cg_gamma.json results/rrn_gamma.json -l "Erdos-Renyi" "Rede Complexa" "Grafo Completo" "Rede Regular Aleatória" -o plots/network_comparison.png
-```
-
-## Visualização de Resultados Salvos
-
-Após executar simulações e salvar os resultados, você pode visualizá-los posteriormente.
-
-### Visualização Básica
-
-```bash
-python spkmc_cli.py plot results/er_gamma.json
-```
-
-### Visualização com Barras de Erro
-
-```bash
-python spkmc_cli.py plot results/er_gamma.json --with-error
-```
-
-### Salvando o Gráfico
-
-```bash
-python spkmc_cli.py plot results/er_gamma.json -o plots/er_gamma_plot.png
-```
-
-### Obtendo Informações sobre os Resultados
-
-```bash
-python spkmc_cli.py info -f results/er_gamma.json
-```
-
-## Exportação de Resultados para Diferentes Formatos
-
-Os resultados são salvos em formato JSON por padrão, mas você pode convertê-los para outros formatos usando scripts Python.
-
-### Exemplo de Conversão para CSV
-
-Crie um script Python como este:
-
-```python
-import json
-import csv
-import sys
-
-def json_to_csv(json_file, csv_file):
-    # Carregar os dados JSON
-    with open(json_file, 'r') as f:
-        data = json.load(f)
-
-    # Extrair os dados
-    time = data.get('time', [])
-    S = data.get('S_val', [])
-    I = data.get('I_val', [])
-    R = data.get('R_val', [])
-
-    # Escrever no CSV
-    with open(csv_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Time', 'Susceptible', 'Infected', 'Recovered'])
-        for t, s, i, r in zip(time, S, I, R):
-            writer.writerow([t, s, i, r])
-
-    print(f"Dados convertidos de {json_file} para {csv_file}")
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python json_to_csv.py <arquivo_json> <arquivo_csv>")
-        sys.exit(1)
-
-    json_to_csv(sys.argv[1], sys.argv[2])
-```
-
-Execute o script:
-
-```bash
-python json_to_csv.py results/er_gamma.json results/er_gamma.csv
-```
-
-### Exemplo de Conversão para Excel
-
-Crie um script Python como este (requer a biblioteca `pandas` e `openpyxl`):
-
-```python
-import json
-import pandas as pd
-import sys
-
-def json_to_excel(json_file, excel_file):
-    # Carregar os dados JSON
-    with open(json_file, 'r') as f:
-        data = json.load(f)
-
-    # Extrair os dados
-    time = data.get('time', [])
-    S = data.get('S_val', [])
-    I = data.get('I_val', [])
-    R = data.get('R_val', [])
-
-    # Criar DataFrame
-    df = pd.DataFrame({
-        'Time': time,
-        'Susceptible': S,
-        'Infected': I,
-        'Recovered': R
-    })
-
-    # Extrair metadados
-    metadata = data.get('metadata', {})
-
-    # Criar um escritor Excel
-    with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-        # Escrever os dados
-        df.to_excel(writer, sheet_name='Data', index=False)
-
-        # Escrever os metadados
-        pd.DataFrame([metadata]).to_excel(writer, sheet_name='Metadata', index=False)
-
-    print(f"Dados convertidos de {json_file} para {excel_file}")
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Uso: python json_to_excel.py <arquivo_json> <arquivo_excel>")
-        sys.exit(1)
-
-    json_to_excel(sys.argv[1], sys.argv[2])
-```
-
-Execute o script:
-
-```bash
-python json_to_excel.py results/er_gamma.json results/er_gamma.xlsx
-```
-
-## Ajuda
-
-### Mostrar Ajuda Geral
-
-```bash
-python spkmc_cli.py --help
-```
-
-### Mostrar Ajuda para um Comando Específico
-
-```bash
-python spkmc_cli.py run --help
-python spkmc_cli.py plot --help
-python spkmc_cli.py info --help
-python spkmc_cli.py compare --help

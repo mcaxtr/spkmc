@@ -1,139 +1,139 @@
-# Arquitetura do SPKMC
+# SPKMC Architecture
 
-Este documento descreve a arquitetura do pacote SPKMC, explicando os principais componentes e suas interações.
+This document describes the architecture of the SPKMC package, explaining the main components and their interactions.
 
-## Visão Geral
+## Overview
 
-O SPKMC (Shortest Path Kinetic Monte Carlo) é um algoritmo para simulação de propagação de epidemias em redes, utilizando o modelo SIR (Susceptible-Infected-Recovered). A implementação é baseada em classes e interfaces que permitem a simulação em diferentes tipos de redes e com diferentes distribuições de probabilidade.
+SPKMC (Shortest Path Kinetic Monte Carlo) is an algorithm for simulating epidemic spread on networks using the SIR (Susceptible-Infected-Recovered) model. The implementation is based on classes and interfaces that enable simulation across different network types and probability distributions.
 
-## Estrutura do Projeto
+## Project Structure
 
 ```
 spkmc/
-├── cli/                # Módulo da CLI
+├── cli/                # CLI module
 │   ├── __init__.py
-│   ├── __main__.py     # Ponto de entrada para python -m spkmc.cli
-│   ├── commands.py     # Comandos da CLI
-│   └── validators.py   # Validadores para parâmetros da CLI
-├── core/               # Módulo principal
+│   ├── __main__.py     # Entry point for python -m spkmc.cli
+│   ├── commands.py     # CLI commands
+│   └── validators.py   # CLI parameter validators
+├── core/               # Core module
 │   ├── __init__.py
-│   ├── distributions.py # Classes de distribuição
-│   ├── networks.py     # Classes de redes
-│   └── simulation.py   # Classe SPKMC
-├── io/                 # Módulo de entrada/saída
+│   ├── distributions.py # Distribution classes
+│   ├── networks.py     # Network classes
+│   └── simulation.py   # SPKMC class
+├── io/                 # Input/output module
 │   ├── __init__.py
-│   └── results.py      # Gerenciamento de resultados
-├── utils/              # Utilitários
+│   └── results.py      # Results management
+├── utils/              # Utilities
 │   ├── __init__.py
-│   └── numba_utils.py  # Funções otimizadas com Numba
-└── visualization/      # Módulo de visualização
+│   └── numba_utils.py  # Numba-optimized functions
+└── visualization/      # Visualization module
     ├── __init__.py
-    └── plots.py        # Funções de visualização
+    └── plots.py        # Visualization functions
 ```
 
-## Componentes Principais
+## Main Components
 
-### Módulo `core`
+### `core` Module
 
-O módulo `core` contém as classes principais do algoritmo SPKMC.
+The `core` module contains the main classes for the SPKMC algorithm.
 
 #### `distributions.py`
 
-Este arquivo contém as classes de distribuição de probabilidade usadas no SPKMC:
+This file contains probability distribution classes used in SPKMC:
 
-- `Distribution`: Classe abstrata que define a interface para as distribuições.
-- `GammaDistribution`: Implementação da distribuição Gamma.
-- `ExponentialDistribution`: Implementação da distribuição Exponencial.
-- `create_distribution`: Função para criar uma instância de distribuição com base no tipo e parâmetros.
+- `Distribution`: Abstract class defining the distribution interface.
+- `GammaDistribution`: Gamma distribution implementation.
+- `ExponentialDistribution`: Exponential distribution implementation.
+- `create_distribution`: Factory function to create a distribution instance based on type and parameters.
 
 #### `networks.py`
 
-Este arquivo contém as classes para criação e manipulação de redes:
+This file contains classes for creating and manipulating networks:
 
-- `NetworkFactory`: Classe para criar diferentes tipos de redes (Erdos-Renyi, Complexa, Grafo Completo).
+- `NetworkFactory`: Creates different network types (Erdos-Renyi, Complex, Complete Graph).
 
 #### `simulation.py`
 
-Este arquivo contém a implementação principal do algoritmo SPKMC:
+This file contains the main SPKMC algorithm implementation:
 
-- `SPKMC`: Classe principal que implementa o algoritmo SPKMC.
+- `SPKMC`: Core class that implements the SPKMC algorithm.
 
-### Módulo `utils`
+### `utils` Module
 
-O módulo `utils` contém funções auxiliares para o algoritmo SPKMC.
+The `utils` module contains helper functions for the SPKMC algorithm.
 
 #### `numba_utils.py`
 
-Este arquivo contém funções otimizadas com Numba para melhorar o desempenho das simulações:
+This file contains Numba-optimized functions to improve simulation performance:
 
-- `gamma_sampling`: Amostragem da distribuição Gamma.
-- `get_weight_exponential`: Amostragem da distribuição Exponencial.
-- `compute_infection_times_gamma`: Cálculo dos tempos de infecção usando a distribuição Gamma.
-- `compute_infection_times_exponential`: Cálculo dos tempos de infecção usando a distribuição Exponencial.
-- `get_states`: Cálculo dos estados (S, I, R) para cada nó em um determinado tempo.
-- `calculate`: Cálculo da proporção de indivíduos em cada estado para cada passo de tempo.
+- `gamma_sampling`: Gamma distribution sampling.
+- `get_weight_exponential`: Exponential distribution sampling.
+- `compute_infection_times_gamma`: Infection time calculation using Gamma distribution.
+- `compute_infection_times_exponential`: Infection time calculation using Exponential distribution.
+- `get_states`: Compute states (S, I, R) for each node at a given time.
+- `calculate`: Compute the proportion of individuals in each state for each time step.
 
-### Módulo `io`
+### `io` Module
 
-O módulo `io` contém classes para gerenciamento de entrada e saída de dados.
+The `io` module contains classes for input/output data management.
 
 #### `results.py`
 
-Este arquivo contém classes para gerenciamento de resultados de simulações:
+This file contains classes for managing simulation results:
 
-- `ResultManager`: Classe para salvar e carregar resultados de simulações.
+- `ResultManager`: Save and load simulation results.
 
-### Módulo `visualization`
+### `visualization` Module
 
-O módulo `visualization` contém classes para visualização de resultados.
+The `visualization` module contains classes for visualizing results.
 
 #### `plots.py`
 
-Este arquivo contém classes para visualização de resultados de simulações:
+This file contains visualization helpers:
 
-- `Visualizer`: Classe para visualização de resultados.
+- `Visualizer`: Result visualization utilities.
 
-### Módulo `cli`
+### `cli` Module
 
-O módulo `cli` contém a implementação da interface de linha de comando.
+The `cli` module implements the command-line interface.
 
 #### `commands.py`
 
-Este arquivo contém os comandos da CLI:
+This file contains CLI commands:
 
-- `cli`: Grupo principal de comandos.
-- `run`: Comando para executar uma simulação.
-- `plot`: Comando para visualizar resultados.
-- `info`: Comando para mostrar informações sobre simulações salvas.
-- `compare`: Comando para comparar resultados de múltiplas simulações.
+- `cli`: Main command group.
+- `run`: Run a simulation.
+- `plot`: Visualize results.
+- `info`: Show information about saved simulations.
+- `compare`: Compare results from multiple simulations.
 
 #### `validators.py`
 
-Este arquivo contém validadores para os parâmetros da CLI:
+This file contains CLI parameter validators:
 
-- `validate_percentage`: Validador para garantir que o valor seja uma porcentagem válida.
-- `validate_positive`: Validador para garantir que o valor seja positivo.
-- `validate_positive_int`: Validador para garantir que o valor seja um inteiro positivo.
-- `validate_network_type`: Validador para garantir que o tipo de rede seja válido.
-- `validate_distribution_type`: Validador para garantir que o tipo de distribuição seja válido.
+- `validate_percentage`: Validate a percentage value.
+- `validate_positive`: Validate a positive value.
+- `validate_positive_int`: Validate a positive integer.
+- `validate_network_type`: Validate the network type.
+- `validate_distribution_type`: Validate the distribution type.
 
-## Fluxo de Execução
+## Execution Flow
 
-1. O usuário cria uma instância de distribuição (`GammaDistribution` ou `ExponentialDistribution`).
-2. O usuário cria uma instância de `SPKMC` com a distribuição.
-3. O usuário cria uma rede usando `NetworkFactory`.
-4. O usuário executa a simulação usando os métodos da classe `SPKMC`.
-5. O usuário visualiza os resultados usando `Visualizer`.
-6. O usuário salva os resultados usando `ResultManager`.
+1. The user creates a distribution instance (`GammaDistribution` or `ExponentialDistribution`).
+2. The user creates an `SPKMC` instance with the distribution.
+3. The user creates a network using `NetworkFactory`.
+4. The user runs the simulation using methods on `SPKMC`.
+5. The user visualizes results using `Visualizer`.
+6. The user saves results using `ResultManager`.
 
-## Otimizações
+## Optimizations
 
-O SPKMC utiliza a biblioteca Numba para otimizar as funções críticas do algoritmo. As funções otimizadas estão no arquivo `numba_utils.py` e são decoradas com `@njit` ou `@njit(parallel=True)` para paralelização.
+SPKMC uses Numba to optimize critical functions. Optimized functions live in `numba_utils.py` and are decorated with `@njit` or `@njit(parallel=True)` for parallelization.
 
-## Interface de Linha de Comando
+## Command-Line Interface
 
-A CLI do SPKMC permite executar simulações, visualizar resultados e obter informações diretamente do terminal. A CLI é implementada usando a biblioteca Click e está no módulo `cli`.
+The SPKMC CLI allows running simulations, visualizing results, and retrieving information directly from the terminal. The CLI is implemented using Click in the `cli` module.
 
-## Extensibilidade
+## Extensibility
 
-O SPKMC é projetado para ser extensível. Novas distribuições podem ser adicionadas implementando a classe abstrata `Distribution`. Novos tipos de redes podem ser adicionados implementando novos métodos na classe `NetworkFactory`.
+SPKMC is designed to be extensible. New distributions can be added by implementing the abstract `Distribution` class. New network types can be added by implementing new methods in `NetworkFactory`.

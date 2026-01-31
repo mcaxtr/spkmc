@@ -1,8 +1,8 @@
 """
-Comandos da CLI do SPKMC.
+SPKMC CLI commands.
 
-Este módulo contém os comandos da interface de linha de comando para o algoritmo SPKMC,
-incluindo comandos para executar simulações, visualizar resultados e obter informações.
+This module contains command-line interface commands for the SPKMC algorithm,
+including commands to run simulations, visualize results, and display information.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 from spkmc.io.experiments import Experiment, ExperimentManager, PlotConfig
 from spkmc.io.results import NumpyJSONEncoder
 
-# Constantes para valores padrão
+# Constants for default values
 DEFAULT_N = 1000
 DEFAULT_K_AVG = 10
 DEFAULT_SAMPLES = 50
@@ -79,13 +79,13 @@ DEFAULT_EXPONENT = 2.5
 
 def display_experiments_menu(experiments: List[Experiment]) -> Optional[int]:
     """
-    Exibe um menu interativo para seleção de experimento com navegação por setas.
+    Display an interactive menu to select an experiment with arrow navigation.
 
     Args:
-        experiments: Lista de experimentos disponíveis
+        experiments: List of available experiments
 
     Returns:
-        Índice do experimento selecionado (1-based) ou None para sair
+        Index of the selected experiment (1-based) or None to exit
     """
     # Custom style for the menu
     custom_style = Style(
@@ -487,19 +487,19 @@ def run_experiment_scenarios(
     force_rerun: bool = False,
 ) -> List[str]:
     """
-    Executa todos os cenários de um experimento com paralelização automática.
+    Run all scenarios in an experiment with automatic parallelization.
 
     Args:
-        experiment: Experimento a ser executado
-        verbose: Mostrar informações detalhadas
-        use_simple: Gerar arquivos CSV simplificados
-        create_zip: Criar arquivos zip com os resultados
-        no_plot: Desativar geração de gráficos
-        save_plot: Salvar gráficos em arquivos
-        force_rerun: Forçar re-execução mesmo se resultados em cache existirem
+        experiment: Experiment to run
+        verbose: Show detailed information
+        use_simple: Generate simplified CSV files
+        create_zip: Create zip archives with results
+        no_plot: Disable plot generation
+        save_plot: Save plots to files
+        force_rerun: Force re-run even if cached results exist
 
     Returns:
-        Lista de caminhos dos arquivos de resultado gerados
+        List of generated result file paths
     """
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -554,10 +554,10 @@ def run_experiment_scenarios(
     # GPU mode: The GPU driver handles time-slicing between processes, so parallel
     # execution is safe. Each process submits work to the GPU queue.
     use_parallel = strategy.scenario_workers > 1 and num_scenarios > 1
-    parallel_label = f"Executando {num_scenarios} cenários ({total_samples} amostras)"
+    parallel_label = f"Running {num_scenarios} scenarios ({total_samples} samples)"
 
     with create_progress_bar(parallel_label, total_samples, verbose) as progress:
-        task = progress.add_task("Processando amostras...", total=total_samples)
+        task = progress.add_task("Processing samples...", total=total_samples)
 
         # Create a callback function to update the progress bar per sample
         def sample_progress_callback(advance: int) -> None:
@@ -650,7 +650,7 @@ def run_experiment_scenarios(
                                 msg += f"completed in {scenario_time:.1f}s"
                                 log_debug(msg)
                         except Exception as e:
-                            log_error(f"Erro no cenário {index+1} ({scenario_label}): {e}")
+                            log_error(f"Error in scenario {index+1} ({scenario_label}): {e}")
                             futures_results[index] = None
             finally:
                 # Stop the consumer thread and drain remaining queue items
@@ -709,7 +709,7 @@ def run_experiment_scenarios(
                     import traceback
 
                     tb = traceback.format_exc()
-                    log_error(f"Erro ao executar cenário {i+1}: {e}")
+                    log_error(f"Error running scenario {i+1}: {e}")
                     # Show file and line number from traceback
                     tb_lines = tb.strip().split("\n")
                     for line in tb_lines:
@@ -728,9 +728,9 @@ def run_experiment_scenarios(
             Visualizer.compare_results_with_config(
                 all_results, all_labels, experiment.plot_config, compare_path
             )
-            log_success(f"Gráfico comparativo salvo em: {compare_path}")
+            log_success(f"Comparison plot saved to: {compare_path}")
         except Exception as e:
-            log_error(f"Erro ao gerar gráfico comparativo: {e}")
+            log_error(f"Error generating comparison plot: {e}")
 
     # Generate AI analysis if available
     if experiment.description and all_results:
@@ -744,58 +744,58 @@ def run_experiment_scenarios(
             verbose=verbose,
         )
         if analysis_path:
-            log_success(f"Análise AI gerada em: {analysis_path}")
+            log_success(f"AI analysis generated at: {analysis_path}")
 
     # Show execution summary
-    log_success(f"Concluído em {execution_time:.1f}s")
+    log_success(f"Completed in {execution_time:.1f}s")
 
     return result_files
 
 
 def create_time_steps(t_max: float, steps: int) -> np.ndarray:
     """
-    Cria o array de passos de tempo.
+    Create the time-step array.
 
     Args:
-        t_max: Tempo máximo de simulação
-        steps: Número de passos de tempo
+        t_max: Maximum simulation time
+        steps: Number of time steps
 
     Returns:
-        Array com os passos de tempo
+        Array with time steps
     """
     result: np.ndarray = np.asarray(np.linspace(0, t_max, steps))
     return result
 
 
-@click.group(help="CLI para o algoritmo SPKMC (Shortest Path Kinetic Monte Carlo)")
+@click.group(help="CLI for the SPKMC algorithm (Shortest Path Kinetic Monte Carlo)")
 @click.version_option(version=__version__, prog_name="spkmc")
-@click.option("--verbose", "-v", is_flag=True, help="Ativar modo verboso para depuração")
-@click.option("--no-color", is_flag=True, help="Desativar cores na saída")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose mode for debugging")
+@click.option("--no-color", is_flag=True, help="Disable colors in output")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 def cli(verbose: bool, no_color: bool, simple: bool) -> None:
-    """Grupo principal de comandos da CLI SPKMC."""
-    # Configura o modo verboso
+    """Main command group for the SPKMC CLI."""
+    # Configure verbose mode
     os.environ["SPKMC_VERBOSE"] = "1" if verbose else "0"
 
     if verbose:
-        log_info("Modo verboso ativado")
+        log_info("Verbose mode enabled")
 
     if no_color:
-        log_info("Cores desativadas na saída")
+        log_info("Colors disabled in output")
 
     if simple:
-        log_info("Modo de saída simplificada em CSV ativado")
+        log_info("Simplified CSV output mode enabled")
 
 
-@cli.command(help="Executar uma simulação SPKMC")
+@cli.command(help="Run an SPKMC simulation")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 @click.option(
     "--network-type",
@@ -804,7 +804,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default="er",
     show_default=True,
     callback=validate_network_type,
-    help="Tipo de rede: er (Erdos-Renyi), cn (Complex), cg (Complete), rrn (Regular)",
+    help="Network type: er (Erdos-Renyi), cn (Complex), cg (Complete), rrn (Regular)",
 )
 @click.option(
     "--dist-type",
@@ -813,7 +813,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default="gamma",
     show_default=True,
     callback=validate_distribution_type,
-    help="Tipo de distribuição: Gamma ou Exponential",
+    help="Distribution type: Gamma or Exponential",
 )
 @click.option(
     "--shape",
@@ -821,7 +821,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_SHAPE,
     show_default=True,
     callback=validate_positive,
-    help="Parâmetro de forma para distribuição Gamma",
+    help="Shape parameter for the Gamma distribution",
 )
 @click.option(
     "--scale",
@@ -829,7 +829,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_SCALE,
     show_default=True,
     callback=validate_positive,
-    help="Parâmetro de escala para distribuição Gamma",
+    help="Scale parameter for the Gamma distribution",
 )
 @click.option(
     "--mu",
@@ -837,7 +837,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_MU,
     show_default=True,
     callback=validate_positive,
-    help="Parâmetro mu para distribuição Exponencial (recuperação)",
+    help="Mu parameter for the Exponential distribution (recovery)",
 )
 @click.option(
     "--lambda",
@@ -846,7 +846,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_LAMBDA,
     show_default=True,
     callback=validate_positive,
-    help="Parâmetro lambda para tempos de infecção",
+    help="Lambda parameter for infection times",
 )
 @click.option(
     "--exponent",
@@ -854,7 +854,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_EXPONENT,
     show_default=True,
     callback=validate_exponent,
-    help="Expoente para redes complexas (CN)",
+    help="Exponent for complex networks (CN)",
 )
 @click.option(
     "--nodes",
@@ -863,7 +863,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_N,
     show_default=True,
     callback=validate_positive_int,
-    help="Número de nós na rede",
+    help="Number of nodes in the network",
 )
 @click.option(
     "--k-avg",
@@ -871,7 +871,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_K_AVG,
     show_default=True,
     callback=validate_positive,
-    help="Grau médio da rede",
+    help="Average degree of the network",
 )
 @click.option(
     "--samples",
@@ -880,7 +880,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_SAMPLES,
     show_default=True,
     callback=validate_positive_int,
-    help="Número de amostras por execução",
+    help="Number of samples per run",
 )
 @click.option(
     "--num-runs",
@@ -889,7 +889,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_NUM_RUNS,
     show_default=True,
     callback=validate_positive_int,
-    help="Número de execuções (para médias)",
+    help="Number of runs (for averages)",
 )
 @click.option(
     "--initial-perc",
@@ -898,7 +898,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_INITIAL_PERC,
     show_default=True,
     callback=validate_percentage,
-    help="Porcentagem inicial de infectados",
+    help="Initial percentage of infected",
 )
 @click.option(
     "--t-max",
@@ -906,7 +906,7 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_T_MAX,
     show_default=True,
     callback=validate_positive,
-    help="Tempo máximo de simulação",
+    help="Maximum simulation time",
 )
 @click.option(
     "--steps",
@@ -914,33 +914,31 @@ def cli(verbose: bool, no_color: bool, simple: bool) -> None:
     default=DEFAULT_STEPS,
     show_default=True,
     callback=validate_positive_int,
-    help="Número de passos de tempo",
+    help="Number of time steps",
 )
 @click.option(
     "--output",
     "-o",
     type=str,
     callback=validate_output_file,
-    help="Caminho para salvar os resultados (opcional)",
+    help="Path to save results (optional)",
 )
 @click.option(
     "--export-format",
     "-e",
     type=click.Choice(["json", "csv", "excel", "md", "html"]),
-    help="Formato para exportação dos resultados (opcional)",
+    help="Format for exporting results (optional)",
 )
-@click.option("--no-plot", is_flag=True, default=False, help="Não exibir o gráfico dos resultados")
-@click.option(
-    "--save-plot", type=str, help="Salvar o gráfico em um arquivo (formato: png, pdf, svg)"
-)
-@click.option("--overwrite", is_flag=True, default=False, help="Sobrescrever resultados existentes")
-@click.option("--zip", is_flag=True, default=False, help="Criar um arquivo zip com os resultados")
+@click.option("--no-plot", is_flag=True, default=False, help="Do not display the results plot")
+@click.option("--save-plot", type=str, help="Save the plot to a file (format: png, pdf, svg)")
+@click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing results")
+@click.option("--zip", is_flag=True, default=False, help="Create a zip file with results")
 @click.option(
     "--verbose",
     "-v",
     is_flag=True,
     default=False,
-    help="Mostrar informações detalhadas durante a simulação",
+    help="Show detailed information during the simulation",
 )
 def run(
     simple: bool,
@@ -966,70 +964,71 @@ def run(
     zip: bool,
     verbose: bool,
 ) -> None:
-    """Executa uma simulação SPKMC com os parâmetros especificados."""
+    """Run an SPKMC simulation with the specified parameters."""
     # Lazy imports for heavy modules
     from spkmc.core.distributions import create_distribution
     from spkmc.core.simulation import SPKMC
     from spkmc.io.export import ExportManager
     from spkmc.visualization.plots import Visualizer
 
-    # Configurar o modo verboso
+    # Configure verbose mode
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
 
-    # Registrar início da simulação
+    # Record simulation start
     start_time = time.time()
     log_debug(
-        f"Iniciando simulação em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", verbose_only=False
+        f"Starting simulation at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        verbose_only=False,
     )
 
-    # Criar a distribuição
+    # Create the distribution
     distribution_params = {"shape": shape, "scale": scale, "mu": mu, "lambda": lambda_val}
     distribution = create_distribution(dist_type, **distribution_params)
     log_debug(
-        f"Distribuição {dist_type.capitalize()} criada com parâmetros: {distribution_params}",
+        f"{dist_type.capitalize()} distribution created with parameters: {distribution_params}",
         verbose_only=True,
     )
 
-    # Criar o simulador
+    # Create the simulator
     simulator = SPKMC(distribution)
 
-    # Criar os passos de tempo
+    # Create time steps
     time_steps = create_time_steps(t_max, steps)
     log_debug(
-        f"Passos de tempo criados: {time_steps[0]} a {time_steps[-1]} ({len(time_steps)} pontos)",
+        f"Time steps created: {time_steps[0]} to {time_steps[-1]} ({len(time_steps)} points)",
         verbose_only=True,
     )
 
-    # Exibir informações da simulação
-    console.print(format_title("Simulação SPKMC"))
-    console.print(format_info("Configuração:"))
+    # Display simulation info
+    console.print(format_title("SPKMC Simulation"))
+    console.print(format_info("Configuration:"))
 
-    # Usar valores diretamente sem aninhamento de funções de formatação
+    # Use direct values without nesting formatting functions
     network_type_upper = network_type.upper()
     dist_type_cap = dist_type.capitalize()
 
-    console.print(f"  {format_param('Rede', network_type_upper)}")
-    console.print(f"  {format_param('Distribuição', dist_type_cap)}")
-    console.print(f"  {format_param('Nós', nodes)}")
+    console.print(f"  {format_param('Network', network_type_upper)}")
+    console.print(f"  {format_param('Distribution', dist_type_cap)}")
+    console.print(f"  {format_param('Nodes', nodes)}")
 
     if network_type in ["er", "cn", "rrn"]:
-        console.print(f"  {format_param('Grau médio', k_avg)}")
+        console.print(f"  {format_param('Average degree', k_avg)}")
 
     if network_type == "cn":
-        console.print(f"  {format_param('Expoente', exponent)}")
+        console.print(f"  {format_param('Exponent', exponent)}")
 
-    console.print(f"  {format_param('Amostras', samples)}")
-    console.print(f"  {format_param('Execuções', num_runs)}")
-    console.print(f"  {format_param('Infectados iniciais', f'{initial_perc*100:.2f}%')}")
-    console.print(f"  {format_param('Tempo máximo', t_max)}")
-    console.print(f"  {format_param('Passos', steps)}")
+    console.print(f"  {format_param('Samples', samples)}")
+    console.print(f"  {format_param('Runs', num_runs)}")
+    console.print(f"  {format_param('Initial infected', f'{initial_perc*100:.2f}%')}")
+    console.print(f"  {format_param('Max time', t_max)}")
+    console.print(f"  {format_param('Steps', steps)}")
 
-    # Iniciar barra de progresso
-    with create_progress_bar("Simulação SPKMC", 1, verbose) as progress:
-        task = progress.add_task("Executando simulação...", total=1)
+    # Start progress bar
+    with create_progress_bar("SPKMC Simulation", 1, verbose) as progress:
+        task = progress.add_task("Running simulation...", total=1)
 
-    # Parâmetros específicos para cada tipo de rede
+    # Network-specific parameters
     simulation_params = {
         "N": nodes,
         "samples": samples,
@@ -1044,19 +1043,19 @@ def run(
     if network_type == "cn":
         simulation_params["exponent"] = exponent
 
-    # Executar a simulação
+    # Run the simulation
     try:
-        log_debug("Iniciando execução da simulação", verbose_only=True)
+        log_debug("Starting simulation run", verbose_only=True)
         result = simulator.run_simulation(
             network_type, time_steps, progress_callback=None, **simulation_params
         )
         progress.update(task, advance=1)
-        log_success("Simulação concluída com sucesso!")
+        log_success("Simulation completed successfully!")
     except Exception as e:
-        log_error(f"Erro durante a simulação: {e}")
+        log_error(f"Error during simulation: {e}")
         return
 
-    # Extrair os resultados (S=Susceptible, I=Infected, R=Recovered in SIR model)
+    # Extract results (S=Susceptible, I=Infected, R=Recovered in SIR model)
     susceptible = result["S_val"]
     infected = result["I_val"]
     recovered = result["R_val"]
@@ -1067,23 +1066,23 @@ def run(
         infected_err = result["I_err"]
         recovered_err = result["R_err"]
 
-    # Calcular estatísticas
+    # Calculate statistics
     max_infected: float = float(np.max(infected))
     max_infected_time = time_steps[np.argmax(infected)]
     final_recovered = recovered[-1]
 
-    # Exibir estatísticas
-    console.print(format_title("Estatísticas da Simulação"))
-    max_inf_str = f"{max_infected:.4f} (em t={max_infected_time:.2f})"
-    console.print(f"  {format_param('Máximo de infectados', max_inf_str)}")
-    console.print(f"  {format_param('Recuperados finais', f'{final_recovered:.4f}')}")
+    # Display statistics
+    console.print(format_title("Simulation Statistics"))
+    max_inf_str = f"{max_infected:.4f} (at t={max_infected_time:.2f})"
+    console.print(f"  {format_param('Peak infected', max_inf_str)}")
+    console.print(f"  {format_param('Final recovered', f'{final_recovered:.4f}')}")
 
-    # Registrar tempo de execução
+    # Record execution time
     end_time = time.time()
     execution_time = end_time - start_time
-    log_debug(f"Tempo de execução: {execution_time:.2f} segundos", verbose_only=False)
+    log_debug(f"Execution time: {execution_time:.2f} seconds", verbose_only=False)
 
-    # Salvar resultados em um arquivo personalizado, se especificado
+    # Save results to a custom file if specified
     if output:
         # Build metadata dict separately to avoid mypy indexed assignment issues
         metadata_dict: Dict[str, Any] = {
@@ -1094,7 +1093,7 @@ def run(
             "execution_time": execution_time,
         }
 
-        # Adicionar parâmetros específicos
+        # Add distribution-specific parameters
         if dist_type == "gamma":
             metadata_dict["shape"] = shape
             metadata_dict["scale"] = scale
@@ -1128,73 +1127,72 @@ def run(
             )
 
         try:
-            # Garantir que o diretório exista
+            # Ensure the directory exists
             os.makedirs(os.path.dirname(output) if os.path.dirname(output) else ".", exist_ok=True)
 
             with open(output, "w") as f:
                 json.dump(output_result, f, indent=2, cls=NumpyJSONEncoder)
-            log_success(f"Resultados salvos em: {output}")
+            log_success(f"Results saved to: {output}")
 
-            # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+            # Check whether --simple was passed globally or locally
             ctx = click.get_current_context()
             parent_simple = ctx.parent.params.get("simple", False) if ctx.parent else False
             use_simple = simple or parent_simple
 
-            # Gerar arquivo CSV simplificado se o parâmetro --simple estiver ativado
+            # Generate simplified CSV if --simple is enabled
             if use_simple:
                 csv_path = output.replace(".json", "_simple.csv")
                 with open(csv_path, "w") as f:
-                    # Dados sem cabeçalho (tempo, infectados, erro)
+                    # Data without header (time, infected, error)
                     for idx, t in enumerate(time_steps):
                         erro = infected_err[idx] if has_error and infected_err is not None else 0.0
                         f.write(f"{t},{infected[idx]},{erro}\n")
 
-                log_success(f"Resultados simplificados salvos em CSV: {csv_path}")
+                log_success(f"Simplified results saved to CSV: {csv_path}")
 
-            # Exportar em formato adicional, se especificado
+            # Export to additional format if specified
             if export_format:
                 export_path = output.replace(".json", f".{export_format}")
                 exported_file = ExportManager.export_results(
                     output_result, export_path, export_format
                 )
-                log_success(
-                    f"Resultados exportados em formato {export_format.upper()}: {exported_file}"
-                )
+                log_success(f"Results exported in {export_format.upper()} format: {exported_file}")
 
-            # Criar arquivo zip com os resultados, se solicitado
+            # Create zip file with results if requested
             if zip:
                 zip_path = output.replace(".json", ".zip")
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                    # Adicionar o arquivo JSON principal
+                    # Add main JSON file
                     zipf.write(output, os.path.basename(output))
 
-                    # Adicionar o arquivo CSV simplificado, se existir
+                    # Add simplified CSV file if present
                     if use_simple and os.path.exists(csv_path):
                         zipf.write(csv_path, os.path.basename(csv_path))
 
-                    # Adicionar o arquivo exportado, se existir
+                    # Add exported file if present
                     if export_format and os.path.exists(export_path):
                         zipf.write(export_path, os.path.basename(export_path))
 
-                    # Adicionar o gráfico, se existir
+                    # Add plot file if present
                     if save_plot and os.path.exists(save_plot):
                         zipf.write(save_plot, os.path.basename(save_plot))
 
-                log_success(f"Resultados compactados em: {zip_path}")
+                log_success(f"Results zipped at: {zip_path}")
         except Exception as e:
-            log_error(f"Erro ao salvar resultados: {e}")
+            log_error(f"Error saving results: {e}")
 
-    # Plotar os resultados, se solicitado
+    # Plot results if requested
     if not no_plot or save_plot:
-        log_info("Gerando visualização...")
+        log_info("Generating visualization...")
 
         title = (
-            f"Simulação SPKMC - Rede {network_type.upper()}, Distribuição {dist_type.capitalize()}"
+            f"SPKMC Simulation - Network {network_type.upper()}, "
+            f"Distribution {dist_type.capitalize()}"
         )
 
         try:
             if save_plot:
-                # Salvar o gráfico em um arquivo
+                # Save plot to a file
                 if has_error:
                     Visualizer.plot_result_with_error(
                         susceptible,
@@ -1211,9 +1209,9 @@ def run(
                     Visualizer.plot_result(
                         susceptible, infected, recovered, time_steps, title, save_plot
                     )
-                log_success(f"Gráfico salvo em: {save_plot}")
+                log_success(f"Plot saved to: {save_plot}")
             elif not no_plot:
-                # Mostrar o gráfico na tela
+                # Show plot on screen
                 if has_error:
                     Visualizer.plot_result_with_error(
                         susceptible,
@@ -1228,14 +1226,14 @@ def run(
                 else:
                     Visualizer.plot_result(susceptible, infected, recovered, time_steps, title)
         except Exception as e:
-            log_error(f"Erro ao gerar visualização: {e}")
+            log_error(f"Error generating visualization: {e}")
 
 
-@cli.command(help="Visualizar resultados de simulações anteriores")
+@cli.command(help="Visualize results from previous simulations")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 @click.argument("path", type=str)
 @click.option(
@@ -1243,45 +1241,45 @@ def run(
     "-e",
     is_flag=True,
     default=False,
-    help="Mostrar barras de erro (se disponíveis)",
+    help="Show error bars (if available)",
 )
 @click.option(
     "--output",
     "-o",
     type=str,
     callback=validate_output_file,
-    help="Salvar o gráfico em um arquivo (opcional)",
+    help="Save the plot to a file (optional)",
 )
 @click.option(
     "--format",
     "-f",
     type=click.Choice(["png", "pdf", "svg", "jpg"]),
     default="png",
-    help="Formato do gráfico (quando usado com --output)",
+    help="Plot format (when used with --output)",
 )
 @click.option(
-    "--dpi", type=int, default=300, help="Resolução do gráfico em DPI (quando usado com --output)"
+    "--dpi", type=int, default=300, help="Plot resolution in DPI (when used with --output)"
 )
 @click.option(
     "--export",
     "-x",
     type=click.Choice(["json", "csv", "excel", "md", "html"]),
-    help="Exportar resultados em formato adicional",
+    help="Export results in an additional format",
 )
 @click.option(
     "--states",
     "-s",
     type=str,
     multiple=True,
-    help="Estados específicos para plotar (ex: --states infected --states recovered)",
+    help="Specific states to plot (e.g., --states infected --states recovered)",
 )
 @click.option(
     "--separate",
     is_flag=True,
     default=False,
-    help="Plotar múltiplos cenários em gráficos separados (quando um diretório é fornecido)",
+    help="Plot multiple scenarios in separate charts (when a directory is provided)",
 )
-@click.option("--verbose", "-v", is_flag=True, default=False, help="Mostrar informações detalhadas")
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Show detailed information")
 def plot(
     simple: bool,
     path: str,
@@ -1294,28 +1292,28 @@ def plot(
     separate: bool,
     verbose: bool,
 ) -> None:
-    """Visualiza os resultados de uma simulação anterior."""
+    """Visualize results from a previous simulation."""
     # Lazy imports for heavy modules
     from spkmc.io.export import ExportManager
     from spkmc.io.results import ResultManager
     from spkmc.visualization.plots import Visualizer
 
-    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+    # Check whether --simple was passed globally or locally
     ctx = click.get_current_context()
     parent_simple = ctx.parent.params.get("simple", False) if ctx.parent else False
     use_simple = simple or parent_simple
-    # Configurar o modo verboso
+    # Configure verbose mode
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
 
-    # Verificar se o caminho é um arquivo ou diretório
+    # Check whether the path is a file or directory
     path_obj = Path(path)
 
     if not path_obj.exists():
-        log_error(f"Caminho não encontrado: {path}")
+        log_error(f"Path not found: {path}")
         ctx.exit(1)
 
-    # Processar estados a serem plotados
+    # Process states to plot
     valid_states = {"susceptible", "infected", "recovered", "s", "i", "r"}
     states_to_plot = set()
 
@@ -1323,7 +1321,7 @@ def plot(
         for state in states:
             state_lower = state.lower()
             if state_lower in valid_states:
-                # Normalizar para S, I, R
+                # Normalize to S, I, R
                 if state_lower in ["susceptible", "s"]:
                     states_to_plot.add("S")
                 elif state_lower in ["infected", "i"]:
@@ -1331,88 +1329,88 @@ def plot(
                 elif state_lower in ["recovered", "r"]:
                     states_to_plot.add("R")
             else:
-                log_warning(f"Estado inválido ignorado: {state}")
+                log_warning(f"Invalid state ignored: {state}")
     else:
-        # Se nenhum estado foi especificado, plotar todos
+        # If no state was specified, plot all
         states_to_plot = {"S", "I", "R"}
 
     if not states_to_plot:
-        log_warning("Nenhum estado válido especificado. Plotando todos os estados.")
+        log_warning("No valid state specified. Plotting all states.")
         states_to_plot = {"S", "I", "R"}
 
-    log_info(f"Estados a serem plotados: {', '.join(sorted(states_to_plot))}")
+    log_info(f"States to plot: {', '.join(sorted(states_to_plot))}")
 
-    # Coletar arquivos de resultados
+    # Collect result files
     result_files = []
 
     if path_obj.is_file():
-        # Arquivo único
+        # Single file
         if path_obj.suffix == ".json":
             result_files.append(path_obj)
         else:
-            log_error(f"Arquivo deve ser JSON: {path}")
+            log_error(f"File must be JSON: {path}")
             ctx.exit(1)
     elif path_obj.is_dir():
-        # Diretório - buscar todos os arquivos JSON
+        # Directory - find all JSON files
         json_files = list(path_obj.glob("*.json"))
         if not json_files:
-            log_error(f"Nenhum arquivo JSON encontrado no diretório: {path}")
+            log_error(f"No JSON files found in directory: {path}")
             ctx.exit(1)
         result_files.extend(json_files)
-        log_info(f"Encontrados {len(result_files)} arquivos JSON no diretório")
+        log_info(f"Found {len(result_files)} JSON files in directory")
     else:
-        log_error(f"Caminho inválido: {path}")
+        log_error(f"Invalid path: {path}")
         ctx.exit(1)
 
-    # Processar arquivos
+    # Process files
     if len(result_files) == 1:
-        # Arquivo único - comportamento original
+        # Single file - original behavior
         result_file = result_files[0]
         try:
-            log_info(f"Carregando resultados de: {result_file}")
+            log_info(f"Loading results from: {result_file}")
             result = ResultManager.load_result(str(result_file))
         except Exception as e:
-            log_error(f"Erro ao carregar o arquivo de resultados: {e}")
+            log_error(f"Error loading results file: {e}")
             ctx.exit(1)
 
-        # Extrair os dados (S=Susceptible, I=Infected, R=Recovered in SIR model)
+        # Extract data (S=Susceptible, I=Infected, R=Recovered in SIR model)
         susceptible = np.array(result.get("S_val", []))
         infected = np.array(result.get("I_val", []))
         recovered = np.array(result.get("R_val", []))
         time_steps = np.array(result.get("time", []))
 
         if not len(susceptible) or not len(infected) or not len(recovered) or not len(time_steps):
-            log_error("Dados incompletos no arquivo de resultados.")
+            log_error("Incomplete data in results file.")
             ctx.exit(1)
 
-        # Calcular estatísticas básicas
+        # Calculate basic statistics
         max_infected: float = float(np.max(infected))
         max_infected_time = time_steps[np.argmax(infected)]
         final_recovered = recovered[-1]
 
-        console.print(format_title("Estatísticas da Simulação"))
-        max_inf_str = f"{max_infected:.4f} (em t={max_infected_time:.2f})"
-        console.print(f"  {format_param('Máximo de infectados', max_inf_str)}")
-        console.print(f"  {format_param('Recuperados finais', f'{final_recovered:.4f}')}")
+        console.print(format_title("Simulation Statistics"))
+        max_inf_str = f"{max_infected:.4f} (at t={max_infected_time:.2f})"
+        console.print(f"  {format_param('Peak infected', max_inf_str)}")
+        console.print(f"  {format_param('Final recovered', f'{final_recovered:.4f}')}")
 
-        # Verificar se há dados de erro disponíveis
+        # Check whether error data is available
         has_error = "S_err" in result and "I_err" in result and "R_err" in result
 
-        # Extrair metadados para o título
+        # Extract metadata for the title
         metadata = result.get("metadata", {})
         network_type = metadata.get("network_type", "").upper()
         dist_type = metadata.get("distribution", "").capitalize()
         N = metadata.get("N", "")
 
-        # Exibir metadados
-        console.print(format_title("Metadados da Simulação"))
+        # Display metadata
+        console.print(format_title("Simulation Metadata"))
         for key, value in metadata.items():
             console.print(f"  {format_param(key, value)}")
 
-        title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
+        title = f"SPKMC Simulation - Network {network_type}, Distribution {dist_type}, N={N}"
 
         try:
-            log_info("Gerando visualização...")
+            log_info("Generating visualization...")
 
             if with_error and has_error:
                 susceptible_err = np.array(result.get("S_err", []))
@@ -1432,49 +1430,47 @@ def plot(
                 )
             else:
                 if with_error and not has_error:
-                    log_warning(
-                        "Dados de erro não disponíveis. Mostrando gráfico sem barras de erro."
-                    )
+                    log_warning("Error data not available. Showing plot without error bars.")
                 Visualizer.plot_result(
                     susceptible, infected, recovered, time_steps, title, output, states_to_plot
                 )
 
             if output:
-                log_success(f"Gráfico salvo em: {output}")
+                log_success(f"Plot saved to: {output}")
 
-            # Exportar em formato adicional, se especificado
+            # Export to additional format if specified
             if export:
                 export_path = str(result_file).replace(".json", f".{export}")
                 exported_file = ExportManager.export_results(result, export_path, export)
-                log_success(f"Resultados exportados em formato {export.upper()}: {exported_file}")
+                log_success(f"Results exported in {export.upper()} format: {exported_file}")
 
-            # Gerar arquivo CSV simplificado se o parâmetro --simple estiver ativado
+            # Generate simplified CSV if --simple is enabled
             if use_simple:
                 csv_path = str(result_file).replace(".json", "_simple.csv")
                 with open(csv_path, "w") as f:
-                    # Dados sem cabeçalho (tempo, infectados, erro)
+                    # Data without header (time, infected, error)
                     for idx, t in enumerate(time_steps):
                         erro = infected_err[idx] if has_error and infected_err is not None else 0.0
                         f.write(f"{t},{infected[idx]},{erro}\n")
 
-                log_success(f"Resultados simplificados salvos em CSV: {csv_path}")
+                log_success(f"Simplified results saved to CSV: {csv_path}")
 
         except Exception as e:
-            log_error(f"Erro ao gerar visualização: {e}")
+            log_error(f"Error generating visualization: {e}")
 
     else:
-        # Múltiplos arquivos
-        log_info(f"Processando {len(result_files)} arquivos de resultados...")
+        # Multiple files
+        log_info(f"Processing {len(result_files)} result files...")
 
         if separate:
-            # Plotar cada arquivo separadamente
+            # Plot each file separately
             for i, result_file in enumerate(result_files):
-                log_info(f"Processando arquivo {i+1}/{len(result_files)}: {result_file.name}")
+                log_info(f"Processing file {i+1}/{len(result_files)}: {result_file.name}")
 
                 try:
                     result = ResultManager.load_result(str(result_file))
 
-                    # Extrair os dados (S=Susceptible, I=Infected, R=Recovered in SIR model)
+                    # Extract data (S=Susceptible, I=Infected, R=Recovered in SIR model)
                     susceptible = np.array(result.get("S_val", []))
                     infected = np.array(result.get("I_val", []))
                     recovered = np.array(result.get("R_val", []))
@@ -1486,18 +1482,18 @@ def plot(
                         or not len(recovered)
                         or not len(time_steps)
                     ):
-                        log_warning(f"Dados incompletos em {result_file.name}, pulando...")
+                        log_warning(f"Incomplete data in {result_file.name}, skipping...")
                         continue
 
-                    # Verificar se há dados de erro
+                    # Check whether error data is available
                     has_error = "S_err" in result and "I_err" in result and "R_err" in result
 
-                    # Extrair metadados
+                    # Extract metadata
                     metadata = result.get("metadata", {})
 
-                    title = f"Simulação SPKMC - {result_file.stem}"
+                    title = f"SPKMC Simulation - {result_file.stem}"
 
-                    # Determinar nome do arquivo de saída
+                    # Determine output file name
                     if output:
                         base_output = Path(output)
                         output_file = (
@@ -1535,14 +1531,14 @@ def plot(
                         )
 
                     if output_file:
-                        log_success(f"Gráfico salvo em: {output_file}")
+                        log_success(f"Plot saved to: {output_file}")
 
                 except Exception as e:
-                    log_error(f"Erro ao processar {result_file.name}: {e}")
+                    log_error(f"Error processing {result_file.name}: {e}")
                     continue
 
         else:
-            # Plotar todos os arquivos em um único gráfico comparativo
+            # Plot all files in a single comparison chart
             results_data = []
             labels = []
 
@@ -1550,46 +1546,48 @@ def plot(
                 try:
                     result = ResultManager.load_result(str(result_file))
 
-                    # Verificar se tem os dados necessários
+                    # Check required data
                     if all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
                         results_data.append(result)
                         labels.append(result_file.stem)
                     else:
-                        log_warning(f"Dados incompletos em {result_file.name}, pulando...")
+                        log_warning(f"Incomplete data in {result_file.name}, skipping...")
 
                 except Exception as e:
-                    log_error(f"Erro ao carregar {result_file.name}: {e}")
+                    log_error(f"Error loading {result_file.name}: {e}")
                     continue
 
             if not results_data:
-                log_error("Nenhum arquivo válido encontrado para plotar.")
+                log_error("No valid file found to plot.")
                 ctx.exit(1)
 
             try:
-                log_info(f"Gerando visualização comparativa de {len(results_data)} cenários...")
+                log_info(
+                    f"Generating comparison visualization for {len(results_data)} scenarios..."
+                )
 
-                title = f"Comparação de Simulações SPKMC - {path_obj.name}"
+                title = f"SPKMC Simulation Comparison - {path_obj.name}"
                 Visualizer.compare_results(results_data, labels, title, output, states_to_plot)
 
                 if output:
-                    log_success(f"Gráfico comparativo salvo em: {output}")
+                    log_success(f"Comparison plot saved to: {output}")
 
             except Exception as e:
-                log_error(f"Erro ao gerar visualização comparativa: {e}")
+                log_error(f"Error generating comparison visualization: {e}")
 
 
-@cli.command(help="Mostrar informações sobre simulações salvas")
+@cli.command(help="Show information about saved simulations")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 @click.option(
     "--result-file",
     "-f",
     type=str,
     callback=validate_file_exists,
-    help="Arquivo de resultados específico (opcional)",
+    help="Specific results file (optional)",
 )
 @click.option(
     "--list",
@@ -1597,22 +1595,22 @@ def plot(
     "list_files",
     is_flag=True,
     default=False,
-    help="Listar todos os arquivos de resultados disponíveis",
+    help="List all available results files",
 )
 @click.option(
     "--export",
     "-e",
     type=click.Choice(["json", "csv", "excel", "md", "html"]),
-    help="Exportar informações em formato específico",
+    help="Export information in a specific format",
 )
 @click.option(
     "--output",
     "-o",
     type=str,
     callback=validate_output_file,
-    help="Caminho para salvar a exportação (usado com --export)",
+    help="Path to save the export (used with --export)",
 )
-@click.option("--verbose", "-v", is_flag=True, default=False, help="Mostrar informações detalhadas")
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Show detailed information")
 def info(
     simple: bool,
     result_file: Optional[str],
@@ -1621,28 +1619,28 @@ def info(
     output: Optional[str],
     verbose: bool,
 ) -> None:
-    """Mostra informações sobre simulações salvas."""
+    """Show information about saved simulations."""
     # Lazy imports for heavy modules
     from spkmc.io.export import ExportManager
     from spkmc.io.results import ResultManager
 
-    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+    # Check whether --simple was passed globally or locally
     ctx = click.get_current_context()
     parent_simple = ctx.parent.params.get("simple", False) if ctx.parent else False
     use_simple = simple or parent_simple
-    # Configurar o modo verboso
+    # Configure verbose mode
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
 
     if list_files:
         files = ResultManager.list_results()
         if not files:
-            log_info("Nenhum arquivo de resultados encontrado.")
+            log_info("No results files found.")
             return
 
-        console.print(format_title("Arquivos de Resultados Disponíveis"))
+        console.print(format_title("Available Results Files"))
 
-        # Criar uma tabela formatada
+        # Create a formatted table
         data = []
         for i, file in enumerate(files, 1):
             # Extrair metadados do caminho
@@ -1653,33 +1651,33 @@ def info(
 
             data.append(
                 {
-                    "Índice": i,
-                    "Arquivo": os.path.basename(file),
-                    "Rede": network,
-                    "Distribuição": dist,
-                    "Nós": nodes,
+                    "Index": i,
+                    "File": os.path.basename(file),
+                    "Network": network,
+                    "Distribution": dist,
+                    "Nodes": nodes,
                 }
             )
 
-        print_rich_table(data, "Resultados Disponíveis")
+        print_rich_table(data, "Available Results")
         return
 
     if not result_file:
-        log_error("Especifique um arquivo de resultados ou use --list para ver os disponíveis.")
+        log_error("Specify a results file or use --list to see available files.")
         return
 
-    # Carregar os resultados
+    # Load results
     try:
-        log_info(f"Carregando resultados de: {result_file}")
+        log_info(f"Loading results from: {result_file}")
         result = ResultManager.load_result(result_file)
     except Exception as e:
-        log_error(f"Erro ao carregar o arquivo de resultados: {e}")
+        log_error(f"Error loading results file: {e}")
         return
 
-    # Gerar arquivo CSV simplificado se o parâmetro --simple estiver ativado
+    # Generate simplified CSV if --simple is enabled
     if use_simple and result_file:
         try:
-            # Extrair os dados necessários
+            # Extract required data
             time_steps = np.array(result.get("time", []))
             infected = np.array(result.get("I_val", []))
             has_error = "I_err" in result
@@ -1687,19 +1685,19 @@ def info(
 
             csv_path = result_file.replace(".json", "_simple.csv")
             with open(csv_path, "w") as f:
-                # Dados sem cabeçalho (tempo, infectados, erro)
+                # Data without header (time, infected, error)
                 for idx, t in enumerate(time_steps):
                     erro = infected_err[idx] if has_error and infected_err is not None else 0.0
                     f.write(f"{t},{infected[idx]},{erro}\n")
 
-            log_success(f"Resultados simplificados salvos em CSV: {csv_path}")
+            log_success(f"Simplified results saved to CSV: {csv_path}")
         except Exception as e:
-            log_error(f"Erro ao gerar arquivo CSV simplificado: {e}")
+            log_error(f"Error generating simplified CSV file: {e}")
 
-    # Extrair e mostrar informações
+    # Extract and show information
     metadata = result.get("metadata", {})
     if metadata:
-        console.print(format_title("Parâmetros da Simulação"))
+        console.print(format_title("Simulation Parameters"))
         for key, value in metadata.items():
             if isinstance(value, dict):
                 console.print(f"  {format_param(key, '')}")
@@ -1708,43 +1706,45 @@ def info(
             else:
                 console.print(f"  {format_param(key, value)}")
     else:
-        # Tentar inferir informações do arquivo
-        console.print(format_title("Informações do Arquivo"))
-        console.print(f"  {format_param('Arquivo', os.path.basename(result_file))}")
-        console.print(f"  {format_param('Tamanho', f'{os.path.getsize(result_file)/1024:.2f} KB')}")
+        # Try to infer file info
+        console.print(format_title("File Information"))
+        console.print(f"  {format_param('File', os.path.basename(result_file))}")
+        console.print(f"  {format_param('Size', f'{os.path.getsize(result_file)/1024:.2f} KB')}")
 
-        # Formatar a data de modificação
+        # Format modification date
         mod_time = os.path.getmtime(result_file)
         mod_time_str = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
-        console.print(f"  {format_param('Última modificação', mod_time_str)}")
+        console.print(f"  {format_param('Last modified', mod_time_str)}")
 
-        # Extrair metadados do caminho
+        # Extract metadata from path
         path_metadata = ResultManager.get_metadata_from_path(result_file)
         if path_metadata:
-            console.print(format_title("Metadados Inferidos do Caminho"))
+            console.print(format_title("Inferred Path Metadata"))
             for key, value in path_metadata.items():
                 console.print(f"  {format_param(key, value)}")
 
-        # Mostrar estatísticas básicas
+        # Show basic statistics
         if "S_val" in result and "I_val" in result and "R_val" in result:
             susceptible = np.array(result.get("S_val", []))
             infected = np.array(result.get("I_val", []))
             recovered = np.array(result.get("R_val", []))
             time_steps = np.array(result.get("time", []))
 
-            console.print(format_title("Estatísticas"))
-            console.print(f"  {format_param('Pontos de tempo', len(susceptible))}")
+            console.print(format_title("Statistics"))
+            console.print(f"  {format_param('Time points', len(susceptible))}")
 
             max_infected: float = float(np.max(infected))
             max_infected_time = time_steps[np.argmax(infected)]
-            max_info = f"{max_infected:.4f} (em t={max_infected_time:.2f})"
-            console.print(f"  {format_param('Máximo de infectados', max_info)}")
-            console.print(f"  {format_param('Recuperados finais', f'{recovered[-1]:.4f}')}")
+            max_info = f"{max_infected:.4f} (at t={max_infected_time:.2f})"
+            console.print(f"  {format_param('Peak infected', max_info)}")
+            console.print(f"  {format_param('Final recovered', f'{recovered[-1]:.4f}')}")
 
-    # Verificar se há dados de erro
+    # Check whether error data is available
     has_error = "S_err" in result and "I_err" in result and "R_err" in result
     if has_error:
-        console.print(format_info("O arquivo contém dados de erro (use --with-error ao plotar)."))
+        console.print(
+            format_info("This file contains error data (use --with-error when plotting).")
+        )
 
     # Exportar em formato adicional, se especificado
     if export:
@@ -1752,41 +1752,41 @@ def info(
             output = result_file.replace(".json", f".{export}")
 
         exported_file = ExportManager.export_results(result, output, export)
-        log_success(f"Informações exportadas em formato {export.upper()}: {exported_file}")
+        log_success(f"Information exported in {export.upper()} format: {exported_file}")
 
 
-@cli.command(help="Comparar resultados de múltiplas simulações")
+@cli.command(help="Compare results from multiple simulations")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 @click.argument("result_files", nargs=-1, type=str, required=True)
-@click.option("--labels", "-l", multiple=True, help="Rótulos para cada arquivo (opcional)")
+@click.option("--labels", "-l", multiple=True, help="Labels for each file (optional)")
 @click.option(
     "--output",
     "-o",
     type=str,
     callback=validate_output_file,
-    help="Salvar o gráfico em um arquivo (opcional)",
+    help="Save the plot to a file (optional)",
 )
 @click.option(
     "--format",
     "-f",
     type=click.Choice(["png", "pdf", "svg", "jpg"]),
     default="png",
-    help="Formato do gráfico (quando usado com --output)",
+    help="Plot format (when used with --output)",
 )
 @click.option(
-    "--dpi", type=int, default=300, help="Resolução do gráfico em DPI (quando usado com --output)"
+    "--dpi", type=int, default=300, help="Plot resolution in DPI (when used with --output)"
 )
 @click.option(
     "--export",
     "-e",
     type=click.Choice(["json", "csv", "excel", "md", "html"]),
-    help="Exportar resultados comparativos em formato adicional",
+    help="Export comparative results in an additional format",
 )
-@click.option("--verbose", "-v", is_flag=True, default=False, help="Mostrar informações detalhadas")
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Show detailed information")
 def compare(
     simple: bool,
     result_files: Tuple[str, ...],
@@ -1797,123 +1797,123 @@ def compare(
     export: Optional[str],
     verbose: bool,
 ) -> None:
-    """Compara os resultados de múltiplas simulações."""
+    """Compare results from multiple simulations."""
     # Lazy imports for heavy modules
     from spkmc.io.export import ExportManager
     from spkmc.io.results import ResultManager
     from spkmc.visualization.plots import Visualizer
 
-    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+    # Check whether --simple was passed globally or locally
     ctx = click.get_current_context()
     parent_simple = ctx.parent.params.get("simple", False) if ctx.parent else False
     use_simple = simple or parent_simple
-    # Configurar o modo verboso
+    # Configure verbose mode
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
 
     if not result_files:
-        log_error("Especifique pelo menos um arquivo de resultados ou diretório.")
+        log_error("Specify at least one results file or directory.")
         return
 
-    # Processar argumentos - expandir diretórios para arquivos JSON
+    # Process arguments - expand directories to JSON files
     expanded_files = []
     for arg in result_files:
         if not os.path.exists(arg):
-            log_error(f"O caminho '{arg}' não existe.")
+            log_error(f"The path '{arg}' does not exist.")
             return
 
         if os.path.isdir(arg):
-            # Se for um diretório, buscar todos os arquivos JSON
+            # If it's a directory, find all JSON files
             json_files = sorted([str(f) for f in Path(arg).glob("*.json")])
             if not json_files:
-                log_error(f"Nenhum arquivo JSON encontrado no diretório: {arg}")
+                log_error(f"No JSON files found in directory: {arg}")
                 return
-            log_info(f"Encontrados {len(json_files)} arquivos JSON em {arg}")
+            log_info(f"Found {len(json_files)} JSON files in {arg}")
             expanded_files.extend(json_files)
         elif os.path.isfile(arg):
-            # Se for um arquivo, verificar se é JSON
+            # If it's a file, check it's JSON
             if not arg.endswith(".json"):
-                log_warning(f"O arquivo '{arg}' não é um arquivo JSON, ignorando...")
+                log_warning(f"The file '{arg}' is not a JSON file, skipping...")
                 continue
             expanded_files.append(arg)
         else:
-            log_error(f"O caminho '{arg}' não é um arquivo nem diretório válido.")
+            log_error(f"The path '{arg}' is not a valid file or directory.")
             return
 
     if not expanded_files:
-        log_error("Nenhum arquivo JSON válido encontrado para comparar.")
+        log_error("No valid JSON files found to compare.")
         return
 
-    # Atualizar files_to_compare com a lista expandida
+    # Update files_to_compare with the expanded list
     files_to_compare: List[str] = expanded_files
 
-    log_info(f"Comparando {len(files_to_compare)} arquivo(s) de resultados...")
+    log_info(f"Comparing {len(files_to_compare)} results file(s)...")
 
-    # Usar nomes de arquivos como rótulos padrão se não forem fornecidos
+    # Use filenames as default labels if none are provided
     labels_list: List[str]
     if not labels:
         labels_list = [os.path.basename(f) for f in files_to_compare]
     elif len(labels) < len(files_to_compare):
-        # Completar com nomes de arquivos se não houver rótulos suficientes
+        # Fill with filenames if there are not enough labels
         labels_list = list(labels) + [os.path.basename(f) for f in files_to_compare[len(labels) :]]
     else:
         labels_list = list(labels)
 
-    # Carregar resultados
+    # Load results
     results = []
     metadata_list = []
 
-    with create_progress_bar("Carregando resultados", len(files_to_compare), verbose) as progress:
-        task = progress.add_task("Carregando arquivos...", total=len(files_to_compare))
+    with create_progress_bar("Loading results", len(files_to_compare), verbose) as progress:
+        task = progress.add_task("Loading files...", total=len(files_to_compare))
 
         for i, file in enumerate(files_to_compare):
             try:
                 result = ResultManager.load_result(file)
                 results.append(result)
 
-                # Extrair metadados para exibição
+                # Extract metadata for display
                 metadata = result.get("metadata", {})
                 metadata_list.append(
                     {
-                        "Arquivo": os.path.basename(file),
-                        "Rede": metadata.get("network_type", "").upper(),
-                        "Distribuição": metadata.get("distribution", "").capitalize(),
-                        "Nós": metadata.get("N", ""),
-                        "Rótulo": labels_list[i],
+                        "File": os.path.basename(file),
+                        "Network": metadata.get("network_type", "").upper(),
+                        "Distribution": metadata.get("distribution", "").capitalize(),
+                        "Nodes": metadata.get("N", ""),
+                        "Label": labels_list[i],
                     }
                 )
 
                 progress.update(task, advance=1)
             except Exception as e:
-                log_error(f"Erro ao carregar {file}: {e}")
+                log_error(f"Error loading {file}: {e}")
                 return
 
-    # Exibir informações sobre os arquivos carregados
-    console.print(format_title("Arquivos para Comparação"))
-    print_rich_table(metadata_list, "Resultados a Comparar")
+    # Display info about loaded files
+    console.print(format_title("Files for Comparison"))
+    print_rich_table(metadata_list, "Results to Compare")
 
-    # Comparar resultados
+    # Compare results
     try:
-        log_info("Gerando visualização comparativa...")
+        log_info("Generating comparison visualization...")
 
-        # Configurar o título com mais informações
-        title = "Comparação de Simulações SPKMC"
-        if len(files_to_compare) <= 3:  # Adicionar detalhes apenas se houver poucos arquivos
+        # Configure title with more information
+        title = "SPKMC Simulation Comparison"
+        if len(files_to_compare) <= 3:  # Add details only for a small set
             title += f" ({', '.join(labels_list)})"
 
         Visualizer.compare_results(results, labels_list, title, output)
 
         if output:
-            log_success(f"Gráfico comparativo salvo em: {output}")
+            log_success(f"Comparison plot saved to: {output}")
 
-        # Exportar em formato adicional, se especificado
+        # Export to additional format if specified
         if export:
             if output is None:
-                log_error("Opção --output é necessária quando usando --export")
+                log_error("--output is required when using --export")
                 return
             export_path = output.replace(f".{format}", f".{export}")
 
-            # Criar um resultado combinado para exportação
+            # Create a combined result for export
             combined_result = {
                 "results": results,
                 "labels": labels_list,
@@ -1923,11 +1923,9 @@ def compare(
                 },
             }
             exported_file = ExportManager.export_results(combined_result, export_path, export)
-            log_success(
-                f"Resultados comparativos exportados em formato {export.upper()}: {exported_file}"
-            )
+            log_success(f"Comparative results exported in {export.upper()} format: {exported_file}")
 
-        # Gerar arquivo CSV simplificado para cada resultado
+        # Generate simplified CSV for each result
         if use_simple:
             for res_idx, result_file in enumerate(files_to_compare):
                 try:
@@ -1939,7 +1937,7 @@ def compare(
 
                     csv_path = result_file.replace(".json", "_simple.csv")
                     with open(csv_path, "w") as f:
-                        # Dados sem cabeçalho (tempo, infectados, erro)
+                        # Data without header (time, infected, error)
                         for idx, t in enumerate(time_steps):
                             erro = (
                                 infected_err[idx] if has_error and infected_err is not None else 0.0
@@ -1947,21 +1945,19 @@ def compare(
                             f.write(f"{t},{infected[idx]},{erro}\n")
 
                     label = labels_list[res_idx]
-                    log_success(f"Resultados para '{label}' salvos em: {csv_path}")
+                    log_success(f"Results for '{label}' saved to: {csv_path}")
                 except Exception as e:
-                    log_error(f"Erro ao gerar CSV para '{labels_list[res_idx]}': {e}")
+                    log_error(f"Error generating CSV for '{labels_list[res_idx]}': {e}")
 
     except Exception as e:
-        log_error(f"Erro ao gerar visualização comparativa: {e}")
+        log_error(f"Error generating comparison visualization: {e}")
 
 
-@cli.command(
-    help="Executar múltiplos cenários de simulação a partir de um arquivo JSON ou experimento"
-)
+@cli.command(help="Run multiple simulation scenarios from a JSON file or experiment")
 @click.option(
     "--simple",
     is_flag=True,
-    help="Gerar arquivo de resultado simplificado em CSV (tempo, infectados, erro)",
+    help="Generate simplified CSV result file (time, infected, error)",
 )
 @click.argument("scenarios_file", type=str, default=None, required=False)
 @click.option(
@@ -1970,64 +1966,58 @@ def compare(
     "run_all",
     is_flag=True,
     default=False,
-    help="Executar todos os experimentos em ordem (sem menu interativo)",
+    help="Run all experiments in order (no interactive menu)",
 )
 @click.option(
     "--override",
     is_flag=True,
     default=False,
-    help="Limpar resultados existentes e forçar re-execução completa",
+    help="Clear existing results and force a full re-run",
 )
 @click.option(
     "--experiments-dir",
     "-e",
     type=str,
     default=None,
-    help="Diretório base para experimentos (padrão: experiments)",
+    help="Base directory for experiments (default: experiments)",
 )
 @click.option(
     "--output-dir",
     "-o",
     type=str,
     default="./results",
-    help="Diretório para salvar os resultados (padrão: ./results)",
+    help="Directory to save results (default: ./results)",
 )
-@click.option(
-    "--prefix", "-p", type=str, default="", help="Prefixo para os nomes dos arquivos de saída"
-)
+@click.option("--prefix", "-p", type=str, default="", help="Prefix for output filenames")
 @click.option(
     "--compare",
     "-c",
     is_flag=True,
     default=False,
-    help="Gerar visualização comparativa dos resultados",
+    help="Generate a comparative visualization of results",
 )
-@click.option(
-    "--no-plot", is_flag=True, default=False, help="Desativar a geração de gráficos individuais"
-)
-@click.option("--save-plot", is_flag=True, default=False, help="Salvar os gráficos em arquivos")
+@click.option("--no-plot", is_flag=True, default=False, help="Disable individual plot generation")
+@click.option("--save-plot", is_flag=True, default=False, help="Save plots to files")
 @click.option(
     "--zip",
     is_flag=True,
     default=False,
-    help="Criar um arquivo zip com os resultados de cada cenário",
+    help="Create a zip file with results for each scenario",
 )
 @click.option(
     "--verbose",
     "-v",
     is_flag=True,
     default=False,
-    help="Mostrar informações detalhadas durante a execução",
+    help="Show detailed information during execution",
 )
 @click.option(
     "--debug",
     is_flag=True,
     default=False,
-    help="Ativar modo de depuração com logs detalhados do Numba",
+    help="Enable debug mode with detailed Numba logs",
 )
-@click.option(
-    "--clear-cache", is_flag=True, default=False, help="Limpar cache do Numba antes de executar"
-)
+@click.option("--clear-cache", is_flag=True, default=False, help="Clear Numba cache before running")
 def batch(
     simple: bool,
     scenarios_file: Optional[str],
@@ -2045,69 +2035,69 @@ def batch(
     clear_cache: bool,
 ) -> None:
     """
-    Executa múltiplos cenários de simulação a partir de um arquivo JSON ou experimento.
+    Run multiple simulation scenarios from a JSON file or experiment.
 
-    Se nenhum arquivo for especificado, exibe um menu interativo com os experimentos
-    disponíveis no diretório 'experiments/' (ou no diretório especificado com --experiments-dir).
+    If no file is specified, show an interactive menu with experiments available in
+    the 'experiments/' directory (or the directory specified with --experiments-dir).
 
-    O arquivo JSON deve conter uma lista de objetos, cada um representando um cenário
-    com parâmetros para a simulação. Cada cenário será executado sequencialmente e
-    os resultados serão salvos em arquivos separados no diretório especificado.
+    The JSON file must contain a list of objects, each representing a scenario with
+    parameters for the simulation. Each scenario will run sequentially and results
+    will be saved to separate files in the specified directory.
     """
-    # Verificar se o parâmetro --simple foi passado globalmente ou localmente
+    # Check whether --simple was passed globally or locally
     ctx = click.get_current_context()
     parent_simple = ctx.parent.params.get("simple", False) if ctx.parent else False
     use_simple = simple or parent_simple
 
-    # Expandir ~ para caminho absoluto no output_dir
+    # Expand ~ to absolute path in output_dir
     output_dir_str: str = output_dir if output_dir else "./results"
     output_dir_str = os.path.expanduser(output_dir_str)
 
-    # Configurar o modo verboso
+    # Configure verbose mode
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
 
-    # Configurar o modo de debug
+    # Configure debug mode
     if debug:
         os.environ["SPKMC_DEBUG"] = "1"
-        log_info("Modo de depuração ativado - logs detalhados do Numba habilitados")
+        log_info("Debug mode enabled - detailed Numba logs active")
 
-    # Limpar cache do Numba se solicitado
+    # Clear Numba cache if requested
     if clear_cache:
         from spkmc.utils.numba_utils import clear_numba_cache
 
         clear_numba_cache()
 
     # ============================================================
-    # EXPERIMENT MODE: Se nenhum arquivo foi especificado
+    # EXPERIMENT MODE: No file specified
     # ============================================================
     if scenarios_file is None:
-        # Criar gerenciador de experimentos
+        # Create experiment manager
         exp_manager = ExperimentManager(experiments_dir)
         experiments = exp_manager.list_experiments()
 
         if not experiments:
-            log_error("Nenhum experimento encontrado no diretório 'experiments/'.")
-            log_info("Crie experiments/<nome>/data.json ou especifique um arquivo.")
+            log_error("No experiment found in the 'experiments/' directory.")
+            log_info("Create experiments/<name>/data.json or specify a file.")
             return
 
-        # Determinar quais experimentos executar
+        # Determine which experiments to run
         if run_all:
-            # Executar todos os experimentos em ordem
+            # Run all experiments in order
             experiments_to_run = experiments
-            log_info(f"Executando todos os {len(experiments)} experimentos em ordem...")
+            log_info(f"Running all {len(experiments)} experiments in order...")
         else:
-            # Exibir menu de experimentos
+            # Show experiment menu
             selected = display_experiments_menu(experiments)
 
             if selected is None:
-                log_info("Operação cancelada pelo usuário.")
+                log_info("Operation canceled by user.")
                 return
 
             experiments_to_run = [experiments[selected - 1]]
-            log_info(f"Experimento selecionado: {experiments_to_run[0].name}")
+            log_info(f"Selected experiment: {experiments_to_run[0].name}")
 
-        # Executar cada experimento
+        # Run each experiment
         total_start_time = time.time()
         total_scenarios_processed = 0
         experiments_completed = 0
@@ -2117,41 +2107,41 @@ def batch(
                 console.print()
                 console.print(
                     format_title(
-                        f"Experimento {exp_index + 1}/{len(experiments_to_run)}: {experiment.name}"
+                        f"Experiment {exp_index + 1}/{len(experiments_to_run)}: {experiment.name}"
                     )
                 )
 
-            # Verificar se há resultados existentes
-            force_rerun = override  # --override sempre força re-execução
+            # Check for existing results
+            force_rerun = override  # --override always forces a re-run
             exp_name = experiment.name
             res_count = experiment.result_count
             if experiment.has_results:
                 if override:
-                    # Com --override, limpa resultados
+                    # With --override, clear results
                     experiment.clean_results()
-                    log_info(f"Resultados de '{exp_name}' removidos. Re-execução forçada.")
+                    log_info(f"Results for '{exp_name}' removed. Forced re-run.")
                 elif run_all:
-                    # No modo --all sem --override, pula cenários já executados
-                    msg = f"'{exp_name}' tem {res_count} resultado(s). "
-                    msg += "Cenários existentes serão ignorados."
+                    # In --all mode without --override, skip already run scenarios
+                    msg = f"'{exp_name}' has {res_count} result(s). "
+                    msg += "Existing scenarios will be skipped."
                     log_info(msg)
                 else:
-                    # Modo interativo: pergunta ao usuário
-                    log_warning(f"'{exp_name}' já possui {res_count} resultado(s).")
+                    # Interactive mode: ask the user
+                    log_warning(f"'{exp_name}' already has {res_count} result(s).")
                     if click.confirm(
-                        "Deseja limpar os resultados existentes e re-executar?",
+                        "Do you want to clear existing results and re-run?",
                         default=False,
                     ):
                         experiment.clean_results()
                         force_rerun = True
-                        log_success("Resultados removidos. Re-execução completa.")
+                        log_success("Results removed. Full re-run.")
                     else:
-                        log_info("Mantendo resultados. Cenários existentes ignorados.")
+                        log_info("Keeping results. Existing scenarios will be ignored.")
 
-            # Executar o experimento
+            # Run the experiment
             start_time = time.time()
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_debug(f"Iniciando execução em {now_str}", verbose_only=False)
+            log_debug(f"Starting execution at {now_str}", verbose_only=False)
 
             result_files = run_experiment_scenarios(
                 experiment=experiment,
@@ -2163,39 +2153,39 @@ def batch(
                 force_rerun=force_rerun,
             )
 
-            # Resumo do experimento
+            # Experiment summary
             end_time = time.time()
             execution_time = end_time - start_time
             total_scenarios_processed += len(result_files)
             experiments_completed += 1
 
             if not run_all:
-                console.print(format_title("Resumo da Execução do Experimento"))
-                console.print(f"  {format_param('Experimento', exp_name)}")
+                console.print(format_title("Experiment Execution Summary"))
+                console.print(f"  {format_param('Experiment', exp_name)}")
                 num_scenarios = len(experiment.scenarios)
-                console.print(f"  {format_param('Total de cenários', num_scenarios)}")
-                console.print(f"  {format_param('Cenários processados', len(result_files))}")
-                exec_time_str = f"{execution_time:.2f} segundos"
-                console.print(f"  {format_param('Tempo de execução', exec_time_str)}")
+                console.print(f"  {format_param('Total scenarios', num_scenarios)}")
+                console.print(f"  {format_param('Scenarios processed', len(result_files))}")
+                exec_time_str = f"{execution_time:.2f} seconds"
+                console.print(f"  {format_param('Execution time', exec_time_str)}")
                 results_dir = str(experiment.results_dir)
-                console.print(f"  {format_param('Diretório de resultados', results_dir)}")
+                console.print(f"  {format_param('Results directory', results_dir)}")
 
             n_files = len(result_files)
-            msg = f"'{exp_name}' concluído. {n_files} cenário(s) em {execution_time:.1f}s."
+            msg = f"'{exp_name}' completed. {n_files} scenario(s) in {execution_time:.1f}s."
             log_success(msg)
 
-        # Resumo final para --all
+        # Final summary for --all
         if run_all:
             total_execution_time = time.time() - total_start_time
             console.print()
-            console.print(format_title("Resumo Final - Todos os Experimentos"))
-            console.print(f"  {format_param('Experimentos executados', experiments_completed)}")
+            console.print(format_title("Final Summary - All Experiments"))
+            console.print(f"  {format_param('Experiments run', experiments_completed)}")
             console.print(
-                f"  {format_param('Total de cenários processados', total_scenarios_processed)}"
+                f"  {format_param('Total scenarios processed', total_scenarios_processed)}"
             )
-            total_time_str = f"{total_execution_time:.2f} segundos"
-            console.print(f"  {format_param('Tempo total', total_time_str)}")
-            log_success(f"Todos os {experiments_completed} experimentos concluídos.")
+            total_time_str = f"{total_execution_time:.2f} seconds"
+            console.print(f"  {format_param('Total time', total_time_str)}")
+            log_success(f"All {experiments_completed} experiments completed.")
 
             # Generate AI collection summary for --all mode
             from spkmc.analysis import AIAnalyzer, extract_experiment_metrics
@@ -2236,26 +2226,26 @@ def batch(
         return
 
     # ============================================================
-    # FILE MODE: Execução tradicional com arquivo de cenários
+    # FILE MODE: Traditional execution with a scenarios file
     # ============================================================
 
-    # Registrar início da execução em lote
+    # Record batch execution start
     start_time = time.time()
     log_debug(
-        f"Iniciando execução em lote em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Starting batch execution at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         verbose_only=False,
     )
 
-    # Verificar se o arquivo de cenários existe
+    # Check whether the scenarios file exists
     if not os.path.exists(scenarios_file):
-        log_error(f"O arquivo de cenários '{scenarios_file}' não existe.")
+        log_error(f"The scenarios file '{scenarios_file}' does not exist.")
         return
 
-    # Carregar o arquivo de cenários
+    # Load the scenarios file
     from pathlib import Path
 
     try:
-        log_info(f"Carregando cenários de: {scenarios_file}")
+        log_info(f"Loading scenarios from: {scenarios_file}")
         with open(scenarios_file, "r") as f:
             data = json.load(f)
 
@@ -2276,25 +2266,25 @@ def batch(
             description = data.get("description")
         else:
             log_error(
-                "O arquivo deve conter uma lista de cenários ou um objeto com chave 'scenarios'."
+                "The file must contain a list of scenarios or an object with a 'scenarios' key."
             )
             return
 
         if not isinstance(scenarios, list) or len(scenarios) == 0:
-            log_error("Nenhum cenário encontrado no arquivo.")
+            log_error("No scenarios found in the file.")
             return
 
-        log_info(f"Experimento: {experiment_name}")
-        log_success(f"Carregados {len(scenarios)} cenários para execução.")
+        log_info(f"Experiment: {experiment_name}")
+        log_success(f"Loaded {len(scenarios)} scenarios for execution.")
 
         # Auto-detect experiment directory and use its results/ folder
         experiment_dir = Path(os.path.dirname(os.path.abspath(scenarios_file)))
         if output_dir_str == "./results":
             output_dir_str = str(experiment_dir / "results")
-            log_info(f"Usando diretório de resultados do experimento: {output_dir_str}")
+            log_info(f"Using experiment results directory: {output_dir_str}")
 
     except Exception as e:
-        log_error(f"Erro ao carregar o arquivo de cenários: {e}")
+        log_error(f"Error loading scenarios file: {e}")
         return
 
     # Create PlotConfig from dict
@@ -2310,10 +2300,10 @@ def batch(
     )
 
     # Handle --override for file mode
-    force_rerun = override  # --override sempre força re-execução
+    force_rerun = override  # --override always forces a re-run
     if override and experiment.has_results:
         experiment.clean_results()
-        log_info("Resultados anteriores removidos. Forçando re-execução.")
+        log_info("Previous results removed. Forcing re-run.")
 
     # Use parallelized execution
     result_files = run_experiment_scenarios(
@@ -2330,44 +2320,42 @@ def batch(
     end_time = time.time()
     total_execution_time = end_time - start_time
 
-    console.print(format_title("Resumo da Execução"))
-    console.print(f"  {format_param('Experimento', experiment_name)}")
-    console.print(f"  {format_param('Total de cenários', len(scenarios))}")
-    console.print(f"  {format_param('Cenários processados', len(result_files))}")
-    console.print(f"  {format_param('Tempo total', f'{total_execution_time:.2f} segundos')}")
-    console.print(f"  {format_param('Diretório de resultados', output_dir_str)}")
+    console.print(format_title("Execution Summary"))
+    console.print(f"  {format_param('Experiment', experiment_name)}")
+    console.print(f"  {format_param('Total scenarios', len(scenarios))}")
+    console.print(f"  {format_param('Scenarios processed', len(result_files))}")
+    console.print(f"  {format_param('Total time', f'{total_execution_time:.2f} seconds')}")
+    console.print(f"  {format_param('Results directory', output_dir_str)}")
 
-    log_success(f"Execução concluída. {len(result_files)} cenário(s) processado(s).")
+    log_success(f"Execution completed. {len(result_files)} scenario(s) processed.")
 
 
-@cli.command(help="Limpar resultados de todos os experimentos")
+@cli.command(help="Clean results from all experiments")
 @click.option(
     "--experiments-dir",
     "-e",
     type=str,
     default=None,
-    help="Diretório base para experimentos (padrão: experiments)",
+    help="Base directory for experiments (default: experiments)",
 )
-@click.option(
-    "--yes", "-y", is_flag=True, default=False, help="Confirmar automaticamente sem perguntar"
-)
+@click.option("--yes", "-y", is_flag=True, default=False, help="Auto-confirm without prompting")
 @click.option(
     "--numba-cache",
     is_flag=True,
     default=False,
-    help="Também limpar o cache de compilação do Numba",
+    help="Also clear the Numba compilation cache",
 )
 def clean(experiments_dir: Optional[str], yes: bool, numba_cache: bool) -> None:
     """
-    Remove todos os resultados de todos os experimentos.
+    Remove all results from all experiments.
 
-    Este comando limpa o diretório 'results/' de cada experimento,
-    permitindo re-executar todas as simulações do zero.
+    This command cleans the 'results/' directory of each experiment,
+    allowing all simulations to be re-run from scratch.
     """
     import shutil
     from pathlib import Path
 
-    # Criar gerenciador de experimentos
+    # Create experiment manager
     exp_manager = ExperimentManager(experiments_dir)
     experiments = exp_manager.list_experiments()
 
@@ -2376,60 +2364,60 @@ def clean(experiments_dir: Optional[str], yes: bool, numba_cache: bool) -> None:
     has_root_results = root_results.exists() and any(root_results.glob("*.json"))
 
     if not experiments and not has_root_results:
-        log_error("Nenhum experimento ou resultado encontrado.")
+        log_error("No experiments or results found.")
         return
 
-    # Contar resultados existentes
+    # Count existing results
     total_results = sum(exp.result_count for exp in experiments)
     experiments_with_results = [exp for exp in experiments if exp.has_results]
 
     if not experiments_with_results and not has_root_results:
-        log_info("Nenhum resultado para limpar. Todos os experimentos estão vazios.")
+        log_info("No results to clean. All experiments are empty.")
         return
 
-    # Mostrar o que será removido
-    console.print(format_title("Resultados Encontrados"))
+    # Show what will be removed
+    console.print(format_title("Results Found"))
     for exp in experiments_with_results:
-        console.print(f"  • {exp.name}: {exp.result_count} resultado(s)")
+        console.print(f"  • {exp.name}: {exp.result_count} result(s)")
     if has_root_results:
         root_count = len(list(root_results.glob("*.json")))
-        console.print(f"  • [root]/results/: {root_count} arquivo(s)")
+        console.print(f"  • [root]/results/: {root_count} file(s)")
         total_results += root_count
     console.print()
-    console.print(f"Total: {total_results} resultado(s)")
+    console.print(f"Total: {total_results} result(s)")
     console.print()
 
-    # Confirmar
+    # Confirm
     if not yes:
-        if not click.confirm("Deseja remover todos os resultados?", default=False):
-            log_info("Operação cancelada.")
+        if not click.confirm("Do you want to remove all results?", default=False):
+            log_info("Operation canceled.")
             return
 
-    # Limpar resultados
+    # Clean results
     cleaned_count = 0
     for exp in experiments_with_results:
         try:
             exp.clean_results()
             cleaned_count += 1
-            log_success(f"Resultados de '{exp.name}' removidos.")
+            log_success(f"Results for '{exp.name}' removed.")
         except Exception as e:
-            log_error(f"Erro ao limpar '{exp.name}': {e}")
+            log_error(f"Error cleaning '{exp.name}': {e}")
 
     # Clean root results/ directory
     if has_root_results:
         try:
             shutil.rmtree(root_results)
-            log_success("Resultados de '[root]/results/' removidos.")
+            log_success("Results from '[root]/results/' removed.")
             cleaned_count += 1
         except Exception as e:
-            log_error(f"Erro ao limpar '[root]/results/': {e}")
+            log_error(f"Error cleaning '[root]/results/': {e}")
 
     # Clean Numba cache if requested
     if numba_cache:
         from spkmc.utils.numba_utils import clear_numba_cache
 
         clear_numba_cache()
-        log_success("Cache do Numba limpo.")
+        log_success("Numba cache cleared.")
 
     console.print()
-    log_success(f"Limpeza concluída. {cleaned_count} local(is) limpo(s).")
+    log_success(f"Cleanup completed. {cleaned_count} location(s) cleaned.")

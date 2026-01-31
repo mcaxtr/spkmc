@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Exemplo de uso programático da CLI do SPKMC.
+Example of programmatic use of the SPKMC CLI.
 
-Este script demonstra como usar a CLI do SPKMC programaticamente a partir de outro script Python,
-permitindo automatizar simulações e análises.
+This script demonstrates how to call the SPKMC CLI programmatically from another
+Python script to automate simulations and analyses.
 """
 
 import json
@@ -18,19 +18,19 @@ import numpy as np
 
 def run_cli_command(command):
     """
-    Executa um comando da CLI do SPKMC.
+    Run an SPKMC CLI command.
 
     Args:
-        command: Lista com o comando e seus argumentos
+        command: List with the command and its arguments
 
     Returns:
-        Saída do comando
+        Command output
     """
-    print(f"Executando: {' '.join(command)}")
+    print(f"Running: {' '.join(command)}")
     result = subprocess.run(command, capture_output=True, text=True)
 
     if result.returncode != 0:
-        print(f"Erro ao executar o comando: {result.stderr}")
+        print(f"Error running command: {result.stderr}")
         return None
 
     return result.stdout
@@ -38,18 +38,18 @@ def run_cli_command(command):
 
 def run_simulation(network_type, dist_type, output_file, **kwargs):
     """
-    Executa uma simulação usando a CLI do SPKMC.
+    Run a simulation using the SPKMC CLI.
 
     Args:
-        network_type: Tipo de rede ('er', 'cn', 'cg')
-        dist_type: Tipo de distribuição ('gamma', 'exponential')
-        output_file: Caminho para salvar os resultados
-        **kwargs: Parâmetros adicionais para a simulação
+        network_type: Network type ('er', 'cn', 'cg')
+        dist_type: Distribution type ('gamma', 'exponential')
+        output_file: Path to save results
+        **kwargs: Additional simulation parameters
 
     Returns:
-        Caminho para o arquivo de resultados
+        Path to the results file
     """
-    # Comando base
+    # Base command
     command = [
         "python",
         "spkmc_cli.py",
@@ -61,51 +61,51 @@ def run_simulation(network_type, dist_type, output_file, **kwargs):
         "--output",
         output_file,
         "--no-plot",
-    ]  # Não mostrar o gráfico durante a execução
+    ]  # Do not show the plot during execution
 
-    # Adiciona parâmetros adicionais
+    # Add additional parameters
     for key, value in kwargs.items():
-        # Converte underscores para hífens no nome do parâmetro
+        # Convert underscores to hyphens in parameter names
         param_name = f"--{key.replace('_', '-')}"
         command.extend([param_name, str(value)])
 
-    # Executa o comando
+    # Run the command
     run_cli_command(command)
 
-    # Verifica se o arquivo foi criado
+    # Check whether the file was created
     if os.path.exists(output_file):
         return output_file
     else:
-        print(f"Erro: O arquivo de resultados não foi criado: {output_file}")
+        print(f"Error: Results file was not created: {output_file}")
         return None
 
 
 def plot_results(result_file, output_file=None, with_error=False):
     """
-    Plota os resultados de uma simulação usando a CLI do SPKMC.
+    Plot simulation results using the SPKMC CLI.
 
     Args:
-        result_file: Caminho para o arquivo de resultados
-        output_file: Caminho para salvar o gráfico (opcional)
-        with_error: Se True, mostra barras de erro (se disponíveis)
+        result_file: Path to the results file
+        output_file: Path to save the plot (optional)
+        with_error: If True, show error bars (if available)
 
     Returns:
-        Caminho para o arquivo de gráfico (se output_file for fornecido)
+        Path to the plot file (if output_file is provided)
     """
-    # Comando base
+    # Base command
     command = ["python", "spkmc_cli.py", "plot", result_file]
 
-    # Adiciona opções
+    # Add options
     if with_error:
         command.append("--with-error")
 
     if output_file:
         command.extend(["--output", output_file])
 
-    # Executa o comando
+    # Run the command
     run_cli_command(command)
 
-    # Verifica se o arquivo foi criado
+    # Check whether the file was created
     if output_file and os.path.exists(output_file):
         return output_file
     else:
@@ -114,32 +114,32 @@ def plot_results(result_file, output_file=None, with_error=False):
 
 def compare_results(result_files, labels=None, output_file=None):
     """
-    Compara os resultados de múltiplas simulações usando a CLI do SPKMC.
+    Compare results from multiple simulations using the SPKMC CLI.
 
     Args:
-        result_files: Lista de caminhos para arquivos de resultados
-        labels: Lista de rótulos para cada arquivo (opcional)
-        output_file: Caminho para salvar o gráfico (opcional)
+        result_files: List of paths to results files
+        labels: List of labels for each file (optional)
+        output_file: Path to save the plot (optional)
 
     Returns:
-        Caminho para o arquivo de gráfico (se output_file for fornecido)
+        Path to the plot file (if output_file is provided)
     """
-    # Comando base
+    # Base command
     command = ["python", "spkmc_cli.py", "compare"] + result_files
 
-    # Adiciona rótulos
+    # Add labels
     if labels:
         for label in labels:
             command.extend(["-l", label])
 
-    # Adiciona opção de saída
+    # Add output option
     if output_file:
         command.extend(["--output", output_file])
 
-    # Executa o comando
+    # Run the command
     run_cli_command(command)
 
-    # Verifica se o arquivo foi criado
+    # Check whether the file was created
     if output_file and os.path.exists(output_file):
         return output_file
     else:
@@ -148,31 +148,32 @@ def compare_results(result_files, labels=None, output_file=None):
 
 def get_info(result_file):
     """
-    Obtém informações sobre uma simulação usando a CLI do SPKMC.
+    Get information about a simulation using the SPKMC CLI.
 
     Args:
-        result_file: Caminho para o arquivo de resultados
+        result_file: Path to the results file
 
     Returns:
-        Informações sobre a simulação
+        Simulation information
     """
-    # Comando
+    # Command
     command = ["python", "spkmc_cli.py", "info", "--result-file", result_file]
 
-    # Executa o comando
+    # Run the command
     return run_cli_command(command)
 
 
 def main():
-    """Função principal do exemplo."""
-    # Cria diretório para resultados
+    """Main function for the example."""
+    # Create results directory
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
 
+    # Create plots directory
     plots_dir = Path("plots")
     plots_dir.mkdir(exist_ok=True)
 
-    # Parâmetros comuns
+    # Common parameters
     common_params = {
         "nodes": 1000,
         "samples": 50,
@@ -182,17 +183,17 @@ def main():
         "num_runs": 2,
     }
 
-    # Executa simulação com rede Erdos-Renyi e distribuição Gamma
+    # Run simulation with Erdos-Renyi network and Gamma distribution
     er_gamma_file = str(results_dir / "er_gamma.json")
     er_gamma_params = {**common_params, "k_avg": 10, "shape": 2.0, "scale": 1.0, "lambda_val": 1.0}
     er_gamma_result = run_simulation("er", "gamma", er_gamma_file, **er_gamma_params)
 
-    # Executa simulação com rede Erdos-Renyi e distribuição Exponencial
+    # Run simulation with Erdos-Renyi network and Exponential distribution
     er_exp_file = str(results_dir / "er_exponential.json")
     er_exp_params = {**common_params, "k_avg": 10, "mu": 1.0, "lambda_val": 1.0}
     er_exp_result = run_simulation("er", "exponential", er_exp_file, **er_exp_params)
 
-    # Executa simulação com rede Complexa e distribuição Gamma
+    # Run simulation with Complex network and Gamma distribution
     cn_gamma_file = str(results_dir / "cn_gamma.json")
     cn_gamma_params = {
         **common_params,
@@ -204,10 +205,10 @@ def main():
     }
     cn_gamma_result = run_simulation("cn", "gamma", cn_gamma_file, **cn_gamma_params)
 
-    # Plota os resultados individuais
+    # Plot individual results
     if er_gamma_result:
         plot_results(er_gamma_result, str(plots_dir / "er_gamma.png"), with_error=True)
-        print(f"Informações sobre a simulação ER-Gamma:")
+        print("Information about the ER-Gamma simulation:")
         print(get_info(er_gamma_result))
 
     if er_exp_result:
@@ -216,7 +217,7 @@ def main():
     if cn_gamma_result:
         plot_results(cn_gamma_result, str(plots_dir / "cn_gamma.png"), with_error=True)
 
-    # Compara os resultados
+    # Compare results
     if er_gamma_result and er_exp_result:
         compare_results(
             [er_gamma_result, er_exp_result],
@@ -231,9 +232,9 @@ def main():
             output_file=str(plots_dir / "comparison_networks.png"),
         )
 
-    print("\nSimulações concluídas. Resultados salvos em:")
-    print(f"- Arquivos de resultados: {results_dir}")
-    print(f"- Gráficos: {plots_dir}")
+    print("\nSimulations completed. Results saved to:")
+    print(f"- Results files: {results_dir}")
+    print(f"- Plots: {plots_dir}")
 
 
 if __name__ == "__main__":
