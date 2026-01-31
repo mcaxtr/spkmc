@@ -150,11 +150,14 @@ class GammaDistribution(Distribution):
     def get_params_string(self) -> str:
         """
         Retorna uma string com os parâmetros da distribuição para uso em nomes de arquivos.
-        
+
         Returns:
-            String com os parâmetros
+            String com os parâmetros (shape, scale, and lambda formatted for filenames)
         """
-        return f"{self.shape}"
+        shape_str = f"{self.shape:.4f}".rstrip('0').rstrip('.')
+        scale_str = f"{self.scale:.4f}".rstrip('0').rstrip('.')
+        lmbd_str = f"{self.lmbd:.4f}".rstrip('0').rstrip('.')
+        return f"sh{shape_str}_sc{scale_str}_l{lmbd_str}"
     
     def get_params_dict(self) -> dict:
         """
@@ -235,11 +238,13 @@ class ExponentialDistribution(Distribution):
     def get_params_string(self) -> str:
         """
         Retorna uma string com os parâmetros da distribuição para uso em nomes de arquivos.
-        
+
         Returns:
-            String com os parâmetros
+            String com os parâmetros (mu and lambda formatted for filenames)
         """
-        return ""
+        mu_str = f"{self.mu:.4f}".rstrip('0').rstrip('.')
+        lmbd_str = f"{self.lmbd:.4f}".rstrip('0').rstrip('.')
+        return f"mu{mu_str}_l{lmbd_str}"
     
     def get_params_dict(self) -> dict:
         """
