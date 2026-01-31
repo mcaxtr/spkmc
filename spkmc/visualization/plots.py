@@ -1,9 +1,8 @@
 """
-Visualização de resultados para o algoritmo SPKMC.
+Result visualization for the SPKMC algorithm.
 
-Este módulo contém funções para visualização dos resultados de simulações SPKMC,
-incluindo gráficos de evolução temporal dos estados SIR e comparações entre diferentes
-simulações.
+This module contains functions to visualize SPKMC simulation results,
+including time-evolution plots of SIR states and comparisons between simulations.
 """
 
 import os
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class Visualizer:
-    """Classe para visualização de resultados."""
+    """Class for visualizing results."""
 
     @staticmethod
     def plot_result_with_error(
@@ -34,19 +33,19 @@ class Visualizer:
         states_to_plot: Optional[set] = None,
     ) -> None:
         """
-        Plota os resultados com barras de erro.
+        Plot results with error bars.
 
         Args:
-            S: Proporção de suscetíveis
-            I: Proporção de infectados
-            R: Proporção de recuperados
-            S_err: Erro para suscetíveis
-            I_err: Erro para infectados
-            R_err: Erro para recuperados
-            time: Passos de tempo
-            title: Título do gráfico (opcional)
-            save_path: Caminho para salvar o gráfico (opcional)
-            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
+            S: Proportion of susceptible
+            I: Proportion of infected
+            R: Proportion of recovered
+            S_err: Error for susceptible
+            I_err: Error for infected
+            R_err: Error for recovered
+            time: Time steps
+            title: Plot title (optional)
+            save_path: Path to save the plot (optional)
+            states_to_plot: Set of states to plot ('S', 'I', 'R')
         """
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
@@ -54,19 +53,19 @@ class Visualizer:
         plt.figure(figsize=(10, 6))
 
         if "R" in states_to_plot:
-            plt.errorbar(time, R, yerr=R_err, label="Recuperados", capsize=2, color="g")
+            plt.errorbar(time, R, yerr=R_err, label="Recovered", capsize=2, color="g")
         if "I" in states_to_plot:
-            plt.errorbar(time, I, yerr=I_err, label="Infectados", capsize=2, color="r")
+            plt.errorbar(time, I, yerr=I_err, label="Infected", capsize=2, color="r")
         if "S" in states_to_plot:
-            plt.errorbar(time, S, yerr=S_err, label="Suscetíveis", capsize=2, color="b")
+            plt.errorbar(time, S, yerr=S_err, label="Susceptible", capsize=2, color="b")
 
-        plt.xlabel("Tempo")
-        plt.ylabel("Proporção de Indivíduos")
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of Individuals")
 
         if title:
             plt.title(title)
         else:
-            plt.title("Dinâmica do Modelo SIR ao Longo do Tempo com Barras de Erro")
+            plt.title("SIR Model Dynamics Over Time with Error Bars")
 
         plt.legend()
         plt.grid(True, alpha=0.3)
@@ -88,16 +87,16 @@ class Visualizer:
         states_to_plot: Optional[set] = None,
     ) -> None:
         """
-        Plota os resultados sem barras de erro.
+        Plot results without error bars.
 
         Args:
-            S: Proporção de suscetíveis
-            I: Proporção de infectados
-            R: Proporção de recuperados
-            time: Passos de tempo
-            title: Título do gráfico (opcional)
-            save_path: Caminho para salvar o gráfico (opcional)
-            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
+            S: Proportion of susceptible
+            I: Proportion of infected
+            R: Proportion of recovered
+            time: Time steps
+            title: Plot title (optional)
+            save_path: Path to save the plot (optional)
+            states_to_plot: Set of states to plot ('S', 'I', 'R')
         """
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
@@ -105,19 +104,19 @@ class Visualizer:
         plt.figure(figsize=(10, 6))
 
         if "R" in states_to_plot:
-            plt.plot(time, R, "g-", label="Recuperados")
+            plt.plot(time, R, "g-", label="Recovered")
         if "I" in states_to_plot:
-            plt.plot(time, I, "r-", label="Infectados")
+            plt.plot(time, I, "r-", label="Infected")
         if "S" in states_to_plot:
-            plt.plot(time, S, "b-", label="Suscetíveis")
+            plt.plot(time, S, "b-", label="Susceptible")
 
-        plt.xlabel("Tempo")
-        plt.ylabel("Proporção de Indivíduos")
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of Individuals")
 
         if title:
             plt.title(title)
         else:
-            plt.title("Dinâmica do Modelo SIR ao Longo do Tempo")
+            plt.title("SIR Model Dynamics Over Time")
 
         plt.legend()
         plt.grid(True, alpha=0.3)
@@ -137,20 +136,20 @@ class Visualizer:
         states_to_plot: Optional[set] = None,
     ) -> None:
         """
-        Compara resultados de múltiplas simulações.
+        Compare results from multiple simulations.
 
         Args:
-            results: Lista de dicionários com resultados
-            labels: Lista de rótulos para cada resultado
-            title: Título do gráfico (opcional)
-            save_path: Caminho para salvar o gráfico (opcional)
-            states_to_plot: Conjunto de estados para plotar ('S', 'I', 'R')
+            results: List of dictionaries with results
+            labels: List of labels for each result
+            title: Plot title (optional)
+            save_path: Path to save the plot (optional)
+            states_to_plot: Set of states to plot ('S', 'I', 'R')
         """
         if not results:
-            raise ValueError("A lista de resultados está vazia")
+            raise ValueError("The results list is empty")
 
         if len(results) != len(labels):
-            raise ValueError("O número de resultados e rótulos deve ser igual")
+            raise ValueError("The number of results and labels must match")
 
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
@@ -176,7 +175,7 @@ class Visualizer:
 
         for idx, (result, label) in enumerate(zip(results, labels)):
             if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
-                raise ValueError(f"Resultado {idx} não contém todos os dados necessários")
+                raise ValueError(f"Result {idx} does not contain all required data")
 
             s_vals = np.array(result["S_val"])
             i_vals = np.array(result["I_val"])
@@ -216,13 +215,13 @@ class Visualizer:
                     label=f"R - {label}",
                 )
 
-        plt.xlabel("Tempo")
-        plt.ylabel("Proporção de Indivíduos")
+        plt.xlabel("Time")
+        plt.ylabel("Proportion of Individuals")
 
         if title:
             plt.title(title)
         else:
-            plt.title("Comparação de Simulações SPKMC")
+            plt.title("SPKMC Simulation Comparison")
 
         plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize="small")
         plt.grid(True, alpha=0.3)
@@ -242,19 +241,19 @@ class Visualizer:
         save_path: Optional[str] = None,
     ) -> None:
         """
-        Compara resultados de múltiplas simulações com configuração customizada.
+        Compare results from multiple simulations with custom configuration.
 
         Args:
-            results: Lista de dicionários com resultados
-            labels: Lista de rótulos para cada resultado
-            plot_config: Configuração de plot customizada
-            save_path: Caminho para salvar o gráfico (opcional)
+            results: List of dictionaries with results
+            labels: List of labels for each result
+            plot_config: Custom plot configuration
+            save_path: Path to save the plot (optional)
         """
         if not results:
-            raise ValueError("A lista de resultados está vazia")
+            raise ValueError("The results list is empty")
 
         if len(results) != len(labels):
-            raise ValueError("O número de resultados e rótulos deve ser igual")
+            raise ValueError("The number of results and labels must match")
 
         # Use config values
         states_to_plot = (
@@ -282,7 +281,7 @@ class Visualizer:
 
         for idx, (result, label) in enumerate(zip(results, labels)):
             if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
-                raise ValueError(f"Resultado {idx} não contém todos os dados necessários")
+                raise ValueError(f"Result {idx} does not contain all required data")
 
             s_vals = np.array(result["S_val"])
             i_vals = np.array(result["I_val"])
@@ -328,7 +327,7 @@ class Visualizer:
         if plot_config.title:
             plt.title(plot_config.title)
         else:
-            plt.title("Comparação de Simulações SPKMC")
+            plt.title("SPKMC Simulation Comparison")
 
         # Position legend outside if many scenarios, otherwise use config position
         if len(results) > 4:
@@ -352,21 +351,21 @@ class Visualizer:
         G: nx.DiGraph, title: Optional[str] = None, save_path: Optional[str] = None
     ) -> None:
         """
-        Plota a rede utilizada na simulação.
+        Plot the network used in the simulation.
 
         Args:
-            G: Grafo da rede
-            title: Título do gráfico (opcional)
-            save_path: Caminho para salvar o gráfico (opcional)
+            G: Network graph
+            title: Plot title (optional)
+            save_path: Path to save the plot (optional)
         """
         plt.figure(figsize=(10, 8))
 
-        # Limita o número de nós para visualização
+        # Limit the number of nodes for visualization
         if G.number_of_nodes() > 100:
             import warnings
 
             warnings.warn(
-                f"A rede tem {G.number_of_nodes()} nós. Limitando a visualização a 100 nós.",
+                f"The network has {G.number_of_nodes()} nodes. Limiting visualization to 100 nodes.",
                 stacklevel=2,
             )
             G = nx.DiGraph(G.subgraph(list(G.nodes())[:100]))
@@ -388,7 +387,7 @@ class Visualizer:
             plt.title(title)
         else:
             plt.title(
-                f"Visualização da Rede ({G.number_of_nodes()} nós, {G.number_of_edges()} arestas)"
+                f"Network Visualization ({G.number_of_nodes()} nodes, {G.number_of_edges()} edges)"
             )
 
         plt.axis("off")
@@ -402,31 +401,31 @@ class Visualizer:
     @staticmethod
     def create_summary_plot(result_path: str, output_dir: Optional[str] = None) -> str:
         """
-        Cria um gráfico resumo a partir de um arquivo de resultados.
+        Create a summary plot from a results file.
 
         Args:
-            result_path: Caminho para o arquivo de resultados
-            output_dir: Diretório para salvar o gráfico (opcional)
+            result_path: Path to the results file
+            output_dir: Directory to save the plot (optional)
 
         Returns:
-            Caminho para o gráfico gerado
+            Path to the generated plot
         """
         import json
 
-        # Carrega os resultados
+        # Load results
         with open(result_path, "r") as f:
             result = json.load(f)
 
-        # Extrai os dados
+        # Extract data
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
         time = np.array(result.get("time", []))
 
-        # Verifica se há dados de erro
+        # Check whether error data is available
         has_error = "S_err" in result and "I_err" in result and "R_err" in result
 
-        # Cria o diretório de saída se não existir
+        # Create output directory if it doesn't exist
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
             base_name = os.path.basename(result_path).replace(".json", ".png")
@@ -434,15 +433,15 @@ class Visualizer:
         else:
             save_path = result_path.replace(".json", ".png")
 
-        # Extrai metadados para o título
+        # Extract metadata for the title
         metadata = result.get("metadata", {})
         network_type = metadata.get("network_type", "").upper()
         dist_type = metadata.get("distribution", "").capitalize()
         N = metadata.get("N", "")
 
-        title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
+        title = f"SPKMC Simulation - Network {network_type}, Distribution {dist_type}, N={N}"
 
-        # Plota os resultados
+        # Plot results
         if has_error:
             s_err = np.array(result.get("S_err", []))
             i_err = np.array(result.get("I_err", []))

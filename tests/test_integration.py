@@ -1,8 +1,8 @@
 """
-Testes de integração para o SPKMC.
+Integration tests for SPKMC.
 
-Este módulo contém testes de integração para verificar o fluxo completo do SPKMC,
-desde a criação de distribuições e redes até a execução de simulações e exportação de resultados.
+This module contains integration tests to verify the full SPKMC flow,
+from creating distributions and networks to running simulations and exporting results.
 """
 
 import os
@@ -22,42 +22,42 @@ from spkmc.io.results import ResultManager
 
 @pytest.fixture
 def runner():
-    """Fixture para o CliRunner do Click."""
+    """Fixture for Click's CliRunner."""
     return CliRunner()
 
 
 @pytest.fixture
 def temp_dir():
-    """Fixture para criar um diretório temporário."""
+    """Fixture to create a temporary directory."""
     temp_dir = tempfile.mkdtemp()
     yield temp_dir
 
-    # Limpa o diretório após o teste
+    # Clean up the directory after the test
     for root, dirs, files in os.walk(temp_dir, topdown=False):
         for file in files:
             os.remove(os.path.join(root, file))
         for dir in dirs:
             os.rmdir(os.path.join(root, dir))
 
-    # Remove o diretório
+    # Remove the directory
     if os.path.exists(temp_dir):
         os.rmdir(temp_dir)
 
 
 def test_full_workflow_programmatic(temp_dir):
     """
-    Testa o fluxo completo de forma programática.
+    Test the full workflow programmatically.
 
-    Este teste verifica a integração entre os diferentes componentes do SPKMC.
+    This test verifies integration between different SPKMC components.
     """
-    # 1. Criar distribuição
+    # 1. Create distribution
     distribution = create_distribution("gamma", shape=2.0, scale=1.0, lambda_=1.0)
 
-    # 2. Criar simulador
+    # 2. Create simulator
     simulator = SPKMC(distribution)
 
-    # 3. Configurar parâmetros
-    N = 20  # Usa um valor pequeno para o teste
+    # 3. Configure parameters
+    N = 20  # Use a small value for the test
     k_avg = 4
     samples = 2
     initial_perc = 0.1
@@ -65,7 +65,7 @@ def test_full_workflow_programmatic(temp_dir):
     steps = 6
     time_steps = np.linspace(0, t_max, steps)
 
-    # 4. Executar simulação
+    # 4. Run simulation
     result = simulator.run_simulation(
         network_type="er",
         time_steps=time_steps,
@@ -77,7 +77,7 @@ def test_full_workflow_programmatic(temp_dir):
         overwrite=True,
     )
 
-    # 5. Verificar resultados
+    # 5. Verify results
     assert "S_val" in result
     assert "I_val" in result
     assert "R_val" in result
@@ -90,31 +90,31 @@ def test_full_workflow_programmatic(temp_dir):
     assert len(result["time"]) == steps
     assert np.isclose(result["S_val"] + result["I_val"] + result["R_val"], 1.0).all()
 
-    # 6. Exportar resultados em diferentes formatos
+    # 6. Export results in different formats
     output_base = os.path.join(temp_dir, "test_result")
 
-    # 6.1. Exportar para JSON
+    # 6.1. Export to JSON
     json_path = ExportManager.export_to_json(result, f"{output_base}.json")
     assert os.path.exists(json_path)
 
-    # 6.2. Exportar para CSV
+    # 6.2. Export to CSV
     csv_path = ExportManager.export_to_csv(result, f"{output_base}.csv")
     assert os.path.exists(csv_path)
 
-    # 6.3. Exportar para Excel
+    # 6.3. Export to Excel
     excel_path = ExportManager.export_to_excel(result, f"{output_base}.xlsx")
     assert os.path.exists(excel_path)
 
-    # 6.4. Exportar para Markdown
+    # 6.4. Export to Markdown
     md_path = ExportManager.export_to_markdown(result, f"{output_base}.md", include_plot=True)
     assert os.path.exists(md_path)
-    assert os.path.exists(f"{output_base}.png")  # Verifica se o gráfico foi gerado
+    assert os.path.exists(f"{output_base}.png")  # Verify the plot was generated
 
-    # 6.5. Exportar para HTML
+    # 6.5. Export to HTML
     html_path = ExportManager.export_to_html(result, f"{output_base}.html", include_plot=True)
     assert os.path.exists(html_path)
 
-    # 7. Carregar resultados
+    # 7. Load results
     loaded_result = ResultManager.load_result(json_path)
     # Verify the core result data structure is preserved after save/load
     assert "S_val" in loaded_result
@@ -129,23 +129,23 @@ def test_full_workflow_programmatic(temp_dir):
 
 def test_cli_integration(runner, temp_dir, monkeypatch):
     """
-    Testa a integração da CLI.
+    Test CLI integration.
 
-    Este teste verifica a integração entre os diferentes comandos da CLI do SPKMC.
+    This test verifies integration between different SPKMC CLI commands.
     """
 
-    # Mock para evitar a exibição de gráficos
+    # Mock to avoid displaying plots
     def mock_plot(*args, **kwargs):
         pass
 
-    # Aplica o mock
+    # Apply the mock
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot)
     monkeypatch.setattr(Visualizer, "plot_result_with_error", mock_plot)
     monkeypatch.setattr(Visualizer, "compare_results", mock_plot)
 
-    # 1. Executar simulação com rede Erdos-Renyi e distribuição Gamma
+    # 1. Run simulation with an Erdos-Renyi network and Gamma distribution
     output_path = os.path.join(temp_dir, "er_gamma.json")
     result = runner.invoke(
         cli,
@@ -179,12 +179,12 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
         ],
     )
 
-    # Verifica se a simulação foi executada com sucesso
+    # Verify the simulation ran successfully
     assert result.exit_code == 0
-    assert "Simulação concluída com sucesso" in result.output
+    assert "Simulation completed successfully" in result.output
     assert os.path.exists(output_path)
 
-    # 2. Executar simulação com rede complexa e distribuição Exponencial
+    # 2. Run simulation with a complex network and Exponential distribution
     output_path2 = os.path.join(temp_dir, "cn_exp.json")
     result = runner.invoke(
         cli,
@@ -220,12 +220,12 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
         ],
     )
 
-    # Verifica se a simulação foi executada com sucesso
+    # Verify the simulation ran successfully
     assert result.exit_code == 0
-    assert "Simulação concluída com sucesso" in result.output
+    assert "Simulation completed successfully" in result.output
     assert os.path.exists(output_path2)
 
-    # 3. Executar simulação com rede regular aleatória e distribuição Gamma
+    # 3. Run simulation with a random regular network and Gamma distribution
     output_path3 = os.path.join(temp_dir, "rrn_gamma.json")
     result = runner.invoke(
         cli,
@@ -259,26 +259,26 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
         ],
     )
 
-    # Verifica se a simulação foi executada com sucesso
+    # Verify the simulation ran successfully
     assert result.exit_code == 0
-    assert "Simulação concluída com sucesso" in result.output
+    assert "Simulation completed successfully" in result.output
     assert os.path.exists(output_path3)
 
-    # 4. Visualizar resultados
+    # 4. Visualize results
     result = runner.invoke(cli, ["plot", output_path, "--with-error"])
 
-    # Verifica se a visualização foi executada com sucesso
+    # Verify the visualization ran successfully
     assert result.exit_code == 0
 
-    # 5. Obter informações sobre os resultados
+    # 5. Get information about results
     result = runner.invoke(cli, ["info", "--result-file", output_path])
 
-    # Verifica se as informações foram exibidas com sucesso
+    # Verify info was displayed successfully
     assert result.exit_code == 0
-    assert "Parâmetros da Simulação" in result.output
+    assert "Simulation Parameters" in result.output
     assert "network_type: er" in result.output.lower()
 
-    # 6. Comparar resultados
+    # 6. Compare results
     result = runner.invoke(
         cli,
         [
@@ -293,27 +293,27 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
         ],
     )
 
-    # Verifica se a comparação foi executada com sucesso
+    # Verify the comparison ran successfully
     assert result.exit_code == 0
 
 
 def test_network_distribution_integration():
     """
-    Testa a integração entre redes e distribuições.
+    Test integration between networks and distributions.
 
-    Este teste verifica a integração entre os módulos de redes e distribuições.
+    This test verifies integration between the networks and distributions modules.
     """
-    # 1. Criar distribuições
+    # 1. Create distributions
     gamma_dist = create_distribution("gamma", shape=2.0, scale=1.0, lambda_=1.0)
     exp_dist = create_distribution("exponential", mu=1.0, lambda_=1.0)
 
-    # 2. Criar redes
+    # 2. Create networks
     er_network = NetworkFactory.create_erdos_renyi(N=20, k_avg=4)
     cn_network = NetworkFactory.create_complex_network(N=20, exponent=2.5, k_avg=4)
     cg_network = NetworkFactory.create_complete_graph(N=10)
     rrn_network = NetworkFactory.create_random_regular_network(N=20, k_avg=4)
 
-    # 3. Verificar propriedades das redes
+    # 3. Verify network properties
     assert er_network.number_of_nodes() == 20
     assert er_network.number_of_edges() > 0
 
@@ -321,7 +321,7 @@ def test_network_distribution_integration():
     assert cn_network.number_of_edges() > 0
 
     assert cg_network.number_of_nodes() == 10
-    assert cg_network.number_of_edges() == 10 * 9  # Grafo direcionado completo
+    assert cg_network.number_of_edges() == 10 * 9  # Directed complete graph
 
     assert rrn_network.number_of_nodes() == 20
     assert rrn_network.number_of_edges() > 0
@@ -329,15 +329,15 @@ def test_network_distribution_integration():
     out_degrees = dict(rrn_network.out_degree()).values()
     assert all(d == 4 for d in out_degrees)
 
-    # 4. Criar simuladores
+    # 4. Create simulators
     gamma_simulator = SPKMC(gamma_dist)
     exp_simulator = SPKMC(exp_dist)
 
-    # 5. Configurar simulação
+    # 5. Configure simulation
     time_steps = np.linspace(0, 5.0, 6)
-    sources = np.array([0])  # Nó 0 inicialmente infectado
+    sources = np.array([0])  # Node 0 initially infected
 
-    # 6. Executar simulações com diferentes combinações
+    # 6. Run simulations with different combinations
     # 6.1. Gamma + ER
     S1, I1, R1 = gamma_simulator.run_multiple_simulations(
         er_network, sources, time_steps, samples=2, show_progress=False
@@ -368,7 +368,7 @@ def test_network_distribution_integration():
         rrn_network, sources, time_steps, samples=2, show_progress=False
     )
 
-    # 7. Verificar resultados
+    # 7. Verify results
     for S, I, R in [
         (S1, I1, R1),
         (S2, I2, R2),
@@ -384,6 +384,6 @@ def test_network_distribution_integration():
         assert I.shape == time_steps.shape
         assert R.shape == time_steps.shape
         assert np.isclose(S + I + R, 1.0).all()
-        assert S[0] < 1.0  # Deve haver pelo menos um nó infectado inicialmente
-        assert I[0] > 0.0  # Deve haver pelo menos um nó infectado inicialmente
-        assert R[0] == 0.0  # Não deve haver nós recuperados inicialmente
+        assert S[0] < 1.0  # There should be at least one initially infected node
+        assert I[0] > 0.0  # There should be at least one initially infected node
+        assert R[0] == 0.0  # There should be no initially recovered nodes

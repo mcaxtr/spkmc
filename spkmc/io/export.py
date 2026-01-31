@@ -1,8 +1,8 @@
 """
-Exportação de resultados para o algoritmo SPKMC.
+Result export for the SPKMC algorithm.
 
-Este módulo contém funções para exportação de resultados de simulações em diferentes
-formatos, como CSV, Excel, JSON, Markdown e HTML.
+This module contains functions to export simulation results in different formats,
+such as CSV, Excel, JSON, Markdown, and HTML.
 """
 
 import json
@@ -14,54 +14,54 @@ import numpy as np
 
 from spkmc.io.results import NumpyJSONEncoder
 
-# Importações condicionais
+# Conditional imports
 try:
     import pandas as pd
 
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
-    print("Aviso: Pandas não encontrado. A exportação para Excel/CSV não estará disponível.")
+    print("Warning: Pandas not found. Excel/CSV export will be unavailable.")
 
 from spkmc.visualization.plots import Visualizer
 
 
 class ExportManager:
-    """Gerencia a exportação de resultados em diferentes formatos."""
+    """Manage result exports in different formats."""
 
     @staticmethod
     def export_to_csv(result: Dict[str, Any], output_path: str) -> str:
         """
-        Exporta os resultados para um arquivo CSV.
+        Export results to a CSV file.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
+            result: Dictionary with results
+            output_path: Output file path
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
 
         Raises:
-            ImportError: Se o pandas não estiver disponível
+            ImportError: If pandas is not available
         """
         if not PANDAS_AVAILABLE:
-            raise ImportError("Pandas não instalado. Use 'pip install pandas' para exportar CSV.")
+            raise ImportError("Pandas not installed. Use 'pip install pandas' to export CSV.")
 
-        # Cria o diretório se não existir
+        # Create the directory if it doesn't exist
         os.makedirs(
             os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
         )
 
-        # Extrai os dados
+        # Extract data
         time_steps = np.array(result.get("time", []))
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
 
-        # Cria o DataFrame
+        # Create DataFrame
         data = {"Time": time_steps, "Susceptible": s_vals, "Infected": i_vals, "Recovered": r_vals}
 
-        # Adiciona dados de erro, se disponíveis
+        # Add error data if available
         if "S_err" in result and "I_err" in result and "R_err" in result:
             data["Susceptible_Error"] = np.array(result.get("S_err", []))
             data["Infected_Error"] = np.array(result.get("I_err", []))
@@ -69,7 +69,7 @@ class ExportManager:
 
         df = pd.DataFrame(data)
 
-        # Salva como CSV
+        # Save as CSV
         df.to_csv(output_path, index=False)
 
         return output_path
@@ -77,44 +77,44 @@ class ExportManager:
     @staticmethod
     def export_to_excel(result: Dict[str, Any], output_path: str) -> str:
         """
-        Exporta os resultados para um arquivo Excel.
+        Export results to an Excel file.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
+            result: Dictionary with results
+            output_path: Output file path
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
 
         Raises:
-            ImportError: Se o pandas ou openpyxl não estiverem disponíveis
+            ImportError: If pandas or openpyxl are not available
         """
         if not PANDAS_AVAILABLE:
-            raise ImportError("Pandas não instalado. Use 'pip install pandas openpyxl' para Excel.")
+            raise ImportError("Pandas not installed. Use 'pip install pandas openpyxl' for Excel.")
 
-        # Verifica se openpyxl está disponível
+        # Check whether openpyxl is available
         try:
             import openpyxl
 
             _ = openpyxl  # Verify import succeeded
         except ImportError:
-            raise ImportError("Openpyxl não instalado. Use 'pip install openpyxl' para Excel.")
+            raise ImportError("Openpyxl not installed. Use 'pip install openpyxl' for Excel.")
 
-        # Cria o diretório se não existir
+        # Create the directory if it doesn't exist
         os.makedirs(
             os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
         )
 
-        # Extrai os dados
+        # Extract data
         time_steps = np.array(result.get("time", []))
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
 
-        # Cria o DataFrame para os dados
+        # Create the DataFrame for data
         data = {"Time": time_steps, "Susceptible": s_vals, "Infected": i_vals, "Recovered": r_vals}
 
-        # Adiciona dados de erro, se disponíveis
+        # Add error data if available
         if "S_err" in result and "I_err" in result and "R_err" in result:
             data["Susceptible_Error"] = np.array(result.get("S_err", []))
             data["Infected_Error"] = np.array(result.get("I_err", []))
@@ -122,16 +122,16 @@ class ExportManager:
 
         df_data = pd.DataFrame(data)
 
-        # Cria o DataFrame para os metadados
+        # Create the DataFrame for metadata
         metadata = result.get("metadata", {})
         df_metadata = pd.DataFrame(list(metadata.items()), columns=["Parameter", "Value"])
 
-        # Cria o arquivo Excel com múltiplas planilhas
+        # Create the Excel file with multiple sheets
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             df_data.to_excel(writer, sheet_name="Data", index=False)
             df_metadata.to_excel(writer, sheet_name="Metadata", index=False)
 
-            # Adiciona uma planilha com estatísticas
+            # Add a statistics sheet
             stats = {
                 "Statistic": ["Max Infected", "Final Recovered", "Time to Peak"],
                 "Value": [
@@ -147,21 +147,21 @@ class ExportManager:
     @staticmethod
     def export_to_json(result: Dict[str, Any], output_path: str) -> str:
         """
-        Exporta os resultados para um arquivo JSON.
+        Export results to a JSON file.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
+            result: Dictionary with results
+            output_path: Output file path
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
         """
-        # Cria o diretório se não existir
+        # Create the directory if it doesn't exist
         os.makedirs(
             os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
         )
 
-        # Salva como JSON
+        # Save as JSON
         with open(output_path, "w") as f:
             json.dump(result, f, indent=2, cls=NumpyJSONEncoder)
 
@@ -172,79 +172,79 @@ class ExportManager:
         result: Dict[str, Any], output_path: str, include_plot: bool = True
     ) -> str:
         """
-        Exporta os resultados para um arquivo Markdown.
+        Export results to a Markdown file.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
-            include_plot: Se True, inclui um gráfico no relatório
+            result: Dictionary with results
+            output_path: Output file path
+            include_plot: If True, include a plot in the report
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
         """
-        # Cria o diretório se não existir
+        # Create the directory if it doesn't exist
         os.makedirs(
             os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
         )
 
-        # Extrai os metadados
+        # Extract metadata
         metadata = result.get("metadata", {})
         network_type = metadata.get("network_type", "").upper()
         dist_type = metadata.get("distribution", "").capitalize()
         N = metadata.get("N", "")
 
-        # Extrai os dados
+        # Extract data
         time_steps = np.array(result.get("time", []))
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
 
-        # Calcula estatísticas
+        # Calculate statistics
         max_infected = np.max(i_vals) if len(i_vals) > 0 else 0
         max_infected_time = (
             time_steps[np.argmax(i_vals)] if len(i_vals) > 0 and len(time_steps) > 0 else 0
         )
         final_recovered = r_vals[-1] if len(r_vals) > 0 else 0
 
-        # Gera o conteúdo Markdown
+        # Build Markdown content
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        md_content = f"""# Relatório de Simulação SPKMC
+        md_content = f"""# SPKMC Simulation Report
 
-Gerado em: {timestamp}
+Generated at: {timestamp}
 
-## Parâmetros da Simulação
+## Simulation Parameters
 
-| Parâmetro | Valor |
+| Parameter | Value |
 |-----------|-------|
-| Tipo de Rede | {network_type} |
-| Distribuição | {dist_type} |
-| Número de Nós (N) | {N} |
+| Network Type | {network_type} |
+| Distribution | {dist_type} |
+| Number of Nodes (N) | {N} |
 """
 
-        # Adiciona parâmetros específicos
+        # Add specific parameters
         for key, value in metadata.items():
             if key not in ["network_type", "distribution", "N"]:
                 md_content += f"| {key} | {value} |\n"
 
-        # Adiciona estatísticas
+        # Add statistics
         md_content += f"""
-## Estatísticas
+## Statistics
 
-| Estatística | Valor |
+| Statistic | Value |
 |-------------|-------|
-| Máximo de Infectados | {max_infected:.4f} |
-| Tempo do Pico de Infecção | {max_infected_time:.4f} |
-| Recuperados Finais | {final_recovered:.4f} |
+| Peak Infected | {max_infected:.4f} |
+| Time to Infection Peak | {max_infected_time:.4f} |
+| Final Recovered | {final_recovered:.4f} |
 
 """
 
-        # Adiciona gráfico, se solicitado
+        # Add plot if requested
         if include_plot:
             plot_path = output_path.replace(".md", ".png")
 
-            # Gera o gráfico
-            title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
+            # Generate plot
+            title = f"SPKMC Simulation - Network {network_type}, Distribution {dist_type}, N={N}"
 
             has_error = "S_err" in result and "I_err" in result and "R_err" in result
             if has_error:
@@ -257,21 +257,21 @@ Gerado em: {timestamp}
             else:
                 Visualizer.plot_result(s_vals, i_vals, r_vals, time_steps, title, plot_path)
 
-            # Adiciona referência ao gráfico no Markdown
+            # Add plot reference to Markdown
             md_content += f"""
-## Visualização
+## Visualization
 
-![Gráfico da Simulação]({os.path.basename(plot_path)})
+![Simulation Plot]({os.path.basename(plot_path)})
 
 """
 
-        # Adiciona tabela de dados (primeiros e últimos 5 pontos)
+        # Add data tables (first and last 5 points)
         md_content += """
-## Dados da Simulação
+## Simulation Data
 
-### Primeiros 5 pontos
+### First 5 points
 
-| Tempo | Suscetíveis | Infectados | Recuperados |
+| Time | Susceptible | Infected | Recovered |
 |-------|-------------|------------|-------------|
 """
 
@@ -282,9 +282,9 @@ Gerado em: {timestamp}
             )
 
         md_content += """
-### Últimos 5 pontos
+### Last 5 points
 
-| Tempo | Suscetíveis | Infectados | Recuperados |
+| Time | Susceptible | Infected | Recovered |
 |-------|-------------|------------|-------------|
 """
 
@@ -294,7 +294,7 @@ Gerado em: {timestamp}
                 f"| {i_vals[idx]:.4f} | {r_vals[idx]:.4f} |\n"
             )
 
-        # Salva o arquivo Markdown
+        # Save Markdown file
         with open(output_path, "w") as f:
             f.write(md_content)
 
@@ -303,43 +303,43 @@ Gerado em: {timestamp}
     @staticmethod
     def export_to_html(result: Dict[str, Any], output_path: str, include_plot: bool = True) -> str:
         """
-        Exporta os resultados para um arquivo HTML.
+        Export results to an HTML file.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
-            include_plot: Se True, inclui um gráfico no relatório
+            result: Dictionary with results
+            output_path: Output file path
+            include_plot: If True, include a plot in the report
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
 
         Raises:
-            ImportError: Se o pandas não estiver disponível
+            ImportError: If pandas is not available
         """
         if not PANDAS_AVAILABLE:
-            raise ImportError("Pandas não instalado. Use 'pip install pandas' para exportar HTML.")
+            raise ImportError("Pandas not installed. Use 'pip install pandas' to export HTML.")
 
-        # Primeiro exporta para Markdown
+        # First export to Markdown
         md_path = output_path.replace(".html", ".md")
         ExportManager.export_to_markdown(result, md_path, include_plot)
 
-        # Converte o Markdown para HTML usando pandas
+        # Convert Markdown to HTML using pandas
         with open(md_path, "r") as f:
             md_content = f.read()
 
-        # Cria um DataFrame com o conteúdo Markdown
+        # Create a DataFrame with the Markdown content
         df = pd.DataFrame({"markdown": [md_content]})
 
-        # Converte para HTML
+        # Convert to HTML
         html = df.to_html(escape=False, index=False, header=False)
 
-        # Adiciona estilos CSS
+        # Add CSS styles
         html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório SPKMC</title>
+    <title>SPKMC Report</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -379,11 +379,11 @@ Gerado em: {timestamp}
 </html>
 """
 
-        # Salva o arquivo HTML
+        # Save HTML file
         with open(output_path, "w") as f:
             f.write(html_content)
 
-        # Remove o arquivo Markdown temporário
+        # Remove temporary Markdown file
         os.remove(md_path)
 
         return output_path
@@ -393,36 +393,36 @@ Gerado em: {timestamp}
         result: Dict[str, Any], output_path: str, format: str = "png", dpi: int = 300
     ) -> str:
         """
-        Exporta o gráfico da simulação em diferentes formatos.
+        Export the simulation plot in different formats.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
-            format: Formato do gráfico (png, pdf, svg, jpg)
-            dpi: Resolução do gráfico em DPI
+            result: Dictionary with results
+            output_path: Output file path
+            format: Plot format (png, pdf, svg, jpg)
+            dpi: Plot resolution in DPI
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
         """
-        # Cria o diretório se não existir
+        # Create the directory if it doesn't exist
         os.makedirs(
             os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
         )
 
-        # Extrai os metadados
+        # Extract metadata
         metadata = result.get("metadata", {})
         network_type = metadata.get("network_type", "").upper()
         dist_type = metadata.get("distribution", "").capitalize()
         N = metadata.get("N", "")
 
-        # Extrai os dados
+        # Extract data
         time_steps = np.array(result.get("time", []))
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
 
-        # Gera o gráfico
-        title = f"Simulação SPKMC - Rede {network_type}, Distribuição {dist_type}, N={N}"
+        # Generate plot
+        title = f"SPKMC Simulation - Network {network_type}, Distribution {dist_type}, N={N}"
 
         has_error = "S_err" in result and "I_err" in result and "R_err" in result
         if has_error:
@@ -440,19 +440,19 @@ Gerado em: {timestamp}
     @staticmethod
     def export_results(result: Dict[str, Any], output_path: str, format: str = "json") -> str:
         """
-        Exporta os resultados no formato especificado.
+        Export results in the specified format.
 
         Args:
-            result: Dicionário com os resultados
-            output_path: Caminho para o arquivo de saída
-            format: Formato de exportação (json, csv, excel, md, html)
+            result: Dictionary with results
+            output_path: Output file path
+            format: Export format (json, csv, excel, md, html)
 
         Returns:
-            Caminho para o arquivo exportado
+            Path to the exported file
 
         Raises:
-            ValueError: Se o formato for inválido
-            ImportError: Se as dependências necessárias não estiverem disponíveis
+            ValueError: If the format is invalid
+            ImportError: If required dependencies are unavailable
         """
         format = format.lower()
 
@@ -461,24 +461,24 @@ Gerado em: {timestamp}
                 return ExportManager.export_to_json(result, output_path)
             elif format == "csv":
                 if not PANDAS_AVAILABLE:
-                    raise ImportError("Pandas não instalado. Use 'pip install pandas' para CSV.")
+                    raise ImportError("Pandas not installed. Use 'pip install pandas' for CSV.")
                 return ExportManager.export_to_csv(result, output_path)
             elif format == "excel":
                 if not PANDAS_AVAILABLE:
                     raise ImportError(
-                        "Pandas não instalado. Use 'pip install pandas openpyxl' para Excel."
+                        "Pandas not installed. Use 'pip install pandas openpyxl' for Excel."
                     )
                 return ExportManager.export_to_excel(result, output_path)
             elif format == "md" or format == "markdown":
                 return ExportManager.export_to_markdown(result, output_path)
             elif format == "html":
                 if not PANDAS_AVAILABLE:
-                    raise ImportError("Pandas não instalado. Use 'pip install pandas' para HTML.")
+                    raise ImportError("Pandas not installed. Use 'pip install pandas' for HTML.")
                 return ExportManager.export_to_html(result, output_path)
             else:
-                raise ValueError(f"Formato de exportação inválido: {format}")
+                raise ValueError(f"Invalid export format: {format}")
         except ImportError as e:
-            print(f"Erro de importação: {e}")
-            print("Tentando exportar para JSON como alternativa...")
+            print(f"Import error: {e}")
+            print("Trying to export to JSON as a fallback...")
             json_path = output_path.replace(f".{format}", ".json")
             return ExportManager.export_to_json(result, json_path)

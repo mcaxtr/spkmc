@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Script de configuração para o pacote SPKMC.
+Setup script for the SPKMC package.
 
-Este script é mantido para compatibilidade com ferramentas mais antigas.
-Para novas instalações, recomenda-se usar o arquivo pyproject.toml.
+This script is kept for compatibility with older tools.
+For new installs, prefer the pyproject.toml file.
 """
 
 from setuptools import setup

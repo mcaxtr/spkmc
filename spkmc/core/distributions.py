@@ -1,8 +1,8 @@
 """
-Classes de distribuição para o algoritmo SPKMC.
+Distribution classes for the SPKMC algorithm.
 
-Este módulo contém as implementações de diferentes distribuições de probabilidade
-utilizadas no algoritmo SPKMC para modelar os tempos de recuperação e infecção.
+This module contains implementations of different probability distributions
+used by the SPKMC algorithm to model recovery and infection times.
 """
 
 from __future__ import annotations
@@ -23,61 +23,61 @@ from spkmc.utils.numba_utils import (
 
 
 class Distribution(ABC):
-    """Classe abstrata para distribuições de probabilidade usadas no SPKMC."""
+    """Abstract base class for probability distributions used in SPKMC."""
 
     @abstractmethod
     def get_recovery_weights(self, size: int) -> np.ndarray:
         """
-        Gera os pesos de recuperação para cada nó.
+        Generate recovery weights for each node.
 
         Args:
-            size: Número de nós
+            size: Number of nodes
 
         Returns:
-            Array com os pesos de recuperação
+            Array with recovery weights
         """
         pass
 
     @abstractmethod
     def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
         """
-        Calcula os tempos de infecção para cada aresta.
+        Calculate infection times for each edge.
 
         Args:
-            recovery_times: Tempos de recuperação para cada nó
-            edges: Arestas do grafo como matriz (u, v)
+            recovery_times: Recovery times for each node
+            edges: Graph edges as a matrix (u, v)
 
         Returns:
-            Array com os tempos de infecção
+            Array with infection times
         """
         pass
 
     @abstractmethod
     def get_distribution_name(self) -> str:
         """
-        Retorna o nome da distribuição.
+        Return the distribution name.
 
         Returns:
-            Nome da distribuição
+            Distribution name
         """
         pass
 
     @abstractmethod
     def get_params_string(self) -> str:
         """
-        Retorna uma string com os parâmetros da distribuição para uso em nomes de arquivos.
+        Return a string with distribution parameters for filenames.
 
         Returns:
-            String com os parâmetros
+            String with parameters
         """
         pass
 
     def get_params_dict(self) -> dict:
         """
-        Retorna um dicionário com os parâmetros da distribuição.
+        Return a dictionary of distribution parameters.
 
         Returns:
-            Dicionário com os parâmetros
+            Dictionary with parameters
         """
         return {}
 
@@ -97,16 +97,16 @@ class Distribution(ABC):
 
 
 class GammaDistribution(Distribution):
-    """Implementação da distribuição Gamma para o SPKMC."""
+    """Gamma distribution implementation for SPKMC."""
 
     def __init__(self, shape: float, scale: float, lmbd: float = 1.0):
         """
-        Inicializa a distribuição Gamma.
+        Initialize the Gamma distribution.
 
         Args:
-            shape: Parâmetro de forma da distribuição Gamma
-            scale: Parâmetro de escala da distribuição Gamma
-            lmbd: Parâmetro lambda para tempos de infecção (padrão: 1.0)
+            shape: Shape parameter of the Gamma distribution
+            scale: Scale parameter of the Gamma distribution
+            lmbd: Lambda parameter for infection times (default: 1.0)
         """
         self.shape = shape
         self.scale = scale
@@ -114,29 +114,29 @@ class GammaDistribution(Distribution):
 
     def get_recovery_weights(self, size: int) -> np.ndarray:
         """
-        Gera os pesos de recuperação usando a distribuição Gamma.
+        Generate recovery weights using the Gamma distribution.
 
         Args:
-            size: Número de nós
+            size: Number of nodes
 
         Returns:
-            Array com os pesos de recuperação
+            Array with recovery weights
         """
         result: np.ndarray = np.asarray(gamma_sampling(self.shape, self.scale, size))
         return result
 
     def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
         """
-        Calcula os tempos de infecção usando a distribuição Gamma.
+        Calculate infection times using the Gamma distribution.
 
         Args:
-            recovery_times: Tempos de recuperação para cada nó
-            edges: Arestas do grafo como matriz (u, v)
+            recovery_times: Recovery times for each node
+            edges: Graph edges as a matrix (u, v)
 
         Returns:
-            Array com os tempos de infecção
+            Array with infection times
         """
-        # Nota: Atualmente usando exponencial para infecção, mesmo com recuperação gamma
+        # Note: Currently using exponential infection times even with gamma recovery
         result: np.ndarray = np.asarray(
             compute_infection_times_exponential(self.lmbd, recovery_times, edges)
         )
@@ -144,19 +144,19 @@ class GammaDistribution(Distribution):
 
     def get_distribution_name(self) -> str:
         """
-        Retorna o nome da distribuição.
+        Return the distribution name.
 
         Returns:
-            Nome da distribuição
+            Distribution name
         """
         return "gamma"
 
     def get_params_string(self) -> str:
         """
-        Retorna uma string com os parâmetros da distribuição para uso em nomes de arquivos.
+        Return a string with distribution parameters for filenames.
 
         Returns:
-            String com os parâmetros (shape, scale, and lambda formatted for filenames)
+            String with parameters (shape, scale, and lambda formatted for filenames)
         """
         shape_str = f"{self.shape:.4f}".rstrip("0").rstrip(".")
         scale_str = f"{self.scale:.4f}".rstrip("0").rstrip(".")
@@ -165,10 +165,10 @@ class GammaDistribution(Distribution):
 
     def get_params_dict(self) -> dict:
         """
-        Retorna um dicionário com os parâmetros da distribuição.
+        Return a dictionary with distribution parameters.
 
         Returns:
-            Dicionário com os parâmetros
+            Dictionary with parameters
         """
         return {
             "type": "gamma",
@@ -190,42 +190,42 @@ class GammaDistribution(Distribution):
 
 
 class ExponentialDistribution(Distribution):
-    """Implementação da distribuição Exponencial para o SPKMC."""
+    """Exponential distribution implementation for SPKMC."""
 
     def __init__(self, mu: float, lmbd: float):
         """
-        Inicializa a distribuição Exponencial.
+        Initialize the Exponential distribution.
 
         Args:
-            mu: Parâmetro mu para tempos de recuperação
-            lmbd: Parâmetro lambda para tempos de infecção
+            mu: Mu parameter for recovery times
+            lmbd: Lambda parameter for infection times
         """
         self.mu = mu
         self.lmbd = lmbd
 
     def get_recovery_weights(self, size: int) -> np.ndarray:
         """
-        Gera os pesos de recuperação usando a distribuição Exponencial.
+        Generate recovery weights using the Exponential distribution.
 
         Args:
-            size: Número de nós
+            size: Number of nodes
 
         Returns:
-            Array com os pesos de recuperação
+            Array with recovery weights
         """
         result: np.ndarray = np.asarray(get_weight_exponential(self.mu, size))
         return result
 
     def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
         """
-        Calcula os tempos de infecção usando a distribuição Exponencial.
+        Calculate infection times using the Exponential distribution.
 
         Args:
-            recovery_times: Tempos de recuperação para cada nó
-            edges: Arestas do grafo como matriz (u, v)
+            recovery_times: Recovery times for each node
+            edges: Graph edges as a matrix (u, v)
 
         Returns:
-            Array com os tempos de infecção
+            Array with infection times
         """
         result: np.ndarray = np.asarray(
             compute_infection_times_exponential(self.lmbd, recovery_times, edges)
@@ -234,19 +234,19 @@ class ExponentialDistribution(Distribution):
 
     def get_distribution_name(self) -> str:
         """
-        Retorna o nome da distribuição.
+        Return the distribution name.
 
         Returns:
-            Nome da distribuição
+            Distribution name
         """
         return "exponential"
 
     def get_params_string(self) -> str:
         """
-        Retorna uma string com os parâmetros da distribuição para uso em nomes de arquivos.
+        Return a string with distribution parameters for filenames.
 
         Returns:
-            String com os parâmetros (mu and lambda formatted for filenames)
+            String with parameters (mu and lambda formatted for filenames)
         """
         mu_str = f"{self.mu:.4f}".rstrip("0").rstrip(".")
         lmbd_str = f"{self.lmbd:.4f}".rstrip("0").rstrip(".")
@@ -254,10 +254,10 @@ class ExponentialDistribution(Distribution):
 
     def get_params_dict(self) -> dict:
         """
-        Retorna um dicionário com os parâmetros da distribuição.
+        Return a dictionary with distribution parameters.
 
         Returns:
-            Dicionário com os parâmetros
+            Dictionary with parameters
         """
         return {
             "type": "exponential",
@@ -279,17 +279,17 @@ class ExponentialDistribution(Distribution):
 
 def create_distribution(dist_type: str, **kwargs: Any) -> Distribution:
     """
-    Cria uma instância de distribuição com base no tipo e parâmetros fornecidos.
+    Create a distribution instance based on the given type and parameters.
 
     Args:
-        dist_type: Tipo de distribuição ('gamma' ou 'exponential')
-        **kwargs: Parâmetros específicos da distribuição
+        dist_type: Distribution type ('gamma' or 'exponential')
+        **kwargs: Distribution-specific parameters
 
     Returns:
-        Instância da distribuição solicitada
+        Instance of the requested distribution
 
     Raises:
-        ValueError: Se o tipo de distribuição for desconhecido
+        ValueError: If the distribution type is unknown
     """
     if dist_type.lower() == "gamma":
         shape = kwargs.get("shape", 2.0)
@@ -303,4 +303,4 @@ def create_distribution(dist_type: str, **kwargs: Any) -> Distribution:
         return ExponentialDistribution(mu=mu, lmbd=lmbd)
 
     else:
-        raise ValueError(f"Tipo de distribuição desconhecido: {dist_type}")
+        raise ValueError(f"Unknown distribution type: {dist_type}")

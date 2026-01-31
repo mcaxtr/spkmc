@@ -1,8 +1,8 @@
 """
-Módulo de entrada/saída para o algoritmo SPKMC.
+Input/output module for the SPKMC algorithm.
 
-Este módulo contém classes e funções para gerenciamento de resultados,
-experimentos e exportação de dados.
+This module contains classes and functions for managing results,
+experiments, and data export.
 
 Usage:
     from spkmc.io.results import ResultManager

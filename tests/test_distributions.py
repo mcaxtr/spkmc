@@ -1,7 +1,7 @@
 """
-Testes para o módulo de distribuições.
+Tests for the distributions module.
 
-Este módulo contém testes para as classes de distribuição do SPKMC.
+This module contains tests for SPKMC distribution classes.
 """
 
 import numpy as np
@@ -11,7 +11,7 @@ from spkmc.core.distributions import ExponentialDistribution, GammaDistribution,
 
 
 def test_gamma_distribution_creation():
-    """Testa a criação de uma distribuição Gamma."""
+    """Test creation of a Gamma distribution."""
     shape = 2.0
     scale = 1.0
     lmbd = 1.0
@@ -26,7 +26,7 @@ def test_gamma_distribution_creation():
 
 
 def test_exponential_distribution_creation():
-    """Testa a criação de uma distribuição Exponencial."""
+    """Test creation of an Exponential distribution."""
     mu = 1.0
     lmbd = 1.0
 
@@ -39,7 +39,7 @@ def test_exponential_distribution_creation():
 
 
 def test_create_distribution_gamma():
-    """Testa a função create_distribution para distribuição Gamma."""
+    """Test create_distribution for a Gamma distribution."""
     dist = create_distribution("gamma", shape=2.0, scale=1.0, lambda_=1.0)
 
     assert isinstance(dist, GammaDistribution)
@@ -49,7 +49,7 @@ def test_create_distribution_gamma():
 
 
 def test_create_distribution_exponential():
-    """Testa a função create_distribution para distribuição Exponencial."""
+    """Test create_distribution for an Exponential distribution."""
     dist = create_distribution("exponential", mu=1.0, lambda_=1.0)
 
     assert isinstance(dist, ExponentialDistribution)
@@ -58,13 +58,13 @@ def test_create_distribution_exponential():
 
 
 def test_create_distribution_invalid():
-    """Testa a função create_distribution com um tipo inválido."""
+    """Test create_distribution with an invalid type."""
     with pytest.raises(ValueError):
         create_distribution("invalid_type")
 
 
 def test_gamma_distribution_recovery_weights():
-    """Testa a geração de pesos de recuperação para distribuição Gamma."""
+    """Test recovery weight generation for the Gamma distribution."""
     dist = GammaDistribution(shape=2.0, scale=1.0)
     size = 10
 
@@ -76,7 +76,7 @@ def test_gamma_distribution_recovery_weights():
 
 
 def test_exponential_distribution_recovery_weights():
-    """Testa a geração de pesos de recuperação para distribuição Exponencial."""
+    """Test recovery weight generation for the Exponential distribution."""
     dist = ExponentialDistribution(mu=1.0, lmbd=1.0)
     size = 10
 
@@ -88,7 +88,7 @@ def test_exponential_distribution_recovery_weights():
 
 
 def test_distribution_params_dict():
-    """Testa a geração de dicionário de parâmetros."""
+    """Test generation of parameter dictionaries."""
     gamma_dist = GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
     exp_dist = ExponentialDistribution(mu=1.0, lmbd=1.0)
 

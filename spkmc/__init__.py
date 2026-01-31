@@ -1,11 +1,11 @@
 """
 SPKMC - Shortest Path Kinetic Monte Carlo
 
-Este pacote implementa o algoritmo SPKMC para simulação de propagação de epidemias em redes,
-utilizando o modelo SIR (Susceptible-Infected-Recovered).
+This package implements the SPKMC algorithm to simulate epidemic spread on networks,
+using the SIR model (Susceptible-Infected-Recovered).
 
-A implementação é baseada em classes e interfaces que permitem a simulação em diferentes
-tipos de redes e com diferentes distribuições de probabilidade.
+The implementation is based on classes and interfaces that enable simulation across
+different network types and probability distributions.
 
 Usage:
     # Import specific modules directly for faster startup:

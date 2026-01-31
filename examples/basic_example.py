@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Exemplo básico de uso do SPKMC.
+Basic example of using SPKMC.
 
-Este script demonstra como usar a API do SPKMC para executar uma simulação
-de propagação de epidemias em uma rede Erdos-Renyi com distribuição Gamma.
+This script demonstrates how to use the SPKMC API to run an epidemic spread
+simulation on an Erdos-Renyi network with a Gamma distribution.
 """
 
 import matplotlib.pyplot as plt
@@ -13,45 +13,45 @@ from spkmc import SPKMC, GammaDistribution, NetworkFactory
 
 
 def main():
-    """Função principal do exemplo."""
-    # Configuração dos parâmetros
-    N = 1000  # Número de nós
-    k_avg = 10  # Grau médio
-    samples = 50  # Número de amostras
-    initial_perc = 0.01  # Porcentagem inicial de infectados
+    """Main function for the example."""
+    # Parameter configuration
+    N = 1000  # Number of nodes
+    k_avg = 10  # Average degree
+    samples = 50  # Number of samples
+    initial_perc = 0.01  # Initial percentage of infected
 
-    # Configuração do tempo
+    # Time configuration
     t_max = 10.0
     steps = 100
     time_steps = np.linspace(0, t_max, steps)
 
-    # Criação da distribuição Gamma
+    # Create the Gamma distribution
     gamma_dist = GammaDistribution(shape=2.0, scale=1.0, lmbd=1.0)
 
-    # Criação do simulador SPKMC
+    # Create the SPKMC simulator
     simulator = SPKMC(gamma_dist)
 
-    print("Simulando rede Erdos-Renyi com distribuição Gamma...")
+    print("Simulating an Erdos-Renyi network with a Gamma distribution...")
 
-    # Criação da rede Erdos-Renyi
+    # Create the Erdos-Renyi network
     G = NetworkFactory.create_erdos_renyi(N, k_avg)
 
-    # Configuração dos nós inicialmente infectados
+    # Configure initially infected nodes
     init_infect = int(N * initial_perc)
     sources = np.random.randint(0, N, init_infect)
 
-    # Execução da simulação
+    # Run the simulation
     S, I, R = simulator.run_multiple_simulations(G, sources, time_steps, samples)
 
-    # Visualização dos resultados
+    # Visualize results
     plt.figure(figsize=(10, 6))
-    plt.plot(time_steps, S, "b-", label="Suscetíveis")
-    plt.plot(time_steps, I, "r-", label="Infectados")
-    plt.plot(time_steps, R, "g-", label="Recuperados")
+    plt.plot(time_steps, S, "b-", label="Susceptible")
+    plt.plot(time_steps, I, "r-", label="Infected")
+    plt.plot(time_steps, R, "g-", label="Recovered")
 
-    plt.xlabel("Tempo")
-    plt.ylabel("Proporção de Indivíduos")
-    plt.title("Dinâmica do Modelo SIR ao Longo do Tempo")
+    plt.xlabel("Time")
+    plt.ylabel("Proportion of Individuals")
+    plt.title("SIR Model Dynamics Over Time")
     plt.legend()
     plt.grid(True, alpha=0.3)
 

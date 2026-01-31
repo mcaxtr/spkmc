@@ -1,8 +1,8 @@
 """
-Implementação principal do algoritmo SPKMC.
+Main implementation of the SPKMC algorithm.
 
-Este módulo contém a implementação do algoritmo Shortest Path Kinetic Monte Carlo (SPKMC)
-para simulação de propagação de epidemias em redes, utilizando o modelo SIR
+This module contains the implementation of the Shortest Path Kinetic Monte Carlo (SPKMC)
+algorithm for simulating epidemic spread on networks using the SIR model
 (Susceptible-Infected-Recovered).
 """
 
@@ -66,12 +66,12 @@ class _DummyProgress:
 
 class SPKMC:
     """
-    Implementação do algoritmo Shortest Path Kinetic Monte Carlo (SPKMC).
+    Implementation of the Shortest Path Kinetic Monte Carlo (SPKMC) algorithm.
 
-    Esta classe implementa o algoritmo SPKMC para simulação de propagação de epidemias
-    em redes, utilizando o modelo SIR (Susceptible-Infected-Recovered).
+    This class implements the SPKMC algorithm for simulating epidemic spread on
+    networks using the SIR model (Susceptible-Infected-Recovered).
 
-    Suporta aceleração GPU automática quando disponível.
+    Supports automatic GPU acceleration when available.
     """
 
     # Minimum graph size for GPU to be beneficial
@@ -80,11 +80,11 @@ class SPKMC:
 
     def __init__(self, distribution: Distribution, use_gpu: bool = False):
         """
-        Inicializa o simulador SPKMC.
+        Initialize the SPKMC simulator.
 
         Args:
-            distribution: Objeto de distribuição a ser usado na simulação
-            use_gpu: Usar aceleração GPU se disponível (padrão: False)
+            distribution: Distribution object to use in the simulation
+            use_gpu: Use GPU acceleration if available (default: False)
 
         Environment:
             SPKMC_NO_GPU: Set to '1' to force CPU mode (useful for benchmarking)
@@ -132,17 +132,17 @@ class SPKMC:
         self, N: int, edges: np.ndarray, sources: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Calcula as distâncias mínimas dos nós de origem para todos os outros nós.
+        Calculate shortest distances from source nodes to all other nodes.
 
-        Usa GPU para aceleração quando disponível e habilitado.
+        Uses GPU acceleration when available and enabled.
 
         Args:
-            N: Número de nós
-            edges: Arestas do grafo como matriz (u, v)
-            sources: Nós de origem
+            N: Number of nodes
+            edges: Graph edges as a matrix (u, v)
+            sources: Source nodes
 
         Returns:
-            Tupla com (distâncias, tempos de recuperação)
+            Tuple of (distances, recovery times)
         """
         # Try GPU acceleration if enabled and available
         # Auto-select: only use GPU for large graphs where it's beneficial
@@ -175,18 +175,18 @@ class SPKMC:
         debug = os.environ.get("SPKMC_DEBUG") == "1"
         t_start = time_module.perf_counter()
 
-        # Gera os tempos de recuperação
+        # Generate recovery times
         recovery_weights = self.distribution.get_recovery_weights(N)
 
-        # Calcula os tempos de infecção
+        # Calculate infection times
         infection_times = self.distribution.get_infection_times(recovery_weights, edges)
 
-        # Cria a matriz esparsa do grafo
+        # Create the sparse graph matrix
         row_indices = edges[:, 0]
         col_indices = edges[:, 1]
         graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
 
-        # Calcula as distâncias mínimas
+        # Calculate shortest distances
         dist_matrix = dijkstra(
             csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False
         )
@@ -208,21 +208,21 @@ class SPKMC:
         self, N: int, edges: np.ndarray, sources: np.ndarray, time_steps: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Executa uma única simulação SPKMC.
+        Run a single SPKMC simulation.
 
         Args:
-            N: Número de nós
-            edges: Arestas do grafo como matriz (u, v)
-            sources: Nós de origem
-            time_steps: Array com os passos de tempo
+            N: Number of nodes
+            edges: Graph edges as a matrix (u, v)
+            sources: Source nodes
+            time_steps: Array of time steps
 
         Returns:
-            Tupla com (S, I, R) contendo a proporção de indivíduos em cada estado
+            Tuple (S, I, R) with the proportion of individuals in each state
         """
-        # Calcula os tempos de infecção e recuperação
+        # Calculate infection and recovery times
         time_to_infect, recovery_times = self.get_dist_sparse(N, edges, sources)
 
-        # Calcula os estados para cada passo de tempo usando GPU se disponível
+        # Calculate states for each time step using GPU if available
         # Use same threshold as SSSP for consistency
         use_gpu_for_this_graph = (
             self.use_gpu and self._gpu_available and (N >= self.GPU_MIN_NODES or self._force_gpu)
@@ -257,21 +257,21 @@ class SPKMC:
         progress_callback: ProgressCallback = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Executa múltiplas simulações SPKMC e retorna a média.
+        Run multiple SPKMC simulations and return the mean.
 
         Uses batched GPU operations when GPU is available and graph is large enough.
         Falls back to per-sample execution for CPU mode or small graphs.
 
         Args:
-            G: Grafo da rede
-            sources: Nós de origem
-            time_steps: Array com os passos de tempo
-            samples: Número de amostras
-            show_progress: Se True, mostra barra de progresso
+            G: Network graph
+            sources: Source nodes
+            time_steps: Time steps array
+            samples: Number of samples
+            show_progress: If True, show progress bar
             progress_callback: Optional callback called after each sample
 
         Returns:
-            Tupla (S_mean, I_mean, R_mean) com a média da proporção em cada estado
+            Tuple (S_mean, I_mean, R_mean) with mean proportions for each state
         """
         edges = np.array(G.edges())
         N = G.number_of_nodes()
@@ -405,9 +405,9 @@ class SPKMC:
         I_values = np.zeros((samples, steps))
         R_values = np.zeros((samples, steps))
 
-        # Executa as simulações
-        with _create_progress("Amostras", samples, show_progress) as progress:
-            task = progress.add_task("Amostras", total=samples)
+        # Run simulations
+        with _create_progress("Samples", samples, show_progress) as progress:
+            task = progress.add_task("Samples", total=samples)
             for sample in range(samples):
                 S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
                 S_values[sample, :] = S
@@ -418,7 +418,7 @@ class SPKMC:
                 if progress_callback is not None:
                     progress_callback(1, samples)
 
-        # Calcula as médias
+        # Calculate means
         S_mean = np.mean(S_values, axis=0)
         I_mean = np.mean(I_values, axis=0)
         R_mean = np.mean(R_values, axis=0)
@@ -438,25 +438,25 @@ class SPKMC:
         progress_callback: ProgressCallback = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Simula a propagação em múltiplas redes Erdos-Renyi.
+        Simulate spread on multiple Erdos-Renyi networks.
 
         Args:
-            num_runs: Número de execuções
-            time_steps: Array com os passos de tempo
-            N: Número de nós
-            k_avg: Grau médio
-            samples: Número de amostras por execução
-            initial_perc: Porcentagem inicial de infectados
-            load_if_exists: Se True, carrega resultados existentes
-            show_progress: Se True, mostra barra de progresso
+            num_runs: Number of runs
+            time_steps: Time steps array
+            N: Number of nodes
+            k_avg: Average degree
+            samples: Number of samples per run
+            initial_perc: Initial percentage of infected
+            load_if_exists: If True, load existing results
+            show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
 
         Returns:
-            Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
         S_list, I_list, R_list = [], [], []
 
-        # Verifica se já existem resultados salvos
+        # Check whether saved results already exist
         if load_if_exists:
             result_path = ResultManager.get_result_path(
                 "ER", self.distribution, N, samples, k_avg=k_avg
@@ -473,9 +473,9 @@ class SPKMC:
                         np.array(result.get("R_err", [])),
                     )
                 except Exception as e:
-                    print(f"Erro ao carregar resultados existentes: {e}")
+                    print(f"Error loading existing results: {e}")
 
-        # Executa as simulações
+        # Run simulations
         import time as time_module
 
         debug = os.environ.get("SPKMC_DEBUG") == "1"
@@ -483,10 +483,10 @@ class SPKMC:
         # Use fast edge generators for GPU workflows
         use_fast_edges = self._should_use_batched_gpu(N)
 
-        with _create_progress("Execuções", num_runs, show_progress) as progress:
-            task = progress.add_task("Execuções (ER)", total=num_runs)
+        with _create_progress("Runs", num_runs, show_progress) as progress:
+            task = progress.add_task("Runs (ER)", total=num_runs)
             for run in range(num_runs):
-                # Cria a rede (fast edge generator for GPU, NetworkX for CPU)
+                # Create the network (fast edge generator for GPU, NetworkX for CPU)
                 t_net_start = time_module.perf_counter()
                 if use_fast_edges:
                     _, edges = NetworkFactory.create_erdos_renyi_edges(N, k_avg)
@@ -495,13 +495,13 @@ class SPKMC:
                     edges = np.array(G.edges())
                 t_net_end = time_module.perf_counter()
 
-                # Configura os nós inicialmente infectados
+                # Configure initially infected nodes
                 init_infect = int(N * initial_perc)
                 if init_infect < 1:
-                    raise ValueError(f"Nós infectados iniciais < 1: N*initial_perc = {init_infect}")
+                    raise ValueError(f"Initial infected nodes < 1: N*initial_perc = {init_infect}")
                 sources = np.random.randint(0, N, init_infect)
 
-                # Executa a simulação
+                # Run the simulation
                 t_sim_start = time_module.perf_counter()
                 S, I, R = self.run_multiple_simulations_from_edges(
                     N,
@@ -531,7 +531,7 @@ class SPKMC:
                 R_list.append(R)
                 progress.update(task, advance=1)
 
-        # Calcula médias e erros
+        # Calculate means and errors
         S_avg = np.mean(np.array(S_list), axis=0)
         I_avg = np.mean(np.array(I_list), axis=0)
         R_avg = np.mean(np.array(R_list), axis=0)
@@ -540,7 +540,7 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
-        # Salva os resultados
+        # Save results
         result = {
             "S_val": list(S_avg),
             "S_err": list(S_err),
@@ -582,26 +582,26 @@ class SPKMC:
         progress_callback: ProgressCallback = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Simula a propagação em múltiplas redes complexas.
+        Simulate spread on multiple complex networks.
 
         Args:
-            num_runs: Número de execuções
-            exponent: Expoente da lei de potência
-            time_steps: Array com os passos de tempo
-            N: Número de nós
-            k_avg: Grau médio
-            samples: Número de amostras por execução
-            initial_perc: Porcentagem inicial de infectados
-            load_if_exists: Se True, carrega resultados existentes
-            show_progress: Se True, mostra barra de progresso
+            num_runs: Number of runs
+            exponent: Power-law exponent
+            time_steps: Time steps array
+            N: Number of nodes
+            k_avg: Average degree
+            samples: Number of samples per run
+            initial_perc: Initial percentage of infected
+            load_if_exists: If True, load existing results
+            show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
 
         Returns:
-            Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
         S_list, I_list, R_list = [], [], []
 
-        # Verifica se já existem resultados salvos
+        # Check whether saved results already exist
         if load_if_exists:
             result_path = ResultManager.get_result_path(
                 "CN", self.distribution, N, samples, exponent=exponent, k_avg=k_avg
@@ -618,29 +618,29 @@ class SPKMC:
                         np.array(result.get("R_err", [])),
                     )
                 except Exception as e:
-                    print(f"Erro ao carregar resultados existentes: {e}")
+                    print(f"Error loading existing results: {e}")
 
-        # Executa as simulações
+        # Run simulations
         # Use fast edge generators for GPU workflows
         use_fast_edges = self._should_use_batched_gpu(N)
 
-        with _create_progress("Execuções", num_runs, show_progress) as progress:
-            task = progress.add_task(f"Execuções (CN γ={exponent})", total=num_runs)
+        with _create_progress("Runs", num_runs, show_progress) as progress:
+            task = progress.add_task(f"Runs (CN γ={exponent})", total=num_runs)
             for _run in range(num_runs):
-                # Cria a rede (fast edge generator for GPU, NetworkX for CPU)
+                # Create the network (fast edge generator for GPU, NetworkX for CPU)
                 if use_fast_edges:
                     _, edges = NetworkFactory.create_complex_network_edges(N, exponent, k_avg)
                 else:
                     G = NetworkFactory.create_complex_network(N, exponent, k_avg)
                     edges = np.array(G.edges())
 
-                # Configura os nós inicialmente infectados
+                # Configure initially infected nodes
                 init_infect = int(N * initial_perc)
                 if init_infect < 1:
-                    raise ValueError(f"Nós infectados iniciais < 1: N*initial_perc = {init_infect}")
+                    raise ValueError(f"Initial infected nodes < 1: N*initial_perc = {init_infect}")
                 sources = np.random.randint(0, N, init_infect)
 
-                # Executa a simulação
+                # Run the simulation
                 S, I, R = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
@@ -656,7 +656,7 @@ class SPKMC:
                 R_list.append(R)
                 progress.update(task, advance=1)
 
-        # Calcula médias e erros
+        # Calculate means and errors
         S_avg = np.mean(np.array(S_list), axis=0)
         I_avg = np.mean(np.array(I_list), axis=0)
         R_avg = np.mean(np.array(R_list), axis=0)
@@ -665,7 +665,7 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
-        # Salva os resultados
+        # Save results
         result = {
             "S_val": list(S_avg),
             "S_err": list(S_err),
@@ -704,20 +704,20 @@ class SPKMC:
         progress_callback: ProgressCallback = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Simula a propagação em um grafo completo.
+        Simulate spread on a complete graph.
 
         Args:
-            time_steps: Array com os passos de tempo
-            N: Número de nós
-            samples: Número de amostras
-            initial_perc: Porcentagem inicial de infectados
-            overwrite: Se True, sobrescreve resultados existentes
+            time_steps: Time steps array
+            N: Number of nodes
+            samples: Number of samples
+            initial_perc: Initial percentage of infected
+            overwrite: If True, overwrite existing results
             progress_callback: Optional callback for progress updates
 
         Returns:
-            Tupla com (S, I, R) contendo a proporção de indivíduos em cada estado
+            Tuple (S, I, R) with the proportion of individuals in each state
         """
-        # Verifica se já existem resultados salvos
+        # Check whether saved results already exist
         if not overwrite:
             result_path = ResultManager.get_result_path("CG", self.distribution, N, samples)
             if os.path.exists(result_path):
@@ -729,9 +729,9 @@ class SPKMC:
                         np.array(result.get("R_val", [])),
                     )
                 except Exception as e:
-                    print(f"Erro ao carregar resultados existentes: {e}")
+                    print(f"Error loading existing results: {e}")
 
-        # Cria a rede (fast edge generator for GPU, NetworkX for CPU)
+        # Create the network (fast edge generator for GPU, NetworkX for CPU)
         use_fast_edges = self._should_use_batched_gpu(N)
         if use_fast_edges:
             _, edges = NetworkFactory.create_complete_graph_edges(N)
@@ -739,13 +739,13 @@ class SPKMC:
             G = NetworkFactory.create_complete_graph(N)
             edges = np.array(G.edges())
 
-        # Configura os nós inicialmente infectados
+        # Configure initially infected nodes
         init_infect = int(N * initial_perc)
         if init_infect < 1:
-            raise ValueError(f"Nós infectados iniciais < 1: N*initial_perc = {init_infect}")
+            raise ValueError(f"Initial infected nodes < 1: N*initial_perc = {init_infect}")
         sources = np.random.randint(0, N, init_infect)
 
-        # Executa a simulação
+        # Run the simulation
         S, I, R = self.run_multiple_simulations_from_edges(
             N,
             edges,
@@ -756,7 +756,7 @@ class SPKMC:
             progress_callback=progress_callback,
         )
 
-        # Salva os resultados
+        # Save results
         result = {
             "S_val": list(S),
             "I_val": list(I),
@@ -785,23 +785,23 @@ class SPKMC:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Executa uma simulação com base no tipo de rede e parâmetros fornecidos.
+        Run a simulation based on the network type and provided parameters.
 
         Args:
-            network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
-            time_steps: Array com os passos de tempo
+            network_type: Network type ('er', 'cn', 'cg', 'rrn')
+            time_steps: Time steps array
             progress_callback: Optional callback for granular progress updates
-            **kwargs: Parâmetros adicionais para a simulação
+            **kwargs: Additional simulation parameters
 
         Returns:
-            Dicionário com os resultados da simulação
+            Dictionary with simulation results
 
         Raises:
-            ValueError: Se o tipo de rede for desconhecido
+            ValueError: If the network type is unknown
         """
         network_type = network_type.lower()
 
-        # Parâmetros comuns
+        # Common parameters
         N = kwargs.get("N", 1000)
         samples = kwargs.get("samples", 50)
         initial_perc = kwargs.get("initial_perc", 0.01)
@@ -904,7 +904,7 @@ class SPKMC:
             }
 
         else:
-            raise ValueError(f"Tipo de rede desconhecido: {network_type}")
+            raise ValueError(f"Unknown network type: {network_type}")
 
     def simulate_random_regular_network(
         self,
@@ -919,25 +919,25 @@ class SPKMC:
         progress_callback: ProgressCallback = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Simula a propagação em múltiplas redes regulares aleatórias.
+        Simulate spread on multiple random regular networks.
 
         Args:
-            num_runs: Número de execuções
-            time_steps: Array com os passos de tempo
-            N: Número de nós
-            k_avg: Grau regular (número de conexões por nó)
-            samples: Número de amostras por execução
-            initial_perc: Porcentagem inicial de infectados
-            load_if_exists: Se True, carrega resultados existentes
-            show_progress: Se True, mostra barra de progresso
+            num_runs: Number of runs
+            time_steps: Time steps array
+            N: Number of nodes
+            k_avg: Regular degree (connections per node)
+            samples: Number of samples per run
+            initial_perc: Initial percentage of infected
+            load_if_exists: If True, load existing results
+            show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
 
         Returns:
-            Tupla com (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
         """
         S_list, I_list, R_list = [], [], []
 
-        # Verifica se já existem resultados salvos
+        # Check whether saved results already exist
         if load_if_exists:
             result_path = ResultManager.get_result_path(
                 "RRN", self.distribution, N, samples, k_avg=k_avg
@@ -954,29 +954,29 @@ class SPKMC:
                         np.array(result.get("R_err", [])),
                     )
                 except Exception as e:
-                    print(f"Erro ao carregar resultados existentes: {e}")
+                    print(f"Error loading existing results: {e}")
 
-        # Executa as simulações
+        # Run simulations
         # Use fast edge generators for GPU workflows
         use_fast_edges = self._should_use_batched_gpu(N)
 
-        with _create_progress("Execuções", num_runs, show_progress) as progress:
-            task = progress.add_task("Execuções (RRN)", total=num_runs)
+        with _create_progress("Runs", num_runs, show_progress) as progress:
+            task = progress.add_task("Runs (RRN)", total=num_runs)
             for _run in range(num_runs):
-                # Cria a rede (fast edge generator for GPU, NetworkX for CPU)
+                # Create the network (fast edge generator for GPU, NetworkX for CPU)
                 if use_fast_edges:
                     _, edges = NetworkFactory.create_random_regular_edges(N, k_avg)
                 else:
                     G = NetworkFactory.create_random_regular_network(N, k_avg)
                     edges = np.array(G.edges())
 
-                # Configura os nós inicialmente infectados
+                # Configure initially infected nodes
                 init_infect = int(N * initial_perc)
                 if init_infect < 1:
-                    raise ValueError(f"Nós infectados iniciais < 1: N*initial_perc = {init_infect}")
+                    raise ValueError(f"Initial infected nodes < 1: N*initial_perc = {init_infect}")
                 sources = np.random.randint(0, N, init_infect)
 
-                # Executa a simulação
+                # Run the simulation
                 S, I, R = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
@@ -992,7 +992,7 @@ class SPKMC:
                 R_list.append(R)
                 progress.update(task, advance=1)
 
-        # Calcula médias e erros
+        # Calculate means and errors
         S_avg = np.mean(np.array(S_list), axis=0)
         I_avg = np.mean(np.array(I_list), axis=0)
         R_avg = np.mean(np.array(R_list), axis=0)
@@ -1001,7 +1001,7 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
-        # Salva os resultados
+        # Save results
         result = {
             "S_val": list(S_avg),
             "S_err": list(S_err),
