@@ -387,7 +387,8 @@ class Visualizer:
             plt.title(title)
         else:
             plt.title(
-                f"Network Visualization ({G.number_of_nodes()} nodes, {G.number_of_edges()} edges)"
+                "Network Visualization "
+                f"({G.number_of_nodes()} nodes, {G.number_of_edges()} edges)"
             )
 
         plt.axis("off")

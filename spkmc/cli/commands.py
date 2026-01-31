@@ -1185,7 +1185,10 @@ def run(
     if not no_plot or save_plot:
         log_info("Generating visualization...")
 
-        title = f"SPKMC Simulation - Network {network_type.upper()}, Distribution {dist_type.capitalize()}"
+        title = (
+            f"SPKMC Simulation - Network {network_type.upper()}, "
+            f"Distribution {dist_type.capitalize()}"
+        )
 
         try:
             if save_plot:
