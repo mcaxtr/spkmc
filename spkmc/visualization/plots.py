@@ -365,7 +365,8 @@ class Visualizer:
             import warnings
 
             warnings.warn(
-                f"The network has {G.number_of_nodes()} nodes. Limiting visualization to 100 nodes.",
+                f"The network has {G.number_of_nodes()} nodes. "
+                "Limiting visualization to 100 nodes.",
                 stacklevel=2,
             )
             G = nx.DiGraph(G.subgraph(list(G.nodes())[:100]))
