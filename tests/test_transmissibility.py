@@ -11,22 +11,17 @@ import numpy as np
 import pytest
 from scipy.stats import gamma as gamma_dist
 
+from spkmc.core.distributions import ExponentialDistribution, GammaDistribution
 from spkmc.core.transmissibility import (
-    TransmissibilityCalculator,
     ExponentialExponentialTransmissibility,
     GammaExponentialTransmissibility,
     NumericalTransmissibility,
-    EpidemicThreshold,
-    create_transmissibility_calculator,
     calculate_empirical_transmissibility,
-    poisson_poisson_transmissibility,
-    gamma_exponential_transmissibility,
-    epidemic_threshold_regular,
+    create_transmissibility_calculator,
     epidemic_threshold_er,
-)
-from spkmc.core.distributions import (
-    GammaDistribution,
-    ExponentialDistribution,
+    epidemic_threshold_regular,
+    gamma_exponential_transmissibility,
+    poisson_poisson_transmissibility,
 )
 
 

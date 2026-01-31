@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 @dataclass
 class TimingResult:
     """Result of a single timing measurement."""
+
     name: str
     duration_ms: float
     details: str = ""
@@ -33,6 +34,7 @@ class TimingResult:
 @dataclass
 class ProfileResults:
     """Collection of profiling results."""
+
     timings: List[TimingResult] = field(default_factory=list)
 
     def add(self, name: str, duration_ms: float, details: str = ""):
@@ -77,18 +79,20 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
 
     # Import GPU utilities
     try:
-        import cupy as cp
         import cudf
         import cugraph
+        import cupy as cp
+
         from spkmc.utils.gpu_utils import BatchedGPUSimulator, configure_gpu_memory_pool
+
         gpu_available = True
     except ImportError as e:
         print(f"GPU not available: {e}")
         return
 
     # Force GPU mode
-    os.environ['SPKMC_FORCE_GPU'] = '1'
-    os.environ['SPKMC_BATCH_GPU'] = '1'
+    os.environ["SPKMC_FORCE_GPU"] = "1"
+    os.environ["SPKMC_BATCH_GPU"] = "1"
 
     # =========================================================================
     # Stage 1: Network Generation
@@ -124,21 +128,17 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
     # =========================================================================
     # Stage 5: Batched Random Number Generation
     # =========================================================================
-    params = {'distribution': 'exponential', 'mu': 1.0, 'lambda_val': 0.3}
+    params = {"distribution": "exponential", "mu": 1.0, "lambda_val": 0.3}
 
     with timed_section(results, "5. Batched RNG - Recovery", f"{samples}x{N}"):
         recovery_all = cp.random.exponential(
-            1.0 / params['mu'],
-            size=(samples, N),
-            dtype=cp.float32
+            1.0 / params["mu"], size=(samples, N), dtype=cp.float32
         )
         cp.cuda.Stream.null.synchronize()
 
     with timed_section(results, "6. Batched RNG - Edges", f"{samples}x{len(edges)}"):
         edge_times_all = cp.random.exponential(
-            1.0 / params['lambda_val'],
-            size=(samples, len(edges)),
-            dtype=cp.float32
+            1.0 / params["lambda_val"], size=(samples, len(edges)), dtype=cp.float32
         )
         cp.cuda.Stream.null.synchronize()
 
@@ -154,23 +154,19 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
     with timed_section(results, "7. Pre-allocate Graph Structure"):
         # Pre-allocate src/dst arrays (fixed structure)
         graph_src = cp.empty(total_edges, dtype=cp.int32)
-        graph_src[:len(edges)] = edges_gpu[:, 0]
-        graph_src[len(edges):] = super_node
+        graph_src[: len(edges)] = edges_gpu[:, 0]
+        graph_src[len(edges) :] = super_node
 
         graph_dst = cp.empty(total_edges, dtype=cp.int32)
-        graph_dst[:len(edges)] = edges_gpu[:, 1]
-        graph_dst[len(edges):] = sources_gpu
+        graph_dst[: len(edges)] = edges_gpu[:, 1]
+        graph_dst[len(edges) :] = sources_gpu
 
         # Pre-allocate weights (updated each sample)
         graph_weights = cp.empty(total_edges, dtype=cp.float32)
-        graph_weights[len(edges):] = 0.0  # Super-node weights always 0
+        graph_weights[len(edges) :] = 0.0  # Super-node weights always 0
 
         # Pre-create DataFrame (reused across samples)
-        graph_df = cudf.DataFrame({
-            'src': graph_src,
-            'dst': graph_dst,
-            'weight': graph_weights
-        })
+        graph_df = cudf.DataFrame({"src": graph_src, "dst": graph_dst, "weight": graph_weights})
         cp.cuda.Stream.null.synchronize()
 
     # =========================================================================
@@ -190,22 +186,16 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
             edge_times = edge_times_all[s]
 
             # Update weights in-place in pre-allocated array
-            graph_weights[:len(edges)] = cp.where(
-                edge_times >= recovery[u],
-                cp.float32(np.inf),
-                edge_times
+            graph_weights[: len(edges)] = cp.where(
+                edge_times >= recovery[u], cp.float32(np.inf), edge_times
             )
 
             # Update weight column in pre-existing DataFrame
-            graph_df['weight'] = graph_weights
+            graph_df["weight"] = graph_weights
 
             G = cugraph.Graph(directed=True)
             G.from_cudf_edgelist(
-                graph_df,
-                source='src',
-                destination='dst',
-                edge_attr='weight',
-                renumber=False
+                graph_df, source="src", destination="dst", edge_attr="weight", renumber=False
             )
 
             t2 = time.perf_counter()
@@ -219,8 +209,8 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
             sssp_times.append((t4 - t3) * 1000)
 
             # Extract distances
-            vertices = result['vertex'].to_numpy()
-            dist_values = result['distance'].to_numpy()
+            vertices = result["vertex"].to_numpy()
+            dist_values = result["distance"].to_numpy()
             distances = np.full(N, np.inf, dtype=np.float32)
             valid_mask = vertices < N
             distances[vertices[valid_mask]] = dist_values[valid_mask]
@@ -274,8 +264,12 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
     if sssp_pct > 50:
         print(f"  → BOTTLENECK: SSSP loop takes {sssp_pct:.1f}% of total time")
         print(f"  → Average per sample: {sssp_loop_time/samples:.1f}ms")
-        print(f"     - Graph build: {avg_graph_build:.1f}ms ({avg_graph_build/sssp_loop_time*samples*100:.1f}%)")
-        print(f"     - SSSP algorithm: {avg_sssp:.1f}ms ({avg_sssp/sssp_loop_time*samples*100:.1f}%)")
+        print(
+            f"     - Graph build: {avg_graph_build:.1f}ms ({avg_graph_build/sssp_loop_time*samples*100:.1f}%)"
+        )
+        print(
+            f"     - SSSP algorithm: {avg_sssp:.1f}ms ({avg_sssp/sssp_loop_time*samples*100:.1f}%)"
+        )
         print("")
         print("  POSSIBLE OPTIMIZATIONS:")
         print("    1. Reduce number of samples (current: {})".format(samples))
@@ -286,8 +280,8 @@ def profile_gpu_simulation(N: int, samples: int, k_avg: int = 10):
         print(f"  → No single bottleneck (SSSP is {sssp_pct:.1f}%)")
 
     # Cleanup
-    os.environ.pop('SPKMC_FORCE_GPU', None)
-    os.environ.pop('SPKMC_BATCH_GPU', None)
+    os.environ.pop("SPKMC_FORCE_GPU", None)
+    os.environ.pop("SPKMC_BATCH_GPU", None)
 
 
 def profile_cpu_simulation(N: int, samples: int, k_avg: int = 10):
@@ -296,14 +290,15 @@ def profile_cpu_simulation(N: int, samples: int, k_avg: int = 10):
 
     print(f"\nProfiling CPU simulation: N={N}, samples={samples}, k_avg={k_avg}")
 
-    os.environ['SPKMC_NO_GPU'] = '1'
+    os.environ["SPKMC_NO_GPU"] = "1"
 
-    from spkmc.core.networks import NetworkFactory
-    from spkmc.core.distributions import create_distribution
-    from scipy.sparse.csgraph import dijkstra
     from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import dijkstra
 
-    dist = create_distribution('exponential', mu=1.0, lambda_param=0.3)
+    from spkmc.core.distributions import create_distribution
+    from spkmc.core.networks import NetworkFactory
+
+    dist = create_distribution("exponential", mu=1.0, lambda_param=0.3)
     time_steps = np.linspace(0, 30, 100)
 
     # Network Generation
@@ -326,15 +321,14 @@ def profile_cpu_simulation(N: int, samples: int, k_avg: int = 10):
             # Sparse matrix
             row_indices = edges[:, 0]
             col_indices = edges[:, 1]
-            graph_matrix = csr_matrix(
-                (infection_times, (row_indices, col_indices)),
-                shape=(N, N)
-            )
+            graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
 
             # Dijkstra
             t1 = time.perf_counter()
             sources = np.array([0])
-            dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
+            dist_matrix = dijkstra(
+                csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False
+            )
             t2 = time.perf_counter()
             dijkstra_times.append((t2 - t1) * 1000)
 
@@ -343,7 +337,7 @@ def profile_cpu_simulation(N: int, samples: int, k_avg: int = 10):
 
     results.print_summary()
 
-    os.environ.pop('SPKMC_NO_GPU', None)
+    os.environ.pop("SPKMC_NO_GPU", None)
 
 
 def main():

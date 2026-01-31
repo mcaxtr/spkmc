@@ -4,15 +4,15 @@ Testes para o módulo de resultados do SPKMC.
 Este módulo contém testes para a classe ResultManager e suas funcionalidades.
 """
 
-import os
 import json
+import os
 import tempfile
-import pytest
-import numpy as np
 from pathlib import Path
 
+import pytest
+
+from spkmc.core.distributions import ExponentialDistribution, GammaDistribution
 from spkmc.io.results import ResultManager
-from spkmc.core.distributions import GammaDistribution, ExponentialDistribution
 
 
 @pytest.fixture
@@ -41,24 +41,24 @@ def sample_result():
             "N": 100,
             "k_avg": 5,
             "samples": 10,
-            "initial_perc": 0.01
-        }
+            "initial_perc": 0.01,
+        },
     }
 
 
 @pytest.fixture
 def temp_result_file(sample_result):
     """Fixture para criar um arquivo de resultados temporário."""
-    # Cria um arquivo temporário
-    with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+    # Cria um arquivo temporário em modo texto para JSON
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
         # Salva os dados no arquivo
         json.dump(sample_result, f)
-        
+
         # Retorna o caminho do arquivo
         path = f.name
-    
+
     yield path
-    
+
     # Remove o arquivo após o teste
     if os.path.exists(path):
         os.remove(path)
@@ -67,7 +67,7 @@ def temp_result_file(sample_result):
 def test_get_result_path_er(gamma_distribution):
     """Testa a geração de caminho para resultados de rede Erdos-Renyi."""
     path = ResultManager.get_result_path("er", gamma_distribution, 1000, 50)
-    
+
     assert isinstance(path, str)
     assert "er" in path.lower()
     assert "gamma" in path.lower()
@@ -79,7 +79,7 @@ def test_get_result_path_er(gamma_distribution):
 def test_get_result_path_cn(gamma_distribution):
     """Testa a geração de caminho para resultados de rede complexa."""
     path = ResultManager.get_result_path("cn", gamma_distribution, 1000, 50, 2.5)
-    
+
     assert isinstance(path, str)
     assert "cn" in path.lower()
     assert "gamma" in path.lower()
@@ -92,7 +92,7 @@ def test_get_result_path_cn(gamma_distribution):
 def test_load_result(temp_result_file, sample_result):
     """Testa o carregamento de resultados."""
     result = ResultManager.load_result(temp_result_file)
-    
+
     assert isinstance(result, dict)
     assert "S_val" in result
     assert "I_val" in result
@@ -113,20 +113,20 @@ def test_load_result_nonexistent():
 def test_save_result(sample_result):
     """Testa o salvamento de resultados."""
     # Cria um arquivo temporário
-    with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
-    
+
     try:
         # Salva os resultados
         ResultManager.save_result(path, sample_result)
-        
+
         # Verifica se o arquivo foi criado
         assert os.path.exists(path)
-        
+
         # Carrega os resultados e verifica
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             loaded_result = json.load(f)
-        
+
         assert loaded_result["S_val"] == sample_result["S_val"]
         assert loaded_result["I_val"] == sample_result["I_val"]
         assert loaded_result["R_val"] == sample_result["R_val"]
@@ -140,68 +140,56 @@ def test_save_result(sample_result):
 
 def test_list_results(monkeypatch):
     """Testa a listagem de resultados."""
+
     # Mock para Path.exists
     def mock_exists(self):
         return True
-    
+
     # Mock para Path.iterdir
     def mock_iterdir(self):
-        paths = [
-            Path("data/spkmc/gamma"),
-            Path("data/spkmc/exponential")
-        ]
+        paths = [Path("data/spkmc/gamma"), Path("data/spkmc/exponential")]
         for path in paths:
             yield path
-    
+
     # Mock para o segundo nível de iterdir
     def mock_iterdir_level2(self):
         if str(self).endswith("gamma"):
-            paths = [
-                Path("data/spkmc/gamma/er"),
-                Path("data/spkmc/gamma/cn")
-            ]
+            paths = [Path("data/spkmc/gamma/er"), Path("data/spkmc/gamma/cn")]
         else:
-            paths = [
-                Path("data/spkmc/exponential/er")
-            ]
+            paths = [Path("data/spkmc/exponential/er")]
         for path in paths:
             yield path
-    
+
     # Mock para o terceiro nível de iterdir
     def mock_iterdir_level3(self):
         if str(self).endswith("er"):
             paths = [
                 Path("data/spkmc/gamma/er/results_1000_50_2.0.json"),
-                Path("data/spkmc/gamma/er/results_2000_100_2.0.json")
+                Path("data/spkmc/gamma/er/results_2000_100_2.0.json"),
             ]
         else:
-            paths = [
-                Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")
-            ]
+            paths = [Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")]
         for path in paths:
             yield path
-    
+
     # Mock para Path.glob
     def mock_glob(self, pattern):
         if str(self).endswith("er"):
             paths = [
                 Path("data/spkmc/gamma/er/results_1000_50_2.0.json"),
-                Path("data/spkmc/gamma/er/results_2000_100_2.0.json")
+                Path("data/spkmc/gamma/er/results_2000_100_2.0.json"),
             ]
         else:
-            paths = [
-                Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")
-            ]
+            paths = [Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")]
         for path in paths:
             yield path
-    
+
     # Aplica os mocks
     monkeypatch.setattr(Path, "exists", mock_exists)
     monkeypatch.setattr(Path, "iterdir", mock_iterdir)
     monkeypatch.setattr(Path, "glob", mock_glob)
-    
+
     # Substitui o método iterdir para diferentes instâncias
-    original_iterdir = Path.iterdir
     def patched_iterdir(self):
         if str(self).endswith("spkmc"):
             return mock_iterdir(self)
@@ -209,23 +197,24 @@ def test_list_results(monkeypatch):
             return mock_iterdir_level2(self)
         else:
             return mock_iterdir_level3(self)
-    
+
     monkeypatch.setattr(Path, "iterdir", patched_iterdir)
-    
+
     # Testa a listagem de resultados
     results = ResultManager.list_results()
-    
+
     assert isinstance(results, list)
     assert len(results) > 0
-    assert any("gamma/er" in r for r in results)
-    assert any("gamma/cn" in r for r in results)
+    # Check for path components (works on both Unix and Windows)
+    assert any("gamma" in r and "er" in r for r in results)
+    assert any("gamma" in r and "cn" in r for r in results)
 
 
 def test_get_metadata_from_path():
     """Testa a extração de metadados do caminho do arquivo."""
     path = "data/spkmc/gamma/er/results_1000_50_2.0.json"
     metadata = ResultManager.get_metadata_from_path(path)
-    
+
     assert isinstance(metadata, dict)
     assert metadata["distribution"] == "gamma"
     assert metadata["network_type"] == "er"
@@ -237,7 +226,7 @@ def test_get_metadata_from_path_cn():
     """Testa a extração de metadados do caminho do arquivo para rede complexa."""
     path = "data/spkmc/gamma/cn/results_25_1000_50_2.0.json"
     metadata = ResultManager.get_metadata_from_path(path)
-    
+
     assert isinstance(metadata, dict)
     assert metadata["distribution"] == "gamma"
     assert metadata["network_type"] == "cn"
@@ -249,7 +238,7 @@ def test_get_metadata_from_path_cn():
 def test_format_result_for_cli(sample_result):
     """Testa a formatação de resultados para a CLI."""
     formatted = ResultManager.format_result_for_cli(sample_result)
-    
+
     assert isinstance(formatted, dict)
     assert "metadata" in formatted
     assert "max_infected" in formatted

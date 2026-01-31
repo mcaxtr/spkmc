@@ -6,22 +6,23 @@ melhorando a experiência do usuário com cores, estilos e formatação avançad
 """
 
 import os
-import sys
 import platform
-from typing import Dict, List, Tuple, Optional, Any, Union
+import sys
+from typing import Any, Dict, List, Optional
 
 # Verificar se as cores devem ser desabilitadas
 NO_COLOR = "--no-color" in sys.argv
 
+
 # Verificar se o terminal suporta cores
-def supports_color():
+def supports_color() -> bool:
     """
     Verifica se o terminal atual suporta cores ANSI.
     Baseado na lógica do Django e do Pytest.
     """
     if NO_COLOR:
         return False
-        
+
     # Verificar variáveis de ambiente que indicam suporte a cores
     if os.environ.get("FORCE_COLOR", "0") != "0":
         return True
@@ -29,10 +30,10 @@ def supports_color():
         return False
     if os.environ.get("TERM") == "dumb":
         return False
-    
+
     # Verificar se é um terminal interativo
     is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-    
+
     # Verificar plataforma
     plat = platform.system()
     if plat == "Windows":
@@ -48,12 +49,14 @@ def supports_color():
         # No Unix, a maioria dos terminais suporta cores
         return is_a_tty
 
+
 # Verificar se as cores estão habilitadas
 COLORS_ENABLED = supports_color()
 
 # Importações condicionais para colorama
 try:
-    from colorama import Fore, Back, Style, init
+    from colorama import Back, Fore, Style, init
+
     # Inicializa o colorama para funcionar em todos os sistemas operacionais
     # Sempre inicializar o colorama, mesmo se as cores estiverem desabilitadas
     # Isso garante que os códigos de escape ANSI sejam processados corretamente
@@ -63,27 +66,38 @@ except ImportError:
     COLORAMA_AVAILABLE = False
     if COLORS_ENABLED:
         print("Aviso: Colorama não encontrado. A saída colorida não estará disponível.")
-    
+
     # Definir classes vazias para evitar erros
     class DummyColor:
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> str:
             return ""
-    
+
     class DummyStyle:
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> str:
             return ""
-    
+
     Fore = DummyColor()
     Back = DummyColor()
     Style = DummyStyle()
 
 # Importações condicionais para rich
+# Declare console at module level to avoid mypy redefinition error
+console: Any = None
+
 try:
     from rich.console import Console
-    from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TimeElapsedColumn, MofNCompleteColumn
-    from rich.table import Table
     from rich.markdown import Markdown
     from rich.panel import Panel
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        TextColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
+    from rich.table import Table
+
     RICH_AVAILABLE = True
     # Console Rich para saída avançada, respeitando a configuração de cores
     console = Console(color_system="auto" if COLORS_ENABLED else None, highlight=False)
@@ -91,65 +105,67 @@ except ImportError:
     RICH_AVAILABLE = False
     if COLORS_ENABLED:
         print("Aviso: Rich não encontrado. A formatação avançada não estará disponível.")
+
     # Criar uma classe console simples para evitar erros
     class SimpleConsole:
-        def print(self, text, *args, **kwargs):
+        def print(self, text: str, *args: Any, **kwargs: Any) -> None:
             # Remover tags de formatação Rich se presentes
             import re
-            text = re.sub(r'\[.*?\]', '', text)
+
+            text = re.sub(r"\[.*?\]", "", text)
             print(text)
-    
+
     console = SimpleConsole()
 
 # Mapeamento de cores para estados SIR e outros elementos
 COLOR_MAP = {
-    'S': Fore.BLUE,
-    'I': Fore.RED,
-    'R': Fore.GREEN,
-    'title': Fore.CYAN,
-    'info': Fore.YELLOW,
-    'success': Fore.GREEN,
-    'error': Fore.RED,
-    'warning': Fore.YELLOW,
-    'param': Fore.MAGENTA,
-    'value': Fore.WHITE
+    "S": Fore.BLUE,
+    "I": Fore.RED,
+    "R": Fore.GREEN,
+    "title": Fore.CYAN,
+    "info": Fore.YELLOW,
+    "success": Fore.GREEN,
+    "error": Fore.RED,
+    "warning": Fore.YELLOW,
+    "param": Fore.MAGENTA,
+    "value": Fore.WHITE,
 }
 
 
 def colorize(text: str, color: str) -> str:
     """
     Colore o texto com a cor especificada.
-    
+
     Args:
         text: Texto a ser colorido
         color: Nome da cor (deve estar em COLOR_MAP)
-        
+
     Returns:
         Texto colorido
     """
     if not COLORS_ENABLED:
         return text
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE and color in COLOR_MAP:
         return f"{COLOR_MAP[color]}{text}{Style.RESET_ALL}"
-    
+
     return text
 
 
 def format_title(title: str) -> str:
     """
     Formata um título para exibição na CLI.
-    
+
     Args:
         title: Título a ser formatado
-        
+
     Returns:
         Título formatado
     """
     if not COLORS_ENABLED:
         return f"\n{title}\n{'-' * len(title)}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"\n{Fore.CYAN}{Style.BRIGHT}{title}{Style.RESET_ALL}\n{'-' * len(title)}"
@@ -160,17 +176,17 @@ def format_title(title: str) -> str:
 def format_param(name: str, value: Any) -> str:
     """
     Formata um parâmetro e seu valor para exibição na CLI.
-    
+
     Args:
         name: Nome do parâmetro
         value: Valor do parâmetro
-        
+
     Returns:
         Parâmetro formatado
     """
     if not COLORS_ENABLED:
         return f"{name}: {value}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"{Fore.MAGENTA}{name}{Style.RESET_ALL}: {Fore.WHITE}{value}{Style.RESET_ALL}"
@@ -181,16 +197,16 @@ def format_param(name: str, value: Any) -> str:
 def format_success(message: str) -> str:
     """
     Formata uma mensagem de sucesso.
-    
+
     Args:
         message: Mensagem de sucesso
-        
+
     Returns:
         Mensagem formatada
     """
     if not COLORS_ENABLED:
         return f"✓ {message}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"{Fore.GREEN}✓ {message}{Style.RESET_ALL}"
@@ -201,16 +217,16 @@ def format_success(message: str) -> str:
 def format_error(message: str) -> str:
     """
     Formata uma mensagem de erro.
-    
+
     Args:
         message: Mensagem de erro
-        
+
     Returns:
         Mensagem formatada
     """
     if not COLORS_ENABLED:
         return f"✗ {message}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"{Fore.RED}✗ {message}{Style.RESET_ALL}"
@@ -221,16 +237,16 @@ def format_error(message: str) -> str:
 def format_warning(message: str) -> str:
     """
     Formata uma mensagem de aviso.
-    
+
     Args:
         message: Mensagem de aviso
-        
+
     Returns:
         Mensagem formatada
     """
     if not COLORS_ENABLED:
         return f"⚠ {message}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"{Fore.YELLOW}⚠ {message}{Style.RESET_ALL}"
@@ -241,16 +257,16 @@ def format_warning(message: str) -> str:
 def format_info(message: str) -> str:
     """
     Formata uma mensagem informativa.
-    
+
     Args:
         message: Mensagem informativa
-        
+
     Returns:
         Mensagem formatada
     """
     if not COLORS_ENABLED:
         return f"ℹ {message}"
-    
+
     # Usar colorama diretamente para evitar problemas com códigos de escape
     if COLORAMA_AVAILABLE:
         return f"{Fore.YELLOW}ℹ {message}{Style.RESET_ALL}"
@@ -261,34 +277,34 @@ def format_info(message: str) -> str:
 def create_progress_bar(description: str, total: int, verbose: bool = False) -> Any:
     """
     Cria uma barra de progresso avançada.
-    
+
     Args:
         description: Descrição da tarefa
         total: Total de itens
         verbose: Se True, mostra informações adicionais
-        
+
     Returns:
         Objeto Progress configurado ou um objeto dummy se rich não estiver disponível
     """
     if not RICH_AVAILABLE:
         # Retorna um objeto dummy que simula a API do Progress
         class DummyProgress:
-            def __enter__(self):
+            def __enter__(self) -> "DummyProgress":
                 return self
-                
-            def __exit__(self, exc_type, exc_val, exc_tb):
+
+            def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
                 pass
-                
-            def add_task(self, description, total=None):
+
+            def add_task(self, description: str, total: Optional[int] = None) -> int:
                 print(f"{description} (Total: {total})")
                 return 0
-                
-            def update(self, task_id, advance=None):
+
+            def update(self, task_id: int, advance: Optional[int] = None) -> None:
                 if advance:
                     print(f"Progresso: avançou {advance}")
-        
+
         return DummyProgress()
-        
+
     if verbose:
         # Verbose mode: show all details including items completed and elapsed time
         return Progress(
@@ -302,7 +318,7 @@ def create_progress_bar(description: str, total: int, verbose: bool = False) -> 
             "<",
             TimeRemainingColumn(),
             console=console,
-            expand=True
+            expand=True,
         )
     else:
         # Default mode: show percentage, elapsed time, and ETA
@@ -315,14 +331,14 @@ def create_progress_bar(description: str, total: int, verbose: bool = False) -> 
             "<",
             TimeRemainingColumn(),
             console=console,
-            expand=True
+            expand=True,
         )
 
 
 def print_rich_table(data: List[Dict[str, Any]], title: str) -> None:
     """
     Imprime uma tabela formatada com Rich.
-    
+
     Args:
         data: Lista de dicionários com os dados
         title: Título da tabela
@@ -330,7 +346,7 @@ def print_rich_table(data: List[Dict[str, Any]], title: str) -> None:
     if not data:
         console.print(format_warning("Nenhum dado para exibir."))
         return
-    
+
     if not RICH_AVAILABLE:
         # Fallback para impressão simples
         print(f"\n{title}\n{'-' * len(title)}")
@@ -342,24 +358,24 @@ def print_rich_table(data: List[Dict[str, Any]], title: str) -> None:
         for item in data:
             print(" | ".join(str(v) for v in item.values()))
         return
-    
+
     table = Table(title=title)
-    
+
     # Adiciona as colunas
     for key in data[0].keys():
         table.add_column(key, style="cyan")
-    
+
     # Adiciona as linhas
     for item in data:
         table.add_row(*[str(v) for v in item.values()])
-    
+
     console.print(table)
 
 
 def print_markdown(markdown_text: str) -> None:
     """
     Renderiza e imprime texto em formato Markdown.
-    
+
     Args:
         markdown_text: Texto em formato Markdown
     """
@@ -367,15 +383,15 @@ def print_markdown(markdown_text: str) -> None:
         # Fallback para impressão simples
         print(markdown_text)
         return
-        
+
     md = Markdown(markdown_text)
     console.print(md)
 
 
-def print_panel(content: str, title: str = None) -> None:
+def print_panel(content: str, title: Optional[str] = None) -> None:
     """
     Imprime um painel com conteúdo.
-    
+
     Args:
         content: Conteúdo do painel
         title: Título do painel (opcional)
@@ -386,7 +402,7 @@ def print_panel(content: str, title: str = None) -> None:
             print(f"\n{title}\n{'-' * len(title)}")
         print(content)
         return
-        
+
     panel = Panel(content, title=title)
     console.print(panel)
 
@@ -394,17 +410,17 @@ def print_panel(content: str, title: str = None) -> None:
 def is_verbose_mode() -> bool:
     """
     Verifica se o modo verboso está ativado.
-    
+
     Returns:
         True se o modo verboso estiver ativado, False caso contrário
     """
-    return '--verbose' in sys.argv or '-v' in sys.argv
+    return "--verbose" in sys.argv or "-v" in sys.argv
 
 
 def log_debug(message: str, verbose_only: bool = True) -> None:
     """
     Registra uma mensagem de depuração.
-    
+
     Args:
         message: Mensagem de depuração
         verbose_only: Se True, só exibe a mensagem no modo verboso
@@ -419,7 +435,7 @@ def log_debug(message: str, verbose_only: bool = True) -> None:
 def log_info(message: str) -> None:
     """
     Registra uma mensagem informativa.
-    
+
     Args:
         message: Mensagem informativa
     """
@@ -432,7 +448,7 @@ def log_info(message: str) -> None:
 def log_success(message: str) -> None:
     """
     Registra uma mensagem de sucesso.
-    
+
     Args:
         message: Mensagem de sucesso
     """
@@ -445,7 +461,7 @@ def log_success(message: str) -> None:
 def log_warning(message: str) -> None:
     """
     Registra uma mensagem de aviso.
-    
+
     Args:
         message: Mensagem de aviso
     """
@@ -458,7 +474,7 @@ def log_warning(message: str) -> None:
 def log_error(message: str) -> None:
     """
     Registra uma mensagem de erro.
-    
+
     Args:
         message: Mensagem de erro
     """

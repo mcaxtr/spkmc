@@ -18,7 +18,8 @@ Optimizations implemented:
 import os
 import sys
 import time as time_module
-from typing import Tuple, Dict, Any, Optional, List, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 import numpy as np
 
 # Global flag for GPU availability (cached after first check)
@@ -42,10 +43,12 @@ def is_gpu_available() -> bool:
         return _GPU_AVAILABLE
 
     try:
-        import cupy as cp
         import cudf
         import cugraph
+        import cupy as cp
 
+        # Verify all GPU libraries are importable
+        _ = (cudf, cugraph)  # Mark as intentionally checked
         # Verify GPU is accessible with a simple operation
         _ = cp.array([1, 2, 3])
         _GPU_AVAILABLE = True
@@ -93,6 +96,7 @@ def configure_gpu_memory_pool(fraction: float = 0.8) -> bool:
 
     try:
         import cupy as cp
+
         mempool = cp.get_default_memory_pool()
         mempool.set_limit(fraction=fraction)
         _MEMORY_POOL_CONFIGURED = True
@@ -103,15 +107,12 @@ def configure_gpu_memory_pool(fraction: float = 0.8) -> bool:
 
 # Conditional imports and GPU implementations
 try:
-    import cupy as cp
     import cudf
     import cugraph
+    import cupy as cp
 
     def get_dist_gpu(
-        N: int,
-        edges: np.ndarray,
-        sources: np.ndarray,
-        params: Dict[str, Any]
+        N: int, edges: np.ndarray, sources: np.ndarray, params: Dict[str, Any]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate shortest path distances using GPU acceleration.
@@ -133,7 +134,8 @@ try:
         import os
         import sys
         import time as time_module
-        debug = os.environ.get('SPKMC_DEBUG') == '1'
+
+        debug = os.environ.get("SPKMC_DEBUG") == "1"
         t_start = time_module.perf_counter()
 
         # Transfer edges to GPU
@@ -141,27 +143,23 @@ try:
         sources_gpu = cp.asarray(sources, dtype=cp.int32)
 
         # Sample recovery and infection times on GPU
-        distribution = params.get('distribution', 'exponential').lower()
-        lmbd = params.get('lambda_val', 1.0)
+        distribution = params.get("distribution", "exponential").lower()
+        lmbd = params.get("lambda_val", 1.0)
 
-        if distribution == 'gamma':
-            shape = params.get('shape', 2.0)
-            scale = params.get('scale', 1.0)
+        if distribution == "gamma":
+            shape = params.get("shape", 2.0)
+            scale = params.get("scale", 1.0)
             recovery_times = cp.random.gamma(shape, scale, size=N)
             # Infection times use exponential even for gamma recovery (matches CPU impl)
             edge_times = cp.random.exponential(1.0 / lmbd, size=edges_gpu.shape[0])
         else:
-            mu = params.get('mu', 1.0)
+            mu = params.get("mu", 1.0)
             recovery_times = cp.random.exponential(1.0 / mu, size=N)
             edge_times = cp.random.exponential(1.0 / lmbd, size=edges_gpu.shape[0])
 
         # Compute infection times (inf if >= recovery time)
         u = edges_gpu[:, 0]
-        infection_weights = cp.where(
-            edge_times >= recovery_times[u],
-            cp.inf,
-            edge_times
-        )
+        infection_weights = cp.where(edge_times >= recovery_times[u], cp.inf, edge_times)
 
         # Create super-node for multi-source SSSP
         super_node = N
@@ -172,19 +170,12 @@ try:
         # Concatenate edges
         all_src = cp.concatenate([edges_gpu[:, 0], super_edges_src])
         all_dst = cp.concatenate([edges_gpu[:, 1], super_edges_dst])
-        all_weights = cp.concatenate([
-            infection_weights.astype(cp.float32),
-            super_weights
-        ])
+        all_weights = cp.concatenate([infection_weights.astype(cp.float32), super_weights])
 
         # Build cuGraph graph
-        df = cudf.DataFrame({
-            'src': all_src,
-            'dst': all_dst,
-            'weight': all_weights
-        })
+        df = cudf.DataFrame({"src": all_src, "dst": all_dst, "weight": all_weights})
         G = cugraph.Graph(directed=True)
-        G.from_cudf_edgelist(df, source='src', destination='dst', edge_attr='weight')
+        G.from_cudf_edgelist(df, source="src", destination="dst", edge_attr="weight")
 
         # Run SSSP from super-node
         result = cugraph.sssp(G, source=super_node)
@@ -192,8 +183,8 @@ try:
         # Extract distances properly by vertex ID
         # cuGraph SSSP returns DataFrame with 'vertex' and 'distance' columns
         # We need to map vertex IDs to their distances, excluding super-node
-        vertices = result['vertex'].to_numpy()
-        dist_values = result['distance'].to_numpy()
+        vertices = result["vertex"].to_numpy()
+        dist_values = result["distance"].to_numpy()
 
         # Initialize distances to infinity (unreachable nodes)
         distances = np.full(N, np.inf, dtype=np.float32)
@@ -206,16 +197,16 @@ try:
 
         t_end = time_module.perf_counter()
         if debug:
-            print(f"[GPU TIMING] get_dist_gpu: {(t_end - t_start)*1000:.1f}ms "
-                  f"(N={N}, edges={len(edges)}, vertices_in_result={len(vertices)})", file=sys.stderr)
+            print(
+                f"[GPU TIMING] get_dist_gpu: {(t_end - t_start)*1000:.1f}ms "
+                f"(N={N}, edges={len(edges)}, vertices_in_result={len(vertices)})",
+                file=sys.stderr,
+            )
 
         return distances, recovery_times.get()
 
     def calculate_gpu(
-        N: int,
-        time_to_infect: np.ndarray,
-        recovery_times: np.ndarray,
-        time_steps: np.ndarray
+        N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray, time_steps: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculate SIR proportions over time using GPU.
@@ -232,18 +223,26 @@ try:
         import os
         import sys
         import time as time_module
-        debug = os.environ.get('SPKMC_DEBUG') == '1'
+
+        debug = os.environ.get("SPKMC_DEBUG") == "1"
         t_start = time_module.perf_counter()
 
         # Validate input shapes
         if len(time_to_infect) != N:
-            raise ValueError(f"time_to_infect shape mismatch: expected {N}, got {len(time_to_infect)}")
+            raise ValueError(
+                f"time_to_infect shape mismatch: expected {N}, got {len(time_to_infect)}"
+            )
         if len(recovery_times) != N:
-            raise ValueError(f"recovery_times shape mismatch: expected {N}, got {len(recovery_times)}")
+            raise ValueError(
+                f"recovery_times shape mismatch: expected {N}, got {len(recovery_times)}"
+            )
 
         if debug:
-            print(f"[GPU DEBUG] calculate_gpu: N={N}, time_to_infect={time_to_infect.shape}, "
-                  f"recovery_times={recovery_times.shape}, steps={len(time_steps)}", file=sys.stderr)
+            print(
+                f"[GPU DEBUG] calculate_gpu: N={N}, time_to_infect={time_to_infect.shape}, "
+                f"recovery_times={recovery_times.shape}, steps={len(time_steps)}",
+                file=sys.stderr,
+            )
 
         time_to_infect_gpu = cp.asarray(time_to_infect)
         recovery_times_gpu = cp.asarray(recovery_times)
@@ -257,20 +256,23 @@ try:
         time_steps_2d = time_steps_gpu[:, cp.newaxis]  # (steps, 1)
 
         # Compute states for all time steps at once
-        S = time_to_infect_2d > time_steps_2d  # (steps, N)
-        I = (~S) & (time_to_infect_2d + recovery_2d > time_steps_2d)  # (steps, N)
-        R = (~S) & (~I)  # (steps, N)
+        s_mask = time_to_infect_2d > time_steps_2d  # (steps, N)
+        i_mask = (~s_mask) & (time_to_infect_2d + recovery_2d > time_steps_2d)  # (steps, N)
+        r_mask = (~s_mask) & (~i_mask)  # (steps, N)
 
         # Sum across nodes and normalize
-        S_time = cp.sum(S, axis=1) / N
-        I_time = cp.sum(I, axis=1) / N
-        R_time = cp.sum(R, axis=1) / N
+        s_time = cp.sum(s_mask, axis=1) / N
+        i_time = cp.sum(i_mask, axis=1) / N
+        r_time = cp.sum(r_mask, axis=1) / N
 
-        result = S_time.get(), I_time.get(), R_time.get()
+        result = s_time.get(), i_time.get(), r_time.get()
         t_end = time_module.perf_counter()
         if debug:
-            print(f"[GPU TIMING] calculate_gpu: {(t_end - t_start)*1000:.1f}ms "
-                  f"(N={N}, steps={len(time_steps)})", file=sys.stderr)
+            print(
+                f"[GPU TIMING] calculate_gpu: {(t_end - t_start)*1000:.1f}ms "
+                f"(N={N}, steps={len(time_steps)})",
+                file=sys.stderr,
+            )
         return result
 
     class BatchedGPUSimulator:
@@ -294,7 +296,7 @@ try:
             N: int,
             edges: np.ndarray,
             time_steps: np.ndarray,
-            progress_callback: Optional[Callable[[int], None]] = None
+            progress_callback: Optional[Callable[[int], None]] = None,
         ):
             """
             Initialize the batched GPU simulator.
@@ -303,7 +305,8 @@ try:
                 N: Number of nodes in the graph
                 edges: Edge array of shape (E, 2) with source and destination nodes
                 time_steps: Array of time points for SIR calculation
-                progress_callback: Optional callback for progress updates (called with 1 after each sample)
+                progress_callback: Optional callback for progress updates
+                    (called with 1 after each sample)
             """
             # Configure memory pool on first use
             configure_gpu_memory_pool()
@@ -315,20 +318,19 @@ try:
             self._num_edges = len(edges)
             self._num_steps = len(time_steps)
             self._progress_callback = progress_callback
-            self._debug = os.environ.get('SPKMC_DEBUG') == '1'
+            self._debug = os.environ.get("SPKMC_DEBUG") == "1"
 
             # Pre-allocate graph structure arrays (src/dst never change)
             # These will be populated in _prepare_graph_structure when sources are known
-            self._graph_src = None
-            self._graph_dst = None
-            self._graph_weights = None  # Pre-allocated, updated each sample
+            self._graph_src: Optional[Any] = None
+            self._graph_dst: Optional[Any] = None
+            self._graph_weights: Optional[Any] = None  # Pre-allocated, updated each sample
+            self._graph_df: Optional[Any] = None
+            self._super_node: int = 0
             self._sources_prepared = False
 
         def run_samples(
-            self,
-            samples: int,
-            sources: np.ndarray,
-            params: Dict[str, Any]
+            self, samples: int, sources: np.ndarray, params: Dict[str, Any]
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             """
             Run all samples with batched operations.
@@ -353,8 +355,11 @@ try:
             t_rng_end = time_module.perf_counter()
 
             if self._debug:
-                print(f"[GPU TIMING] Batched RNG: {(t_rng_end - t_rng_start)*1000:.1f}ms "
-                      f"(samples={samples}, N={self._N}, edges={self._num_edges})", file=sys.stderr)
+                print(
+                    f"[GPU TIMING] Batched RNG: {(t_rng_end - t_rng_start)*1000:.1f}ms "
+                    f"(samples={samples}, N={self._N}, edges={self._num_edges})",
+                    file=sys.stderr,
+                )
 
             # 2. Prepare graph structure (once, reused across samples)
             sources_gpu = cp.asarray(sources, dtype=cp.int32)
@@ -365,10 +370,7 @@ try:
             distances_all = []
 
             for s in range(samples):
-                dist = self._run_sssp_optimized(
-                    recovery_all[s],
-                    edge_times_all[s]
-                )
+                dist = self._run_sssp_optimized(recovery_all[s], edge_times_all[s])
                 distances_all.append(dist)
 
                 # Call progress callback after each sample
@@ -378,8 +380,11 @@ try:
             t_sssp_end = time_module.perf_counter()
 
             if self._debug:
-                print(f"[GPU TIMING] SSSP loop: {(t_sssp_end - t_sssp_start)*1000:.1f}ms "
-                      f"({samples} samples, {(t_sssp_end - t_sssp_start)*1000/samples:.1f}ms/sample)", file=sys.stderr)
+                print(
+                    f"[GPU TIMING] SSSP loop: {(t_sssp_end - t_sssp_start)*1000:.1f}ms "
+                    f"({samples} samples, {(t_sssp_end - t_sssp_start)*1000/samples:.1f}ms/sample)",
+                    file=sys.stderr,
+                )
 
             # 3. Batch SIR calculation for ALL samples at once
             t_sir_start = time_module.perf_counter()
@@ -387,7 +392,10 @@ try:
             t_sir_end = time_module.perf_counter()
 
             if self._debug:
-                print(f"[GPU TIMING] Batched SIR: {(t_sir_end - t_sir_start)*1000:.1f}ms", file=sys.stderr)
+                print(
+                    f"[GPU TIMING] Batched SIR: {(t_sir_end - t_sir_start)*1000:.1f}ms",
+                    file=sys.stderr,
+                )
 
             # 4. Compute means across samples
             S_mean = np.mean(S_all, axis=0)
@@ -396,14 +404,15 @@ try:
 
             t_total_end = time_module.perf_counter()
             if self._debug:
-                print(f"[GPU TIMING] Total batched: {(t_total_end - t_total_start)*1000:.1f}ms", file=sys.stderr)
+                print(
+                    f"[GPU TIMING] Total batched: {(t_total_end - t_total_start)*1000:.1f}ms",
+                    file=sys.stderr,
+                )
 
             return S_mean, I_mean, R_mean
 
         def _generate_recovery_times_batched(
-            self,
-            samples: int,
-            params: Dict[str, Any]
+            self, samples: int, params: Dict[str, Any]
         ) -> cp.ndarray:
             """
             Generate recovery times for all samples at once.
@@ -415,29 +424,17 @@ try:
             Returns:
                 CuPy array of shape (samples, N) with recovery times
             """
-            distribution = params.get('distribution', 'exponential').lower()
+            distribution = params.get("distribution", "exponential").lower()
 
-            if distribution == 'gamma':
-                shape = params.get('shape', 2.0)
-                scale = params.get('scale', 1.0)
-                return cp.random.gamma(
-                    shape, scale,
-                    size=(samples, self._N),
-                    dtype=cp.float32
-                )
+            if distribution == "gamma":
+                shape = params.get("shape", 2.0)
+                scale = params.get("scale", 1.0)
+                return cp.random.gamma(shape, scale, size=(samples, self._N), dtype=cp.float32)
             else:
-                mu = params.get('mu', 1.0)
-                return cp.random.exponential(
-                    1.0 / mu,
-                    size=(samples, self._N),
-                    dtype=cp.float32
-                )
+                mu = params.get("mu", 1.0)
+                return cp.random.exponential(1.0 / mu, size=(samples, self._N), dtype=cp.float32)
 
-        def _generate_edge_times_batched(
-            self,
-            samples: int,
-            params: Dict[str, Any]
-        ) -> cp.ndarray:
+        def _generate_edge_times_batched(self, samples: int, params: Dict[str, Any]) -> cp.ndarray:
             """
             Generate edge infection times for all samples at once.
 
@@ -448,11 +445,9 @@ try:
             Returns:
                 CuPy array of shape (samples, num_edges) with infection times
             """
-            lmbd = params.get('lambda_val', 1.0)
+            lmbd = params.get("lambda_val", 1.0)
             return cp.random.exponential(
-                1.0 / lmbd,
-                size=(samples, self._num_edges),
-                dtype=cp.float32
+                1.0 / lmbd, size=(samples, self._num_edges), dtype=cp.float32
             )
 
         def _prepare_graph_structure(self, sources_gpu: cp.ndarray) -> None:
@@ -474,34 +469,30 @@ try:
 
             # Pre-allocate src array: [original edges, super-node edges]
             self._graph_src = cp.empty(total_edges, dtype=cp.int32)
-            self._graph_src[:self._num_edges] = self._edges_gpu[:, 0]
-            self._graph_src[self._num_edges:] = super_node
+            self._graph_src[: self._num_edges] = self._edges_gpu[:, 0]
+            self._graph_src[self._num_edges :] = super_node
 
             # Pre-allocate dst array: [original edges, source nodes]
             self._graph_dst = cp.empty(total_edges, dtype=cp.int32)
-            self._graph_dst[:self._num_edges] = self._edges_gpu[:, 1]
-            self._graph_dst[self._num_edges:] = sources_gpu
+            self._graph_dst[: self._num_edges] = self._edges_gpu[:, 1]
+            self._graph_dst[self._num_edges :] = sources_gpu
 
             # Pre-allocate weights array (will be updated each sample)
             self._graph_weights = cp.empty(total_edges, dtype=cp.float32)
             # Super-node weights are always 0
-            self._graph_weights[self._num_edges:] = 0.0
+            self._graph_weights[self._num_edges :] = 0.0
 
             # Pre-create DataFrame with structure (weight column updated each sample)
             # This avoids DataFrame creation overhead in the loop
-            self._graph_df = cudf.DataFrame({
-                'src': self._graph_src,
-                'dst': self._graph_dst,
-                'weight': self._graph_weights
-            })
+            self._graph_df = cudf.DataFrame(
+                {"src": self._graph_src, "dst": self._graph_dst, "weight": self._graph_weights}
+            )
 
             self._super_node = super_node
             self._sources_prepared = True
 
         def _run_sssp_optimized(
-            self,
-            recovery_times: cp.ndarray,
-            edge_times: cp.ndarray
+            self, recovery_times: cp.ndarray, edge_times: cp.ndarray
         ) -> np.ndarray:
             """
             Run optimized SSSP for a single sample.
@@ -521,34 +512,30 @@ try:
             """
             # Compute infection weights (inf if edge_time >= recovery_time of source node)
             # Update weights in-place in pre-allocated array
+            assert self._graph_weights is not None, "_prepare_graph_structure must be called first"
+            assert self._graph_df is not None, "_prepare_graph_structure must be called first"
             u = self._edges_gpu[:, 0]
-            self._graph_weights[:self._num_edges] = cp.where(
-                edge_times >= recovery_times[u],
-                cp.float32(np.inf),
-                edge_times
+            self._graph_weights[: self._num_edges] = cp.where(
+                edge_times >= recovery_times[u], cp.float32(np.inf), edge_times
             )
 
             # Update weight column in pre-existing DataFrame
             # cuDF allows in-place column update via direct assignment
-            self._graph_df['weight'] = self._graph_weights
+            self._graph_df["weight"] = self._graph_weights
 
             # Build cuGraph graph using pre-allocated DataFrame
             G = cugraph.Graph(directed=True)
             # renumber=False: vertices already in [0, N] range (including super-node)
             G.from_cudf_edgelist(
-                self._graph_df,
-                source='src',
-                destination='dst',
-                edge_attr='weight',
-                renumber=False
+                self._graph_df, source="src", destination="dst", edge_attr="weight", renumber=False
             )
 
             # Run SSSP from super-node
             result = cugraph.sssp(G, source=self._super_node)
 
             # Extract distances by vertex ID
-            vertices = result['vertex'].to_numpy()
-            dist_values = result['distance'].to_numpy()
+            vertices = result["vertex"].to_numpy()
+            dist_values = result["distance"].to_numpy()
 
             # Initialize distances to infinity (unreachable nodes)
             distances = np.full(self._N, np.inf, dtype=np.float32)
@@ -559,12 +546,11 @@ try:
             valid_distances = dist_values[valid_mask]
             distances[valid_vertices] = valid_distances
 
-            return distances
+            distances_array: np.ndarray = np.asarray(distances)
+            return distances_array
 
         def _calculate_sir_batched(
-            self,
-            distances_all: List[np.ndarray],
-            recovery_all: cp.ndarray
+            self, distances_all: List[np.ndarray], recovery_all: cp.ndarray
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             """
             Calculate SIR proportions for all samples in one GPU operation.
@@ -595,8 +581,11 @@ try:
 
             # Process in chunks for large networks
             if self._debug:
-                print(f"[GPU DEBUG] SIR chunked: {samples} samples in chunks of {chunk_size} "
-                      f"(N={self._N}, steps={steps})", file=sys.stderr)
+                print(
+                    f"[GPU DEBUG] SIR chunked: {samples} samples in chunks of {chunk_size} "
+                    f"(N={self._N}, steps={steps})",
+                    file=sys.stderr,
+                )
 
             S_results = []
             I_results = []
@@ -617,13 +606,11 @@ try:
             return (
                 np.concatenate(S_results, axis=0),
                 np.concatenate(I_results, axis=0),
-                np.concatenate(R_results, axis=0)
+                np.concatenate(R_results, axis=0),
             )
 
         def _calculate_sir_batched_single(
-            self,
-            distances_all: List[np.ndarray],
-            recovery_all: cp.ndarray
+            self, distances_all: List[np.ndarray], recovery_all: cp.ndarray
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             """
             Calculate SIR for a single chunk of samples (no chunking).
@@ -648,15 +635,15 @@ try:
 
             # Vectorized computation across chunk samples AND time steps
             # Result shapes: (chunk_size, steps, N)
-            S_mask = d > t  # Susceptible: not yet infected
-            I_mask = (d <= t) & (d + r > t)  # Infected: infected but not recovered
+            s_mask = d > t  # Susceptible: not yet infected
+            i_mask = (d <= t) & (d + r > t)  # Infected: infected but not recovered
 
             # Sum across nodes (axis=2) and normalize
-            S = cp.sum(S_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
-            I = cp.sum(I_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
-            R = 1.0 - S - I  # (chunk_size, steps)
+            s_frac = cp.sum(s_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
+            i_frac = cp.sum(i_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
+            r_frac = 1.0 - s_frac - i_frac  # (chunk_size, steps)
 
-            return S.get(), I.get(), R.get()
+            return s_frac.get(), i_frac.get(), r_frac.get()
 
     # Mark GPU functions as available
     _GPU_FUNCTIONS_AVAILABLE = True
@@ -666,36 +653,28 @@ except ImportError:
     _GPU_FUNCTIONS_AVAILABLE = False
 
     def get_dist_gpu(
-        N: int,
-        edges: np.ndarray,
-        sources: np.ndarray,
-        params: Dict[str, Any]
+        N: int, edges: np.ndarray, sources: np.ndarray, params: Dict[str, Any]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Stub - GPU dependencies not installed."""
-        raise ImportError(
-            "GPU dependencies not installed. Install with: pip install spkmc[gpu]"
-        )
+        raise ImportError("GPU dependencies not installed. Install with: pip install spkmc[gpu]")
 
     def calculate_gpu(
-        N: int,
-        time_to_infect: np.ndarray,
-        recovery_times: np.ndarray,
-        time_steps: np.ndarray
+        N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray, time_steps: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Stub - GPU dependencies not installed."""
-        raise ImportError(
-            "GPU dependencies not installed. Install with: pip install spkmc[gpu]"
-        )
+        raise ImportError("GPU dependencies not installed. Install with: pip install spkmc[gpu]")
 
-    class BatchedGPUSimulator:
-        """Stub - GPU dependencies not installed."""
+    # Define BatchedGPUSimulator as a stub class when GPU is not available
+    class BatchedGPUSimulator:  # type: ignore[no-redef]  # noqa: N801
+        """Stub class - GPU dependencies not installed."""
 
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "GPU dependencies not installed. Install with: pip install spkmc[gpu]"
-            )
-
-        def run_samples(self, *args, **kwargs):
+        def __init__(
+            self,
+            N: int,
+            edges: np.ndarray,
+            time_steps: np.ndarray,
+            progress_callback: Optional[Callable[[int], None]] = None,
+        ) -> None:
             raise ImportError(
                 "GPU dependencies not installed. Install with: pip install spkmc[gpu]"
             )

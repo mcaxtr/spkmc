@@ -6,7 +6,8 @@ from simulation results for AI-powered analysis.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
 
@@ -160,9 +161,7 @@ def extract_scenario_metrics(result: Dict[str, Any]) -> ScenarioMetrics:
 
 
 def extract_experiment_metrics(
-    experiment_name: str,
-    experiment_description: str,
-    results: List[Dict[str, Any]]
+    experiment_name: str, experiment_description: str, results: List[Dict[str, Any]]
 ) -> ExperimentMetrics:
     """
     Extract and aggregate metrics across all scenarios in an experiment.

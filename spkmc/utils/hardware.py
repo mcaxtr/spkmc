@@ -6,15 +6,14 @@ and optimal parallelization strategy configuration for maximum performance.
 """
 
 import os
-import multiprocessing
-import warnings
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 
 @dataclass
 class HardwareInfo:
     """Container for detected hardware information."""
+
     cpu_count: int
     cpu_count_physical: int
     numba_threads: int
@@ -27,17 +26,16 @@ class HardwareInfo:
 @dataclass
 class ParallelizationStrategy:
     """Configuration for multi-level parallelization."""
-    scenario_workers: int      # Level 1: multiprocessing for scenarios
-    simulation_workers: int    # Level 2: joblib for samples/runs
-    numba_threads: int         # Level 3: Numba OpenMP threads
-    use_gpu: bool              # GPU acceleration flag
+
+    scenario_workers: int  # Level 1: multiprocessing for scenarios
+    simulation_workers: int  # Level 2: joblib for samples/runs
+    numba_threads: int  # Level 3: Numba OpenMP threads
+    use_gpu: bool  # GPU acceleration flag
 
     @classmethod
     def auto_configure(
-        cls,
-        hardware: HardwareInfo,
-        num_scenarios: int = 1
-    ) -> 'ParallelizationStrategy':
+        cls, hardware: HardwareInfo, num_scenarios: int = 1
+    ) -> "ParallelizationStrategy":
         """
         Automatically configure parallelization based on hardware and workload.
 
@@ -93,7 +91,7 @@ class ParallelizationStrategy:
             scenario_workers=scenario_workers,
             simulation_workers=simulation_workers,
             numba_threads=numba_threads,
-            use_gpu=hardware.gpu_available
+            use_gpu=hardware.gpu_available,
         )
 
 
@@ -109,6 +107,7 @@ def detect_cpu_cores() -> Tuple[int, int]:
     # Try to get physical core count using psutil
     try:
         import psutil
+
         physical_cores = psutil.cpu_count(logical=False) or logical_cores
     except ImportError:
         # Estimate physical cores as half of logical (assuming hyperthreading)
@@ -140,39 +139,46 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
     try:
         import cupy as cp
 
-        # Try to access GPU
-        device = cp.cuda.Device(0)
+        # Try to access GPU (Device() verifies GPU is accessible)
+        _ = cp.cuda.Device(0)
         props = cp.cuda.runtime.getDeviceProperties(0)
 
+        runtime_ver = cp.cuda.runtime.runtimeGetVersion()
+        cuda_major = runtime_ver // 1000
+        cuda_minor = (runtime_ver % 1000) // 10
         gpu_info = {
-            'name': props['name'].decode('utf-8') if isinstance(props['name'], bytes) else props['name'],
-            'memory_mb': props['totalGlobalMem'] // (1024 * 1024),
-            'cuda_version': f"{cp.cuda.runtime.runtimeGetVersion() // 1000}.{(cp.cuda.runtime.runtimeGetVersion() % 1000) // 10}",
-            'compute_capability': f"{props['major']}.{props['minor']}"
+            "name": (
+                props["name"].decode("utf-8") if isinstance(props["name"], bytes) else props["name"]
+            ),
+            "memory_mb": props["totalGlobalMem"] // (1024 * 1024),
+            "cuda_version": f"{cuda_major}.{cuda_minor}",
+            "compute_capability": f"{props['major']}.{props['minor']}",
         }
-        libs_available.append('cupy')
+        libs_available.append("cupy")
 
     except ImportError:
-        libs_missing.append('cupy')
-        return False, {'libs_missing': libs_missing, 'reason': 'cupy not installed'}
+        libs_missing.append("cupy")
+        return False, {"libs_missing": libs_missing, "reason": "cupy not installed"}
     except Exception as e:
-        return False, {'reason': f'CUDA initialization failed: {e}'}
+        return False, {"reason": f"CUDA initialization failed: {e}"}
 
     # Check for optional RAPIDS libraries
     try:
         import cudf  # noqa: F401
-        libs_available.append('cudf')
+
+        libs_available.append("cudf")
     except ImportError:
-        libs_missing.append('cudf')
+        libs_missing.append("cudf")
 
     try:
         import cugraph  # noqa: F401
-        libs_available.append('cugraph')
-    except ImportError:
-        libs_missing.append('cugraph')
 
-    gpu_info['libs_available'] = libs_available
-    gpu_info['libs_missing'] = libs_missing
+        libs_available.append("cugraph")
+    except ImportError:
+        libs_missing.append("cugraph")
+
+    gpu_info["libs_available"] = libs_available
+    gpu_info["libs_missing"] = libs_missing
 
     # GPU acceleration requires ALL libraries (cupy, cudf, cugraph) for SSSP calculation
     # If any are missing, GPU mode won't work - only report as available if all present
@@ -198,9 +204,9 @@ def get_hardware_info() -> HardwareInfo:
         cpu_count_physical=physical_cores,
         numba_threads=numba_threads,
         gpu_available=gpu_available,
-        gpu_name=gpu_info.get('name') if gpu_info else None,
-        gpu_memory_mb=gpu_info.get('memory_mb') if gpu_info else None,
-        cuda_version=gpu_info.get('cuda_version') if gpu_info else None
+        gpu_name=gpu_info.get("name") if gpu_info else None,
+        gpu_memory_mb=gpu_info.get("memory_mb") if gpu_info else None,
+        cuda_version=gpu_info.get("cuda_version") if gpu_info else None,
     )
 
 
@@ -208,33 +214,46 @@ def configure_numba_threads(thread_count: Optional[int] = None) -> int:
     """
     Configure Numba thread count dynamically.
 
+    Once Numba threads have been launched, the thread count cannot be changed.
+    In that case, this function returns the current thread count.
+
     Args:
         thread_count: Optional override for thread count
 
     Returns:
-        Configured thread count
+        Configured (or current) thread count
     """
     # Suppress OpenMP deprecation warning before importing Numba
     # KMP_WARNINGS=0 suppresses Intel OpenMP informational messages
-    os.environ.setdefault('KMP_WARNINGS', '0')
-    os.environ.setdefault('OMP_MAX_ACTIVE_LEVELS', '1')
+    os.environ.setdefault("KMP_WARNINGS", "0")
+    os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1")
 
-    from numba import config, set_num_threads
+    from numba import config, get_num_threads, set_num_threads
 
     if thread_count is None:
         _, physical_cores = detect_cpu_cores()
         thread_count = min(physical_cores, 16)
 
-    config.THREADING_LAYER = 'omp'
-    set_num_threads(thread_count)
+    current_threads = get_num_threads()
 
-    return thread_count
+    # If the current thread count matches the desired count, no change needed
+    if current_threads == thread_count:
+        return thread_count
+
+    # Try to set the thread count, but it may fail if threads are already launched
+    try:
+        config.THREADING_LAYER = "omp"
+        set_num_threads(thread_count)
+        return thread_count
+    except RuntimeError:
+        # Threads already launched, return current count
+        return int(current_threads)
 
 
 def format_hardware_box(
     info: HardwareInfo,
     strategy: Optional[ParallelizationStrategy] = None,
-    gpu_details: Optional[Dict[str, Any]] = None
+    gpu_details: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Format hardware info as a rich box for CLI display.
@@ -255,22 +274,25 @@ def format_hardware_box(
 
     # GPU info
     if info.gpu_available and info.gpu_name:
-        memory_str = f"{info.gpu_memory_mb // 1024}GB" if info.gpu_memory_mb and info.gpu_memory_mb >= 1024 else f"{info.gpu_memory_mb}MB"
+        memory_str = (
+            f"{info.gpu_memory_mb // 1024}GB"
+            if info.gpu_memory_mb and info.gpu_memory_mb >= 1024
+            else f"{info.gpu_memory_mb}MB"
+        )
         gpu_line = f"  GPU: {info.gpu_name} ({memory_str}) → CUDA acceleration"
 
         # Show available/missing RAPIDS libraries if provided
         if gpu_details:
-            libs_available = gpu_details.get('libs_available', [])
-            libs_missing = gpu_details.get('libs_missing', [])
+            libs_missing = gpu_details.get("libs_missing", [])
             if libs_missing:
                 gpu_line += f" (missing: {', '.join(libs_missing)})"
     else:
         # Show reason for GPU unavailability if known
         reason = ""
         if gpu_details:
-            if 'reason' in gpu_details:
+            if "reason" in gpu_details:
                 reason = f" ({gpu_details['reason']})"
-            elif gpu_details.get('libs_missing'):
+            elif gpu_details.get("libs_missing"):
                 reason = f" (install: {', '.join(gpu_details['libs_missing'])})"
         gpu_line = f"  GPU: Not available{reason} → CPU mode"
     lines.append(gpu_line)

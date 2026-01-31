@@ -31,13 +31,13 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
 
     # Set environment
     if force_gpu:
-        os.environ['SPKMC_FORCE_GPU'] = '1'
+        os.environ["SPKMC_FORCE_GPU"] = "1"
         print("Environment: SPKMC_FORCE_GPU=1")
     else:
-        os.environ.pop('SPKMC_FORCE_GPU', None)
+        os.environ.pop("SPKMC_FORCE_GPU", None)
         print("Environment: SPKMC_FORCE_GPU not set")
 
-    os.environ['SPKMC_BATCH_GPU'] = '1'
+    os.environ["SPKMC_BATCH_GPU"] = "1"
     print("Environment: SPKMC_BATCH_GPU=1")
     print()
 
@@ -54,7 +54,7 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
     print()
 
     # Create distribution
-    dist = create_distribution('exponential', mu=1.0, lambda_param=0.3)
+    dist = create_distribution("exponential", mu=1.0, lambda_param=0.3)
     time_steps = np.linspace(0, 30, 100).astype(np.float32)
 
     # Create SPKMC with GPU
@@ -77,9 +77,7 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
     else:
         # Check if non-batched GPU will be used
         use_gpu_for_graph = (
-            sim.use_gpu and
-            sim._gpu_available and
-            (N >= SPKMC.GPU_MIN_NODES or sim._force_gpu)
+            sim.use_gpu and sim._gpu_available and (N >= SPKMC.GPU_MIN_NODES or sim._force_gpu)
         )
         if use_gpu_for_graph:
             print("→ Will use: Non-batched GPU (per-sample get_dist_gpu)")
@@ -107,7 +105,7 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
         edges = np.array(G.edges())
 
     t_network = time.perf_counter()
-    timings['network_generation'] = (t_network - t_start) * 1000
+    timings["network_generation"] = (t_network - t_start) * 1000
     print(f"Network generated: {len(edges)} edges in {timings['network_generation']:.1f}ms")
 
     # Sources
@@ -118,11 +116,10 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
     # Run simulation
     t_sim_start = time.perf_counter()
     S, I, R = sim.run_multiple_simulations_from_edges(
-        N, edges, sources, time_steps, samples,
-        show_progress=False
+        N, edges, sources, time_steps, samples, show_progress=False
     )
     t_sim_end = time.perf_counter()
-    timings['simulation'] = (t_sim_end - t_sim_start) * 1000
+    timings["simulation"] = (t_sim_end - t_sim_start) * 1000
 
     print(f"Simulation completed in {timings['simulation']:.1f}ms")
     print(f"  → Per sample: {timings['simulation']/samples:.1f}ms")
@@ -130,10 +127,14 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
 
     # Summary
     print("--- Summary ---")
-    total_time = timings['network_generation'] + timings['simulation']
+    total_time = timings["network_generation"] + timings["simulation"]
     print(f"Total time: {total_time:.1f}ms")
-    print(f"  Network generation: {timings['network_generation']:.1f}ms ({timings['network_generation']/total_time*100:.1f}%)")
-    print(f"  Simulation: {timings['simulation']:.1f}ms ({timings['simulation']/total_time*100:.1f}%)")
+    print(
+        f"  Network generation: {timings['network_generation']:.1f}ms ({timings['network_generation']/total_time*100:.1f}%)"
+    )
+    print(
+        f"  Simulation: {timings['simulation']:.1f}ms ({timings['simulation']/total_time*100:.1f}%)"
+    )
     print()
 
     # Results sanity check
@@ -143,8 +144,8 @@ def trace_simulation(N: int, samples: int, k_avg: int = 10, force_gpu: bool = Fa
     print(f"S+I+R at t=0: {S[0]+I[0]+R[0]:.6f} (should be 1.0)")
 
     # Cleanup
-    os.environ.pop('SPKMC_FORCE_GPU', None)
-    os.environ.pop('SPKMC_BATCH_GPU', None)
+    os.environ.pop("SPKMC_FORCE_GPU", None)
+    os.environ.pop("SPKMC_BATCH_GPU", None)
 
 
 def main():

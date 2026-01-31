@@ -5,17 +5,18 @@ Este módulo contém funções e classes para o gerenciamento de experimentos,
 incluindo descoberta, carregamento, validação e execução de experimentos.
 """
 
-import os
 import json
+import os
 import shutil
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
 class PlotConfig:
     """Configuração para plotagem de resultados."""
+
     title: Optional[str] = None
     xlabel: str = "Tempo"
     ylabel: str = "Proporção de Indivíduos"
@@ -28,7 +29,7 @@ class PlotConfig:
     grid_alpha: float = 0.3
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PlotConfig':
+    def from_dict(cls, data: Dict[str, Any]) -> "PlotConfig":
         """
         Cria PlotConfig a partir de um dicionário.
 
@@ -49,13 +50,14 @@ class PlotConfig:
             states_to_plot=data.get("states_to_plot", ["S", "I", "R"]),
             dpi=data.get("dpi", 300),
             grid=data.get("grid", True),
-            grid_alpha=data.get("grid_alpha", 0.3)
+            grid_alpha=data.get("grid_alpha", 0.3),
         )
 
 
 @dataclass
 class Experiment:
     """Representa um experimento SPKMC."""
+
     name: str
     path: Path
     description: Optional[str] = None
@@ -79,7 +81,9 @@ class Experiment:
         if not self.results_dir.exists():
             return 0
         # Count all JSON files except comparison metadata
-        return len([f for f in self.results_dir.glob("*.json") if not f.name.startswith("comparison")])
+        return len(
+            [f for f in self.results_dir.glob("*.json") if not f.name.startswith("comparison")]
+        )
 
     def clean_results(self) -> None:
         """Remove todos os resultados do experimento."""
@@ -106,9 +110,9 @@ class ExperimentManager:
             experiments_dir: Diretório base para experimentos (opcional)
         """
         self.experiments_dir = Path(
-            experiments_dir or
-            os.environ.get("SPKMC_EXPERIMENTS_DIR") or
-            self.DEFAULT_EXPERIMENTS_DIR
+            experiments_dir
+            or os.environ.get("SPKMC_EXPERIMENTS_DIR")
+            or self.DEFAULT_EXPERIMENTS_DIR
         )
 
     def list_experiments(self) -> List[Experiment]:
@@ -118,7 +122,7 @@ class ExperimentManager:
         Returns:
             Lista de objetos Experiment
         """
-        experiments = []
+        experiments: List[Experiment] = []
 
         if not self.experiments_dir.exists():
             return experiments
@@ -156,7 +160,7 @@ class ExperimentManager:
         if not data_file.exists():
             raise FileNotFoundError(f"Experimento não encontrado: {experiment_name}")
 
-        with open(data_file, 'r', encoding='utf-8') as f:
+        with open(data_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # Validate required fields
@@ -203,7 +207,7 @@ class ExperimentManager:
             description=data.get("description"),
             plot_config=plot_config,
             scenarios=merged_scenarios,
-            parameters=global_params
+            parameters=global_params,
         )
 
     def get_experiment_by_index(self, index: int) -> Optional[Experiment]:

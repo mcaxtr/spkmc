@@ -8,17 +8,10 @@ and only activates if the OPENAI_API_KEY environment variable is set.
 
 import os
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from spkmc.analysis.metrics import (
-    ExperimentMetrics,
-    extract_experiment_metrics,
-)
-from spkmc.analysis.prompts import (
-    SYSTEM_PROMPT,
-    build_experiment_prompt,
-    build_collection_prompt,
-)
+from spkmc.analysis.metrics import ExperimentMetrics, extract_experiment_metrics
+from spkmc.analysis.prompts import SYSTEM_PROMPT, build_collection_prompt, build_experiment_prompt
 
 
 class AIAnalyzer:
@@ -68,8 +61,7 @@ class AIAnalyzer:
                 from openai import OpenAI
             except ImportError:
                 raise ImportError(
-                    "OpenAI package not installed. "
-                    "Install with: pip install openai"
+                    "OpenAI package not installed. " "Install with: pip install openai"
                 )
 
             api_key = os.environ.get("OPENAI_API_KEY")
@@ -85,7 +77,7 @@ class AIAnalyzer:
         experiment_name: str,
         experiment_description: str,
         results: List[Dict[str, Any]],
-        results_dir: Path
+        results_dir: Path,
     ) -> Optional[str]:
         """
         Generate AI analysis for a single experiment.
@@ -110,11 +102,7 @@ class AIAnalyzer:
             return None
 
         # Extract metrics
-        metrics = extract_experiment_metrics(
-            experiment_name,
-            experiment_description,
-            results
-        )
+        metrics = extract_experiment_metrics(experiment_name, experiment_description, results)
 
         # Skip if no valid scenarios
         if not metrics.scenarios:
@@ -129,16 +117,16 @@ class AIAnalyzer:
             model=self.model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.3,  # Lower for more consistent scientific writing
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         analysis_text = response.choices[0].message.content
 
         # Write analysis file
-        with open(analysis_path, 'w', encoding='utf-8') as f:
+        with open(analysis_path, "w", encoding="utf-8") as f:
             f.write(f"# Analysis: {experiment_name}\n\n")
             f.write(f"**Research Question:** {experiment_description}\n\n")
             f.write("---\n\n")
@@ -149,8 +137,7 @@ class AIAnalyzer:
         return str(analysis_path)
 
     def generate_collection_summary(
-        self,
-        all_experiments_metrics: List[ExperimentMetrics]
+        self, all_experiments_metrics: List[ExperimentMetrics]
     ) -> Optional[str]:
         """
         Generate a collection-level summary for --all mode.
@@ -173,13 +160,14 @@ class AIAnalyzer:
             model=self.model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=1500
+            max_tokens=1500,
         )
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        return str(content) if content is not None else None
 
 
 def try_generate_analysis(
@@ -187,7 +175,7 @@ def try_generate_analysis(
     experiment_description: Optional[str],
     results: List[Dict[str, Any]],
     results_dir: Path,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> Optional[str]:
     """
     Convenience function to attempt AI analysis generation.
@@ -208,7 +196,7 @@ def try_generate_analysis(
     import sys
 
     def _debug(msg: str) -> None:
-        if verbose or os.environ.get('SPKMC_DEBUG', '0') == '1':
+        if verbose or os.environ.get("SPKMC_DEBUG", "0") == "1":
             print(f"[AI DEBUG] {msg}", file=sys.stderr)
 
     # Skip if AI not available
@@ -237,10 +225,7 @@ def try_generate_analysis(
     try:
         analyzer = AIAnalyzer()
         result = analyzer.analyze_experiment(
-            experiment_name,
-            experiment_description,
-            results,
-            results_dir
+            experiment_name, experiment_description, results, results_dir
         )
         _debug(f"Analysis generated successfully: {result}")
         return result

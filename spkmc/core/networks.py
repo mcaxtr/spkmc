@@ -7,170 +7,174 @@ utilizadas nas simulações SPKMC, como redes Erdos-Renyi, redes complexas e gra
 Includes fast edge-list generators that bypass NetworkX for GPU workflows.
 """
 
+from typing import Any, Dict, Tuple
+
 import networkx as nx
 import numpy as np
-from typing import Optional, Dict, Any, Tuple, Union
 
 
 class NetworkFactory:
     """Fábrica para criar diferentes tipos de redes."""
-    
+
     NETWORK_TYPES = ["er", "cn", "cg", "rrn"]  # Tipos de rede suportados
-    
+
     @staticmethod
-    def create_network(network_type: str, **kwargs) -> nx.DiGraph:
+    def create_network(network_type: str, **kwargs: Any) -> nx.DiGraph:
         """
         Cria uma rede com base no tipo e parâmetros fornecidos.
-        
+
         Args:
             network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             **kwargs: Parâmetros específicos do tipo de rede
-        
+
         Returns:
             Grafo direcionado da rede solicitada
-        
+
         Raises:
             ValueError: Se o tipo de rede for desconhecido
         """
         network_type = network_type.lower()
-        
+
         if network_type == "er":
             N = kwargs.get("N", 1000)
             k_avg = kwargs.get("k_avg", 10)
             return NetworkFactory.create_erdos_renyi(N, k_avg)
-        
+
         elif network_type == "cn":
             N = kwargs.get("N", 1000)
             exponent = kwargs.get("exponent", 2.5)
             k_avg = kwargs.get("k_avg", 10)
             return NetworkFactory.create_complex_network(N, exponent, k_avg)
-        
+
         elif network_type == "cg":
             N = kwargs.get("N", 1000)
             return NetworkFactory.create_complete_graph(N)
-        
+
         elif network_type == "rrn":
             N = kwargs.get("N", 1000)
             k_avg = kwargs.get("k_avg", 10)
             return NetworkFactory.create_random_regular_network(N, k_avg)
-        
+
         else:
             raise ValueError(f"Tipo de rede desconhecido: {network_type}")
-    
+
     @staticmethod
     def create_erdos_renyi(N: int, k_avg: float) -> nx.DiGraph:
         """
         Cria uma rede Erdos-Renyi.
-        
+
         Args:
             N: Número de nós
             k_avg: Grau médio
-            
+
         Returns:
             Grafo direcionado Erdos-Renyi
         """
         p = k_avg / (N - 1)
         return nx.erdos_renyi_graph(N, p, directed=True)
-    
+
     @staticmethod
     def generate_discrete_power_law(n: int, alpha: float, xmin: int, xmax: float) -> np.ndarray:
         """
         Gera uma sequência de lei de potência discreta.
-        
+
         Args:
             n: Número de elementos
             alpha: Expoente da lei de potência
             xmin: Valor mínimo
             xmax: Valor máximo
-            
+
         Returns:
             Array com a sequência de lei de potência
         """
         rand_nums = np.random.uniform(size=n)
-        power_law_seq = (xmax**(1-alpha) - xmin**(1-alpha)) * rand_nums + xmin**(1-alpha)
-        power_law_seq = power_law_seq**(1/(1-alpha))
+        power_law_seq = (xmax ** (1 - alpha) - xmin ** (1 - alpha)) * rand_nums + xmin ** (
+            1 - alpha
+        )
+        power_law_seq = power_law_seq ** (1 / (1 - alpha))
         power_law_seq = power_law_seq.astype(int)
 
-        if sum(power_law_seq) % 2 == 0:
-            return power_law_seq
+        total_sum = int(sum(power_law_seq))
+        if total_sum % 2 == 0:
+            result: np.ndarray = power_law_seq
+            return result
         else:
             power_law_seq[0] = power_law_seq[0] + 1
-            return power_law_seq
-    
+            result = power_law_seq
+            return result
+
     @staticmethod
     def create_complex_network(N: int, exponent: float, k_avg: float) -> nx.DiGraph:
         """
         Cria uma rede complexa com distribuição de grau seguindo lei de potência.
-        
+
         Args:
             N: Número de nós
             exponent: Expoente da lei de potência
             k_avg: Grau médio
-            
+
         Returns:
             Grafo direcionado complexo
         """
         degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
         degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
-        
+
         if sum(degree_sequence) % 2 != 0:
             degree_sequence[np.argmin(degree_sequence)] += 1
-        
+
         G = nx.configuration_model(degree_sequence)
         G = nx.DiGraph(G)
         G.remove_edges_from(nx.selfloop_edges(G))
         return G
-    
+
     @staticmethod
     def create_complete_graph(N: int) -> nx.DiGraph:
         """
         Cria um grafo completo.
-        
+
         Args:
             N: Número de nós
-            
+
         Returns:
             Grafo direcionado completo
         """
         return nx.complete_graph(N, create_using=nx.DiGraph())
-    
+
     @staticmethod
-    def create_random_regular_network(N: int, k_avg: int) -> nx.DiGraph:
+    def create_random_regular_network(N: int, k_avg: float) -> nx.DiGraph:
         """
         Cria uma rede regular aleatória (random regular network).
-        
+
         Args:
             N: Número de nós
-            k_avg: Grau regular (número de conexões por nó)
-        
+            k_avg: Grau regular (número de conexões por nó, will be converted to int)
+
         Returns:
             Grafo direcionado regular aleatório
         """
-        G = nx.random_regular_graph(k_avg, N)
+        # k_avg must be int for random_regular_graph
+        G = nx.random_regular_graph(int(k_avg), N)
         return nx.DiGraph(G)
-    
+
     @staticmethod
-    def get_network_info(network_type: str, **kwargs) -> Dict[str, Any]:
+    def get_network_info(network_type: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Retorna informações sobre a rede para uso em metadados.
-        
+
         Args:
             network_type: Tipo de rede ('er', 'cn', 'cg', 'rrn')
             **kwargs: Parâmetros específicos do tipo de rede
-        
+
         Returns:
             Dicionário com informações sobre a rede
         """
         network_type = network_type.lower()
-        
-        info = {
-            "type": network_type,
-            "N": kwargs.get("N", 1000)
-        }
-        
+
+        info = {"type": network_type, "N": kwargs.get("N", 1000)}
+
         if network_type in ["er", "cn", "rrn"]:
             info["k_avg"] = kwargs.get("k_avg", 10)
-            
+
         if network_type == "cn":
             info["exponent"] = kwargs.get("exponent", 2.5)
 
@@ -181,7 +185,7 @@ class NetworkFactory:
     # =========================================================================
 
     @staticmethod
-    def create_edges(network_type: str, **kwargs) -> Tuple[int, np.ndarray]:
+    def create_edges(network_type: str, **kwargs: Any) -> Tuple[int, np.ndarray]:
         """
         Create edge list directly without NetworkX graph object.
 
@@ -297,7 +301,9 @@ class NetworkFactory:
         return N, edges
 
     @staticmethod
-    def create_complex_network_edges(N: int, exponent: float, k_avg: float) -> Tuple[int, np.ndarray]:
+    def create_complex_network_edges(
+        N: int, exponent: float, k_avg: float
+    ) -> Tuple[int, np.ndarray]:
         """
         Create scale-free network edge list using configuration model.
 
@@ -319,7 +325,9 @@ class NetworkFactory:
         """
         # Generate power-law degree sequence
         degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
-        degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(np.int32)
+        degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(
+            np.int32
+        )
 
         # Ensure even sum
         if np.sum(degree_sequence) % 2 != 0:
@@ -334,7 +342,7 @@ class NetworkFactory:
         # Pair adjacent stubs
         num_edges = len(stubs) // 2
         src = stubs[:num_edges]
-        dst = stubs[num_edges:2*num_edges]
+        dst = stubs[num_edges : 2 * num_edges]
 
         # Remove self-loops
         valid_mask = src != dst
@@ -349,10 +357,9 @@ class NetworkFactory:
         dst_unique = (unique_packed % N).astype(np.int32)
 
         # Make directed (add reverse edges)
-        edges = np.vstack([
-            np.column_stack([src_unique, dst_unique]),
-            np.column_stack([dst_unique, src_unique])
-        ])
+        edges = np.vstack(
+            [np.column_stack([src_unique, dst_unique]), np.column_stack([dst_unique, src_unique])]
+        )
 
         # Remove any duplicates from making directed
         packed = edges[:, 0].astype(np.int64) * N + edges[:, 1].astype(np.int64)
@@ -415,13 +422,13 @@ class NetworkFactory:
 
         # Try multiple times to get valid pairing (no self-loops, no multi-edges)
         max_attempts = 100
-        for attempt in range(max_attempts):
+        for _attempt in range(max_attempts):
             shuffled = stubs.copy()
             np.random.shuffle(shuffled)
 
-            # Pair stubs: (shuffled[0], shuffled[num_edges]), (shuffled[1], shuffled[num_edges+1]), ...
+            # Pair stubs: first half with second half
             src = shuffled[:num_edges]
-            dst = shuffled[num_edges:2*num_edges]
+            dst = shuffled[num_edges : 2 * num_edges]
 
             # Check for self-loops: any src[i] == dst[i]?
             has_self_loops = np.any(src == dst)
@@ -430,16 +437,15 @@ class NetworkFactory:
 
             # Check for multi-edges: sort each edge (a,b) -> (min,max), then check unique
             edges_sorted = np.sort(np.column_stack([src, dst]), axis=1)
-            packed_int = edges_sorted[:, 0].astype(np.int64) * N + edges_sorted[:, 1].astype(np.int64)
+            packed_int = edges_sorted[:, 0].astype(np.int64) * N + edges_sorted[:, 1].astype(
+                np.int64
+            )
             unique_packed = np.unique(packed_int)
 
             if len(unique_packed) == num_edges:
                 # Valid simple graph: no self-loops, no multi-edges
                 # Make directed by adding both directions
-                edges = np.vstack([
-                    np.column_stack([src, dst]),
-                    np.column_stack([dst, src])
-                ])
+                edges = np.vstack([np.column_stack([src, dst]), np.column_stack([dst, src])])
                 return N, edges
 
         # Fallback to NetworkX if fast method fails after max_attempts

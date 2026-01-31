@@ -19,15 +19,12 @@ Example usage:
             print(f"Analysis saved to: {analysis_path}")
 """
 
-from spkmc.analysis.ai_analyzer import (
-    AIAnalyzer,
-    try_generate_analysis,
-)
+from spkmc.analysis.ai_analyzer import AIAnalyzer, try_generate_analysis
 from spkmc.analysis.metrics import (
-    ScenarioMetrics,
     ExperimentMetrics,
-    extract_scenario_metrics,
+    ScenarioMetrics,
     extract_experiment_metrics,
+    extract_scenario_metrics,
 )
 
 __all__ = [

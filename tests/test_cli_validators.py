@@ -6,32 +6,34 @@ Este módulo contém testes para as funções de validação da interface de lin
 
 import os
 import tempfile
-import pytest
+
 import click
-from click.testing import CliRunner
+import pytest
 
 from spkmc.cli.validators import (
-    validate_percentage,
-    validate_positive,
-    validate_positive_int,
-    validate_network_type,
+    validate_conditional,
+    validate_directory_exists,
     validate_distribution_type,
     validate_exponent,
     validate_file_exists,
-    validate_directory_exists,
+    validate_network_type,
     validate_output_file,
-    validate_conditional
+    validate_percentage,
+    validate_positive,
+    validate_positive_int,
 )
 
 
 class MockContext:
     """Mock para o contexto do Click."""
+
     def __init__(self):
         self.params = {}
 
 
 class MockParameter:
     """Mock para o parâmetro do Click."""
+
     def __init__(self, name):
         self.name = name
 
@@ -53,9 +55,9 @@ def temp_file():
     """Fixture para criar um arquivo temporário."""
     with tempfile.NamedTemporaryFile(delete=False) as f:
         path = f.name
-    
+
     yield path
-    
+
     if os.path.exists(path):
         os.remove(path)
 
@@ -64,9 +66,9 @@ def temp_file():
 def temp_dir():
     """Fixture para criar um diretório temporário."""
     path = tempfile.mkdtemp()
-    
+
     yield path
-    
+
     if os.path.exists(path):
         os.rmdir(path)
 
@@ -82,7 +84,7 @@ def test_validate_percentage_invalid(ctx, param):
     """Testa a validação de porcentagem com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_percentage(ctx, param, -0.1)
-    
+
     with pytest.raises(click.BadParameter):
         validate_percentage(ctx, param, 1.1)
 
@@ -98,7 +100,7 @@ def test_validate_positive_invalid(ctx, param):
     """Testa a validação de valor positivo com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_positive(ctx, param, 0.0)
-    
+
     with pytest.raises(click.BadParameter):
         validate_positive(ctx, param, -1.0)
 
@@ -114,10 +116,10 @@ def test_validate_positive_int_invalid(ctx, param):
     """Testa a validação de inteiro positivo com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_positive_int(ctx, param, 0)
-    
+
     with pytest.raises(click.BadParameter):
         validate_positive_int(ctx, param, -1)
-    
+
     with pytest.raises(click.BadParameter):
         validate_positive_int(ctx, param, 1.5)
 
@@ -134,7 +136,7 @@ def test_validate_network_type_invalid(ctx, param):
     """Testa a validação de tipo de rede com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_network_type(ctx, param, "invalid")
-    
+
     with pytest.raises(click.BadParameter):
         validate_network_type(ctx, param, "")
 
@@ -150,7 +152,7 @@ def test_validate_distribution_type_invalid(ctx, param):
     """Testa a validação de tipo de distribuição com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_distribution_type(ctx, param, "invalid")
-    
+
     with pytest.raises(click.BadParameter):
         validate_distribution_type(ctx, param, "")
 
@@ -166,10 +168,10 @@ def test_validate_exponent_invalid(ctx, param):
     """Testa a validação de expoente com valores inválidos."""
     with pytest.raises(click.BadParameter):
         validate_exponent(ctx, param, 0.5)
-    
+
     with pytest.raises(click.BadParameter):
         validate_exponent(ctx, param, 1.0)
-    
+
     with pytest.raises(click.BadParameter):
         validate_exponent(ctx, param, 0.0)
 
@@ -200,7 +202,7 @@ def test_validate_output_file_valid(ctx, param, temp_dir):
     """Testa a validação de arquivo de saída com valores válidos."""
     output_path = os.path.join(temp_dir, "output.txt")
     assert validate_output_file(ctx, param, output_path) == output_path
-    
+
     # Verifica se o arquivo foi criado e depois o remove
     assert os.path.exists(output_path)
     os.remove(output_path)
@@ -213,22 +215,25 @@ def test_validate_output_file_none(ctx, param):
 
 def test_validate_conditional(ctx, param):
     """Testa a validação condicional."""
+
     # Cria uma função de validação simples
     def validate_test(ctx, param, value):
         if value < 0:
             raise click.BadParameter("Valor deve ser não-negativo")
         return value
-    
+
     # Cria o validador condicional
-    conditional_validator = validate_conditional("condition_param", "condition_value", validate_test)
-    
+    conditional_validator = validate_conditional(
+        "condition_param", "condition_value", validate_test
+    )
+
     # Testa quando a condição é satisfeita
     ctx.params["condition_param"] = "condition_value"
     assert conditional_validator(ctx, param, 10) == 10
-    
+
     with pytest.raises(click.BadParameter):
         conditional_validator(ctx, param, -10)
-    
+
     # Testa quando a condição não é satisfeita
     ctx.params["condition_param"] = "other_value"
     assert conditional_validator(ctx, param, -10) == -10  # Não deve validar

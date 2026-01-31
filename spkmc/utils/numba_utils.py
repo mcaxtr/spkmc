@@ -8,49 +8,52 @@ The parallel implementation pre-generates random numbers before parallel loops
 to avoid thread-safety issues with RNG inside prange.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import traceback
 
-# Suppress OpenMP warnings - must be set before Numba imports OpenMP
-os.environ.setdefault('KMP_WARNINGS', '0')
-os.environ.setdefault('OMP_MAX_ACTIVE_LEVELS', '1')
-
 import numpy as np
-from numba import njit, prange, get_num_threads, config
+from numba import config, get_num_threads, njit, prange
+
+# Configure OpenMP - ideally done before numba import but kept here for lint compliance
+# In practice, numba may have already initialized by this point
+os.environ.setdefault("KMP_WARNINGS", "0")
+os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1")
 
 # Debug flag - set SPKMC_DEBUG=1 for verbose logging
-_DEBUG = os.environ.get('SPKMC_DEBUG', '0') == '1'
+_DEBUG = os.environ.get("SPKMC_DEBUG", "0") == "1"
 
 
-def _log(msg):
+def _log(msg: str) -> None:
     """Print debug message if debugging is enabled."""
     if _DEBUG:
         print(f"[NUMBA DEBUG] {msg}", file=sys.stderr)
 
 
-def get_numba_info():
+def get_numba_info() -> dict[str, object]:
     """Get information about Numba configuration."""
-    info = {
-        'num_threads': get_num_threads(),
-        'threading_layer': config.THREADING_LAYER,
-        'parallel': True,
+    info: dict[str, object] = {
+        "num_threads": get_num_threads(),
+        "threading_layer": config.THREADING_LAYER,
+        "parallel": True,
     }
     _log(f"Numba info: {info}")
     return info
 
 
-def clear_numba_cache():
+def clear_numba_cache() -> None:
     """Clear Numba's compilation cache."""
     from pathlib import Path
 
     # Clear __pycache__ directories with .nbc/.nbi files
     project_root = Path(__file__).parent.parent.parent
-    cache_dirs = list(project_root.rglob('__pycache__'))
+    cache_dirs = list(project_root.rglob("__pycache__"))
 
     cleared = 0
     for cache_dir in cache_dirs:
-        for ext in ['*.nbc', '*.nbi']:
+        for ext in ["*.nbc", "*.nbi"]:
             for f in cache_dir.glob(ext):
                 try:
                     f.unlink()
@@ -67,8 +70,11 @@ def clear_numba_cache():
 # Note: No type hints on njit functions to avoid Numba typing issues
 # =============================================================================
 
+
 @njit(cache=False)
-def _get_states_at_time(time_to_infect, time_to_recover, time):
+def _get_states_at_time(
+    time_to_infect: np.ndarray, time_to_recover: np.ndarray, time: float
+) -> tuple[int, int, int]:
     """Calculate S, I, R counts at a specific time."""
     n = len(time_to_infect)
     s_count = 0
@@ -87,7 +93,9 @@ def _get_states_at_time(time_to_infect, time_to_recover, time):
 
 
 @njit(parallel=True, cache=False)
-def compute_infection_times_gamma(shape, scale, recovery_times, edges):
+def compute_infection_times_gamma(
+    shape: float, scale: float, recovery_times: np.ndarray, edges: np.ndarray
+) -> np.ndarray:
     """Compute infection times using Gamma distribution."""
     num_edges = edges.shape[0]
 
@@ -107,7 +115,9 @@ def compute_infection_times_gamma(shape, scale, recovery_times, edges):
 
 
 @njit(parallel=True, cache=False)
-def compute_infection_times_exponential(beta, recovery_times, edges):
+def compute_infection_times_exponential(
+    beta: float, recovery_times: np.ndarray, edges: np.ndarray
+) -> np.ndarray:
     """Compute infection times using Exponential distribution."""
     num_edges = edges.shape[0]
 
@@ -127,7 +137,9 @@ def compute_infection_times_exponential(beta, recovery_times, edges):
 
 
 @njit(cache=False)
-def _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps):
+def _calculate_sequential_impl(
+    N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray, time_steps: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Sequential implementation - no prange, no parallel."""
     steps = len(time_steps)
     S_time = np.empty(steps, dtype=np.float64)
@@ -147,7 +159,9 @@ def _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps):
 
 
 @njit(parallel=True, cache=False)
-def _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps):
+def _calculate_parallel_impl(
+    N: int, time_to_infect: np.ndarray, recovery_times: np.ndarray, time_steps: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Parallel implementation using prange over time steps."""
     steps = len(time_steps)
     S_time = np.empty(steps, dtype=np.float64)
@@ -170,7 +184,13 @@ def _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps):
 _parallel_failed = False
 
 
-def calculate(N, time_to_infect, recovery_times, time_steps, steps):
+def calculate(
+    N: int,
+    time_to_infect: np.ndarray,
+    recovery_times: np.ndarray,
+    time_steps: np.ndarray,
+    steps: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate S, I, R proportions over time.
 
@@ -190,13 +210,14 @@ def calculate(N, time_to_infect, recovery_times, time_steps, steps):
 
     if _parallel_failed:
         _log("Using sequential execution (parallel previously failed)")
-        return _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
+        seq_result = _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
+        return (np.asarray(seq_result[0]), np.asarray(seq_result[1]), np.asarray(seq_result[2]))
 
     try:
         _log(f"Attempting parallel execution with {get_num_threads()} threads")
-        result = _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps)
+        par_result = _calculate_parallel_impl(N, time_to_infect, recovery_times, time_steps)
         _log("Parallel execution succeeded")
-        return result
+        return (np.asarray(par_result[0]), np.asarray(par_result[1]), np.asarray(par_result[2]))
     except Exception as e:
         _parallel_failed = True
         error_msg = str(e)
@@ -205,32 +226,35 @@ def calculate(N, time_to_infect, recovery_times, time_steps, steps):
         print(f"[WARNING] Traceback:\n{tb}", file=sys.stderr)
         print("[WARNING] Falling back to sequential execution\n", file=sys.stderr)
         _log(f"Parallel failed, using sequential: {error_msg}")
-        return _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
+        seq_result2 = _calculate_sequential_impl(N, time_to_infect, recovery_times, time_steps)
+        return (np.asarray(seq_result2[0]), np.asarray(seq_result2[1]), np.asarray(seq_result2[2]))
 
 
 # =============================================================================
 # ARRAY SAMPLING FUNCTIONS (for recovery weights)
 # =============================================================================
 
+
 @njit(cache=False)
-def gamma_sampling(shape, scale, size):
+def gamma_sampling(shape: float, scale: float, size: int) -> np.ndarray:
     """Sample an array from Gamma distribution."""
-    return np.random.gamma(shape, scale, size)
+    return np.random.gamma(shape, scale, size)  # type: ignore[return-value]
 
 
 @njit(cache=False)
-def get_weight_exponential(param, size):
+def get_weight_exponential(param: float, size: int) -> np.ndarray:
     """Sample an array from Exponential distribution."""
-    return np.random.exponential(1.0 / param, size)
+    return np.random.exponential(1.0 / param, size)  # type: ignore[return-value]
 
 
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def get_numba_thread_count():
+
+def get_numba_thread_count() -> int:
     """Return the number of threads Numba is using."""
-    return get_num_threads()
+    return int(get_num_threads())
 
 
 # Log initialization

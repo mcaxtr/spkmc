@@ -22,7 +22,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 @dataclass
 class BenchmarkResult:
     """Result of a single benchmark run."""
+
     name: str
     network_type: str
     N: int
@@ -49,6 +50,7 @@ class BenchmarkResult:
 @dataclass
 class BenchmarkConfig:
     """Configuration for a benchmark run."""
+
     name: str
     network_type: str
     N: int
@@ -82,13 +84,11 @@ FULL_CONFIGS = [
     BenchmarkConfig("ER N=20K", "er", N=20000, samples=100, num_runs=2),
     BenchmarkConfig("ER N=50K", "er", N=50000, samples=100, num_runs=2),
     BenchmarkConfig("ER N=100K", "er", N=100000, samples=50, num_runs=1),
-
     # Complex Networks at various scales
     BenchmarkConfig("CN N=1K γ=2.5", "cn", N=1000, samples=50, num_runs=3, exponent=2.5),
     BenchmarkConfig("CN N=5K γ=2.5", "cn", N=5000, samples=50, num_runs=3, exponent=2.5),
     BenchmarkConfig("CN N=10K γ=2.5", "cn", N=10000, samples=100, num_runs=2, exponent=2.5),
     BenchmarkConfig("CN N=5K γ=3.0", "cn", N=5000, samples=50, num_runs=3, exponent=3.0),
-
     # Random Regular Networks
     BenchmarkConfig("RRN N=5K", "rrn", N=5000, samples=50, num_runs=3),
     BenchmarkConfig("RRN N=10K", "rrn", N=10000, samples=100, num_runs=2),
@@ -98,7 +98,8 @@ FULL_CONFIGS = [
 def check_gpu_available() -> Tuple[bool, str]:
     """Check if GPU is available and return status."""
     try:
-        from spkmc.utils.gpu_utils import is_gpu_available, get_gpu_check_error
+        from spkmc.utils.gpu_utils import get_gpu_check_error, is_gpu_available
+
         available = is_gpu_available()
         error = get_gpu_check_error() or ""
         return available, error
@@ -113,35 +114,41 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
 
     print(f"\n{'='*60}")
     print(f"Benchmark: {config.name}")
-    print(f"  Network: {config.network_type.upper()}, N={config.N}, "
-          f"samples={config.samples}, runs={config.num_runs}")
+    print(
+        f"  Network: {config.network_type.upper()}, N={config.N}, "
+        f"samples={config.samples}, runs={config.num_runs}"
+    )
     print(f"{'='*60}")
 
     # Create distribution (exponential for simplicity)
-    dist = create_distribution('exponential', mu=1.0, lambda_param=0.3)
+    dist = create_distribution("exponential", mu=1.0, lambda_param=0.3)
     time_steps = np.linspace(0, 30, 100)
 
     # Check GPU availability
     gpu_available, gpu_error = check_gpu_available()
 
-    gpu_time_ms = float('inf')
-    cpu_time_ms = float('inf')
+    gpu_time_ms = float("inf")
+    cpu_time_ms = float("inf")
     notes = ""
 
     # Warm-up run (helps with JIT compilation, memory allocation)
     print("  Warming up...")
     warmup_sim = SPKMC(dist, use_gpu=False)
     _ = warmup_sim.simulate_erdos_renyi(
-        num_runs=1, time_steps=time_steps, N=100, samples=5,
-        load_if_exists=False, show_progress=False
+        num_runs=1,
+        time_steps=time_steps,
+        N=100,
+        samples=5,
+        load_if_exists=False,
+        show_progress=False,
     )
 
     # --- GPU Benchmark ---
     if gpu_available:
         print("  Running GPU benchmark...")
-        os.environ['SPKMC_FORCE_GPU'] = '1'
-        os.environ['SPKMC_BATCH_GPU'] = '1'
-        os.environ.pop('SPKMC_NO_GPU', None)
+        os.environ["SPKMC_FORCE_GPU"] = "1"
+        os.environ["SPKMC_BATCH_GPU"] = "1"
+        os.environ.pop("SPKMC_NO_GPU", None)
 
         try:
             sim_gpu = SPKMC(dist, use_gpu=True)
@@ -149,8 +156,12 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
             # Warm-up GPU
             if config.N >= 1000:
                 _ = sim_gpu.simulate_erdos_renyi(
-                    num_runs=1, time_steps=time_steps, N=500, samples=5,
-                    load_if_exists=False, show_progress=False
+                    num_runs=1,
+                    time_steps=time_steps,
+                    N=500,
+                    samples=5,
+                    load_if_exists=False,
+                    show_progress=False,
                 )
 
             t_start = time.perf_counter()
@@ -163,7 +174,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                     k_avg=config.k_avg,
                     samples=config.samples,
                     load_if_exists=False,
-                    show_progress=False
+                    show_progress=False,
                 )
             elif config.network_type == "cn":
                 _ = sim_gpu.simulate_complex_network(
@@ -174,7 +185,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                     k_avg=config.k_avg,
                     samples=config.samples,
                     load_if_exists=False,
-                    show_progress=False
+                    show_progress=False,
                 )
             elif config.network_type == "rrn":
                 _ = sim_gpu.simulate_random_regular_network(
@@ -184,7 +195,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                     k_avg=config.k_avg,
                     samples=config.samples,
                     load_if_exists=False,
-                    show_progress=False
+                    show_progress=False,
                 )
 
             t_end = time.perf_counter()
@@ -194,18 +205,18 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
         except Exception as e:
             notes = f"GPU error: {type(e).__name__}: {e}"
             print(f"  GPU: FAILED - {notes}")
-            gpu_time_ms = float('inf')
+            gpu_time_ms = float("inf")
 
         finally:
-            os.environ.pop('SPKMC_FORCE_GPU', None)
-            os.environ.pop('SPKMC_BATCH_GPU', None)
+            os.environ.pop("SPKMC_FORCE_GPU", None)
+            os.environ.pop("SPKMC_BATCH_GPU", None)
     else:
         notes = f"GPU not available: {gpu_error}"
         print(f"  GPU: SKIPPED - {notes}")
 
     # --- CPU Benchmark ---
     print("  Running CPU benchmark...")
-    os.environ['SPKMC_NO_GPU'] = '1'
+    os.environ["SPKMC_NO_GPU"] = "1"
 
     try:
         sim_cpu = SPKMC(dist, use_gpu=False)
@@ -220,7 +231,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                 k_avg=config.k_avg,
                 samples=config.samples,
                 load_if_exists=False,
-                show_progress=False
+                show_progress=False,
             )
         elif config.network_type == "cn":
             _ = sim_cpu.simulate_complex_network(
@@ -231,7 +242,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                 k_avg=config.k_avg,
                 samples=config.samples,
                 load_if_exists=False,
-                show_progress=False
+                show_progress=False,
             )
         elif config.network_type == "rrn":
             _ = sim_cpu.simulate_random_regular_network(
@@ -241,7 +252,7 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
                 k_avg=config.k_avg,
                 samples=config.samples,
                 load_if_exists=False,
-                show_progress=False
+                show_progress=False,
             )
 
         t_end = time.perf_counter()
@@ -251,13 +262,13 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
     except Exception as e:
         notes += f" CPU error: {type(e).__name__}: {e}"
         print(f"  CPU: FAILED - {e}")
-        cpu_time_ms = float('inf')
+        cpu_time_ms = float("inf")
 
     finally:
-        os.environ.pop('SPKMC_NO_GPU', None)
+        os.environ.pop("SPKMC_NO_GPU", None)
 
     # Calculate speedup
-    if gpu_time_ms < float('inf') and cpu_time_ms < float('inf') and gpu_time_ms > 0:
+    if gpu_time_ms < float("inf") and cpu_time_ms < float("inf") and gpu_time_ms > 0:
         speedup = cpu_time_ms / gpu_time_ms
     else:
         speedup = 0.0
@@ -270,23 +281,23 @@ def run_benchmark(config: BenchmarkConfig, verbose: bool = False) -> BenchmarkRe
         N=config.N,
         samples=config.samples,
         num_runs=config.num_runs,
-        gpu_time_ms=gpu_time_ms if gpu_time_ms < float('inf') else -1,
-        cpu_time_ms=cpu_time_ms if cpu_time_ms < float('inf') else -1,
+        gpu_time_ms=gpu_time_ms if gpu_time_ms < float("inf") else -1,
+        cpu_time_ms=cpu_time_ms if cpu_time_ms < float("inf") else -1,
         speedup=speedup,
         gpu_available=gpu_available,
-        notes=notes
+        notes=notes,
     )
 
 
 def print_summary(results: List[BenchmarkResult]):
     """Print a summary table of benchmark results."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK SUMMARY")
-    print("="*80)
+    print("=" * 80)
 
     # Header
     print(f"{'Name':<25} {'N':>8} {'Samples':>8} {'GPU (ms)':>10} {'CPU (ms)':>10} {'Speedup':>10}")
-    print("-"*80)
+    print("-" * 80)
 
     for r in results:
         gpu_str = f"{r.gpu_time_ms:.1f}" if r.gpu_time_ms > 0 else "N/A"
@@ -294,7 +305,7 @@ def print_summary(results: List[BenchmarkResult]):
         speedup_str = f"{r.speedup:.2f}x" if r.speedup > 0 else "N/A"
         print(f"{r.name:<25} {r.N:>8} {r.samples:>8} {gpu_str:>10} {cpu_str:>10} {speedup_str:>10}")
 
-    print("-"*80)
+    print("-" * 80)
 
     # Summary statistics
     valid_results = [r for r in results if r.speedup > 0]
@@ -311,7 +322,9 @@ def print_summary(results: List[BenchmarkResult]):
     print(f"\nGPU Min Nodes Threshold: {SPKMC.GPU_MIN_NODES}")
     results_above_threshold = [r for r in results if r.N >= SPKMC.GPU_MIN_NODES]
     if results_above_threshold:
-        above_avg = sum(r.speedup for r in results_above_threshold if r.speedup > 0) / max(1, len([r for r in results_above_threshold if r.speedup > 0]))
+        above_avg = sum(r.speedup for r in results_above_threshold if r.speedup > 0) / max(
+            1, len([r for r in results_above_threshold if r.speedup > 0])
+        )
         print(f"  Avg speedup for N >= {SPKMC.GPU_MIN_NODES}: {above_avg:.2f}x")
 
 
@@ -337,7 +350,7 @@ def main():
 
     # Enable debug timing if requested
     if args.debug:
-        os.environ['SPKMC_DEBUG'] = '1'
+        os.environ["SPKMC_DEBUG"] = "1"
 
     # Import SPKMC after environment setup
     from spkmc.core.simulation import SPKMC
@@ -357,18 +370,20 @@ def main():
             results.append(result)
         except Exception as e:
             print(f"  FAILED: {type(e).__name__}: {e}")
-            results.append(BenchmarkResult(
-                name=config.name,
-                network_type=config.network_type,
-                N=config.N,
-                samples=config.samples,
-                num_runs=config.num_runs,
-                gpu_time_ms=-1,
-                cpu_time_ms=-1,
-                speedup=0,
-                gpu_available=gpu_available,
-                notes=f"Error: {e}"
-            ))
+            results.append(
+                BenchmarkResult(
+                    name=config.name,
+                    network_type=config.network_type,
+                    N=config.N,
+                    samples=config.samples,
+                    num_runs=config.num_runs,
+                    gpu_time_ms=-1,
+                    cpu_time_ms=-1,
+                    speedup=0,
+                    gpu_available=gpu_available,
+                    notes=f"Error: {e}",
+                )
+            )
 
     # Print summary
     print_summary(results)
@@ -379,9 +394,9 @@ def main():
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "gpu_available": gpu_available,
             "gpu_min_nodes": SPKMC.GPU_MIN_NODES,
-            "results": [asdict(r) for r in results]
+            "results": [asdict(r) for r in results],
         }
-        with open(args.output, 'w') as f:
+        with open(args.output, "w") as f:
             json.dump(output_data, f, indent=2)
         print(f"\nResults saved to: {args.output}")
 

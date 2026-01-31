@@ -13,7 +13,8 @@ a unifying description of epidemic dynamics across different distributions.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, Any, Callable
+from typing import Any, Callable, Dict, Optional, Tuple
+
 import numpy as np
 from scipy import integrate
 from scipy.stats import gamma as gamma_dist
@@ -29,7 +30,11 @@ class EpidemicThreshold:
     expected_outbreak_size: Optional[float] = None  # S(T̄) if supercritical
 
     def __str__(self) -> str:
-        status = "SUPERCRITICAL (epidemic spreads)" if self.is_supercritical else "SUBCRITICAL (epidemic dies out)"
+        status = (
+            "SUPERCRITICAL (epidemic spreads)"
+            if self.is_supercritical
+            else "SUBCRITICAL (epidemic dies out)"
+        )
         result = f"T̄ = {self.transmissibility:.4f}, T̄_c = {self.critical_transmissibility:.4f}\n"
         result += f"Status: {status}"
         if self.expected_outbreak_size is not None:
@@ -157,8 +162,8 @@ class TransmissibilityCalculator(ABC):
         p_k = k_values.astype(float) ** (-exponent)
         p_k = p_k / np.sum(p_k)  # Normalize
 
-        k_mean = np.sum(k_values * p_k)
-        k2_mean = np.sum(k_values**2 * p_k)
+        k_mean: float = float(np.sum(k_values * p_k))
+        k2_mean: float = float(np.sum(k_values**2 * p_k))
 
         return self.get_critical_transmissibility(k_mean, k2_mean)
 
@@ -247,7 +252,7 @@ class TransmissibilityCalculator(ABC):
         # S = probability of not being in giant component
         # Outbreak size = 1 - S
         S = np.exp(k_mean * (u - 1))
-        return 1 - S
+        return float(1 - S)
 
 
 class ExponentialExponentialTransmissibility(TransmissibilityCalculator):
@@ -365,11 +370,11 @@ class GammaExponentialTransmissibility(TransmissibilityCalculator):
             phi = gamma_dist.pdf(tau, a=self.shape, scale=self.scale)
             # Exponential CDF for infection (probability infected before tau)
             psi_cdf = 1 - np.exp(-self.beta * tau)
-            return phi * psi_cdf
+            return float(phi * psi_cdf)
 
         result, _ = integrate.quad(integrand, 0, np.inf)
-        self._cached_value = result
-        return result
+        self._cached_value = float(result)
+        return float(result)
 
     def calculate_analytical_erlang(self) -> Optional[float]:
         """
@@ -387,7 +392,7 @@ class GammaExponentialTransmissibility(TransmissibilityCalculator):
 
         n = int(round(n))
         ratio = self.gamma / (self.gamma + self.beta)
-        return 1 - ratio**n
+        return float(1 - ratio**n)
 
     def get_params_dict(self) -> Dict[str, Any]:
         return {
@@ -434,8 +439,8 @@ class NumericalTransmissibility(TransmissibilityCalculator):
             return self.recovery_pdf(tau) * self.infection_cdf(tau)
 
         result, _ = integrate.quad(integrand, 0, np.inf)
-        self._cached_value = result
-        return result
+        self._cached_value = float(result)
+        return float(result)
 
     def get_params_dict(self) -> Dict[str, Any]:
         return {"type": "numerical-custom"}
@@ -466,7 +471,7 @@ def calculate_empirical_transmissibility(
     if num_edges == 0:
         return 0.0
 
-    finite_edges = np.sum(np.isfinite(edge_weights))
+    finite_edges: int = int(np.sum(np.isfinite(edge_weights)))
     return float(finite_edges) / float(num_edges)
 
 
@@ -488,7 +493,7 @@ def calculate_transmissibility_from_outbreak(
         Note: T̄ estimation is approximate and requires network info
     """
     # Count infected nodes (finite infection time)
-    infected_count = np.sum(np.isfinite(infection_times))
+    infected_count: int = int(np.sum(np.isfinite(infection_times)))
     outbreak_fraction = float(infected_count) / float(total_nodes)
 
     # T̄ estimation from outbreak size is complex and network-dependent
@@ -535,24 +540,19 @@ def create_transmissibility_calculator(
     if recovery_type == "exponential":
         gamma = params.get("gamma") or params.get("mu")
         if gamma is None:
-            raise ValueError(
-                "Recovery rate 'gamma' (or 'mu') is required for exponential recovery"
-            )
+            raise ValueError("Recovery rate 'gamma' (or 'mu') is required for exponential recovery")
         return ExponentialExponentialTransmissibility(beta=beta, gamma=gamma)
 
     elif recovery_type == "gamma":
         shape = params.get("shape")
         scale = params.get("scale")
         if shape is None or scale is None:
-            raise ValueError(
-                "Parameters 'shape' and 'scale' are required for gamma recovery"
-            )
+            raise ValueError("Parameters 'shape' and 'scale' are required for gamma recovery")
         return GammaExponentialTransmissibility(shape=shape, scale=scale, beta=beta)
 
     else:
         raise ValueError(
-            f"Recovery type '{recovery_type}' not supported. "
-            "Use 'exponential' or 'gamma'."
+            f"Recovery type '{recovery_type}' not supported. " "Use 'exponential' or 'gamma'."
         )
 
 

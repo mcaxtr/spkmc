@@ -9,13 +9,14 @@ from typing import List
 
 from spkmc.analysis.metrics import ExperimentMetrics, ScenarioMetrics
 
-
-SYSTEM_PROMPT = """You are a computational epidemiologist analyzing SIR (Susceptible-Infected-Recovered) model simulations on complex networks. Your task is to provide rigorous scientific analysis of simulation results.
+SYSTEM_PROMPT = """You are a computational epidemiologist analyzing SIR model simulations \
+on complex networks. Your task is to provide rigorous scientific analysis of results.
 
 Writing Style:
 - Use formal academic/scientific language
 - Be precise and quantitative - always cite specific numbers
-- Use proper epidemiological terminology (basic reproduction number, epidemic threshold, attack rate, herd immunity threshold, network topology, degree distribution, etc.)
+- Use proper epidemiological terminology (basic reproduction number, epidemic threshold, \
+attack rate, herd immunity threshold, network topology, degree distribution, etc.)
 - Focus on findings that address the research question
 
 Structure your analysis with these sections:
@@ -100,7 +101,8 @@ def build_experiment_prompt(metrics: ExperimentMetrics) -> str:
 - **Final Outbreak Size**: {scenario.final_outbreak_size:.4f}
 - **Attack Rate**: {scenario.attack_rate:.2%}
 - **Epidemic Duration**: {scenario.epidemic_duration:.2f} time units
-- **Simulation**: {scenario.samples} samples, {scenario.num_runs} runs, initial infected = {scenario.initial_perc:.1%}
+- **Simulation**: {scenario.samples} samples, {scenario.num_runs} runs, \
+initial infected = {scenario.initial_perc:.1%}
 
 """
 
@@ -127,7 +129,8 @@ def build_collection_prompt(all_experiment_metrics: List[ExperimentMetrics]) -> 
     Returns:
         Formatted prompt for collection-level synthesis
     """
-    prompt = """Synthesize the findings from the following collection of epidemic modeling experiments. Identify overarching patterns, common themes, and provide a unified scientific summary.
+    prompt = """Synthesize the findings from the following epidemic modeling experiments. \
+Identify overarching patterns, common themes, and provide a unified scientific summary.
 
 ## Experiments Analyzed
 
@@ -136,7 +139,8 @@ def build_collection_prompt(all_experiment_metrics: List[ExperimentMetrics]) -> 
         prompt += f"""### {exp.name}
 - **Research Question**: {exp.description}
 - **Scenarios**: {len(exp.scenarios)}
-- **Key Finding**: Peak infection ranged from {exp.min_peak_scenario} (lowest) to {exp.max_peak_scenario} (highest)
+- **Key Finding**: Peak infection ranged from {exp.min_peak_scenario} \
+to {exp.max_peak_scenario}
 - **Peak Variation**: {exp.peak_variation_range:.4f}
 - **Final Size Variation**: {exp.final_size_variation_range:.4f}
 

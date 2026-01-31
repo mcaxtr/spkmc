@@ -5,10 +5,11 @@ Este módulo contém funções e classes para o gerenciamento de resultados de s
 incluindo salvamento, carregamento e manipulação de dados.
 """
 
-import os
 import json
+import os
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 
 from spkmc.core.distributions import Distribution
@@ -17,7 +18,7 @@ from spkmc.core.distributions import Distribution
 class NumpyJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles numpy types."""
 
-    def default(self, obj):
+    def default(self, obj: object) -> Any:
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, (np.float32, np.float64)):
@@ -31,13 +32,19 @@ class NumpyJSONEncoder(json.JSONEncoder):
 
 class ResultManager:
     """Gerencia o salvamento e carregamento de resultados de simulações."""
-    
+
     # Diretório base para resultados
     BASE_DIR = "data/spkmc"
-    
+
     @staticmethod
-    def get_result_path(network_type: str, distribution: Distribution, N: int, samples: int,
-                       exponent: Optional[float] = None, k_avg: Optional[float] = None) -> str:
+    def get_result_path(
+        network_type: str,
+        distribution: Distribution,
+        N: int,
+        samples: int,
+        exponent: Optional[float] = None,
+        k_avg: Optional[float] = None,
+    ) -> str:
         """
         Gera o caminho para o arquivo de resultados.
 
@@ -52,7 +59,9 @@ class ResultManager:
         Returns:
             Caminho para o arquivo de resultados
         """
-        base_path = f"{ResultManager.BASE_DIR}/{distribution.get_distribution_name()}/{network_type}/"
+        base_path = (
+            f"{ResultManager.BASE_DIR}/{distribution.get_distribution_name()}/{network_type}/"
+        )
 
         # Cria diretórios se não existirem
         Path(base_path).mkdir(parents=True, exist_ok=True)
@@ -60,70 +69,74 @@ class ResultManager:
         # Build filename with all relevant parameters
         k_avg_str = f"_k{int(k_avg)}" if k_avg is not None else ""
 
-        if network_type == "CN" and exponent is not None:
-            return f"{base_path}results_{str(exponent).replace('.', '')}_{N}_{samples}{k_avg_str}_{distribution.get_params_string()}.json"
+        if network_type.upper() == "CN" and exponent is not None:
+            exp_str = str(exponent).replace(".", "")
+            params_str = distribution.get_params_string()
+            return f"{base_path}results_{exp_str}_{N}_{samples}{k_avg_str}_{params_str}.json"
         else:
-            return f"{base_path}results_{N}_{samples}{k_avg_str}_{distribution.get_params_string()}.json"
-    
+            params_str = distribution.get_params_string()
+            return f"{base_path}results_{N}_{samples}{k_avg_str}_{params_str}.json"
+
     @staticmethod
     def load_result(file_path: str) -> Dict[str, Any]:
         """
         Carrega resultados de um arquivo JSON.
-        
+
         Args:
             file_path: Caminho para o arquivo de resultados
-            
+
         Returns:
             Dicionário com os resultados
-        
+
         Raises:
             FileNotFoundError: Se o arquivo não existir
             json.JSONDecodeError: Se o arquivo não for um JSON válido
         """
         try:
-            with open(file_path, 'r') as f:
-                return json.load(f)
+            with open(file_path, "r") as f:
+                result: Dict[str, Any] = json.load(f)
+                return result
         except (FileNotFoundError, json.JSONDecodeError) as e:
             raise e
-    
+
     @staticmethod
     def save_result(file_path: str, result: Dict[str, Any]) -> None:
         """
         Salva resultados em um arquivo JSON.
-        
+
         Args:
             file_path: Caminho para o arquivo de resultados
             result: Dicionário com os resultados
-        
+
         Raises:
             IOError: Se ocorrer um erro ao salvar o arquivo
         """
         # Cria diretório se não existir
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
+
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(result, f, indent=2, cls=NumpyJSONEncoder)
         except Exception as e:
             raise IOError(f"Erro ao salvar resultados: {e}")
-    
+
     @staticmethod
     def list_results(filter_by: Optional[Dict[str, Any]] = None) -> List[str]:
         """
         Lista os arquivos de resultados disponíveis.
-        
+
         Args:
             filter_by: Dicionário com critérios de filtragem (opcional)
-            
+
         Returns:
             Lista de caminhos para arquivos de resultados
         """
-        results = []
+        results: List[str] = []
         base_path = Path(ResultManager.BASE_DIR)
-        
+
         if not base_path.exists():
             return results
-        
+
         for dist_dir in base_path.iterdir():
             if dist_dir.is_dir():
                 for network_dir in dist_dir.iterdir():
@@ -136,135 +149,143 @@ class ResultManager:
                                 # Verifica se o arquivo atende aos critérios de filtragem
                                 try:
                                     result_data = ResultManager.load_result(str(result_file))
-                                    
+
                                     # Verifica se todos os critérios de filtragem são atendidos
                                     match = True
                                     for key, value in filter_by.items():
                                         if key not in result_data or result_data[key] != value:
                                             match = False
                                             break
-                                    
+
                                     if match:
                                         results.append(str(result_file))
-                                except:
+                                except (json.JSONDecodeError, OSError, KeyError):
                                     # Ignora arquivos que não podem ser carregados
                                     pass
-        
+
         return results
-    
+
     @staticmethod
     def get_metadata_from_path(file_path: str) -> Dict[str, Any]:
         """
         Extrai metadados do caminho do arquivo.
-        
+
         Args:
             file_path: Caminho para o arquivo de resultados
-            
+
         Returns:
             Dicionário com metadados extraídos
         """
-        metadata = {}
-        
+        metadata: Dict[str, Any] = {}
+
         try:
             # Extrai informações do caminho
             parts = Path(file_path).parts
-            
+
             # Encontra o índice do diretório base
             base_idx = -1
             for i, part in enumerate(parts):
                 if part == "spkmc":
                     base_idx = i
                     break
-            
+
             if base_idx >= 0 and len(parts) >= base_idx + 3:
                 metadata["distribution"] = parts[base_idx + 1]
                 metadata["network_type"] = parts[base_idx + 2]
-                
+
                 # Extrai informações do nome do arquivo
                 filename = Path(file_path).stem
                 if filename.startswith("results_"):
                     params = filename.replace("results_", "").split("_")
-                    
+
                     if metadata["network_type"].lower() == "cn" and len(params) >= 3:
                         # Para redes complexas: exponent, N, samples, [params]
+                        # Exponent is stored without decimal: "25" means "2.5"
                         try:
-                            metadata["exponent"] = float("." + params[0]) if params[0].isdigit() else float(params[0])
+                            exp_str = params[0]
+                            if exp_str.isdigit() and len(exp_str) >= 2:
+                                # Insert decimal before last digit: "25" -> "2.5"
+                                metadata["exponent"] = float(exp_str[:-1] + "." + exp_str[-1])
+                            else:
+                                metadata["exponent"] = float(exp_str)
                             metadata["N"] = int(params[1])
                             metadata["samples"] = int(params[2])
-                        except:
+                        except Exception:
                             pass
                     elif len(params) >= 2:
                         # Para outras redes: N, samples, [params]
                         try:
                             metadata["N"] = int(params[0])
                             metadata["samples"] = int(params[1])
-                        except:
+                        except (ValueError, IndexError):
                             pass
-        except:
+        except (ValueError, IndexError, AttributeError):
             pass
-        
+
         return metadata
-    
+
     @staticmethod
     def format_result_for_cli(result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Formata o resultado para exibição na CLI.
-        
+
         Args:
             result: Dicionário com os resultados
-            
+
         Returns:
             Dicionário formatado para exibição
         """
         formatted = {}
-        
+
         # Copia os metadados
         if "metadata" in result:
             formatted["metadata"] = result["metadata"]
-        
+
         # Formata os dados de simulação
         if "S_val" in result and "I_val" in result and "R_val" in result:
             formatted["max_infected"] = max(result["I_val"]) if result["I_val"] else 0
             formatted["final_recovered"] = result["R_val"][-1] if result["R_val"] else 0
             formatted["data_points"] = len(result["S_val"])
-        
+
         # Adiciona informações sobre erros
         if "S_err" in result and "I_err" in result and "R_err" in result:
             formatted["has_error_data"] = True
         else:
             formatted["has_error_data"] = False
-        
+
         return formatted
-    
+
     @staticmethod
-    def load_results_from_directory(directory: Union[str, Path]) -> List[Tuple[Path, Dict[str, Any]]]:
+    def load_results_from_directory(
+        directory: Union[str, Path],
+    ) -> List[Tuple[Path, Dict[str, Any]]]:
         """
         Carrega todos os arquivos JSON de resultados de um diretório.
-        
+
         Args:
             directory: Caminho para o diretório
-            
+
         Returns:
             Lista de tuplas (caminho_arquivo, dados_resultado)
-        
+
         Raises:
             ValueError: Se o diretório não existir ou não contiver arquivos JSON
         """
         dir_path = Path(directory)
-        
+
         if not dir_path.exists():
             raise ValueError(f"Diretório não encontrado: {directory}")
-        
+
         if not dir_path.is_dir():
             raise ValueError(f"Caminho não é um diretório: {directory}")
-        
+
         json_files = list(dir_path.glob("*.json"))
-        
+
         if not json_files:
             raise ValueError(f"Nenhum arquivo JSON encontrado no diretório: {directory}")
-        
+
         results = []
-        
+
         for json_file in sorted(json_files):
             try:
                 data = ResultManager.load_result(str(json_file))
@@ -273,8 +294,8 @@ class ResultManager:
                 # Log do erro mas continua processando outros arquivos
                 print(f"Aviso: Erro ao carregar {json_file}: {e}")
                 continue
-        
+
         if not results:
             raise ValueError(f"Nenhum arquivo JSON válido encontrado no diretório: {directory}")
-        
+
         return results

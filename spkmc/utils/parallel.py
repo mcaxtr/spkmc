@@ -7,17 +7,17 @@ multiple scenarios concurrently using multiprocessing.
 Uses 'spawn' context on Linux to avoid OpenMP fork issues with Numba.
 """
 
+import multiprocessing as mp
 import os
 import sys
-import multiprocessing as mp
-from typing import List, Dict, Any, Callable, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from spkmc.utils.hardware import ParallelizationStrategy
 
 
-def _get_mp_context():
+def _get_mp_context() -> mp.context.BaseContext:
     """
     Get appropriate multiprocessing context for the current platform.
 
@@ -28,15 +28,15 @@ def _get_mp_context():
     Returns:
         Multiprocessing context object
     """
-    if sys.platform == 'linux':
+    if sys.platform == "linux":
         # Use 'spawn' on Linux to avoid OpenMP fork issues
         # 'spawn' starts a fresh Python interpreter for each worker
         try:
-            return mp.get_context('spawn')
+            return mp.get_context("spawn")
         except ValueError:
             # Fallback to forkserver if spawn unavailable
             try:
-                return mp.get_context('forkserver')
+                return mp.get_context("forkserver")
             except ValueError:
                 # Last resort: use default (will likely fail with OpenMP)
                 return mp.get_context()
@@ -49,7 +49,7 @@ def _get_mp_context():
 _worker_progress_queue = None
 
 
-def _init_worker(numba_threads: int, progress_queue=None) -> None:
+def _init_worker(numba_threads: int, progress_queue: Optional[Any] = None) -> None:
     """
     Initialize worker process with proper Numba configuration.
 
@@ -63,8 +63,8 @@ def _init_worker(numba_threads: int, progress_queue=None) -> None:
     global _worker_progress_queue
     # Set environment variable BEFORE any Numba import
     # Numba reads NUMBA_NUM_THREADS when first imported
-    os.environ['NUMBA_NUM_THREADS'] = str(numba_threads)
-    os.environ['OMP_NUM_THREADS'] = str(numba_threads)
+    os.environ["NUMBA_NUM_THREADS"] = str(numba_threads)
+    os.environ["OMP_NUM_THREADS"] = str(numba_threads)
     # Store the progress queue for use by worker functions
     _worker_progress_queue = progress_queue
 
@@ -79,7 +79,6 @@ def worker_progress_callback(advance: int) -> None:
     Args:
         advance: Number of units to advance the progress bar
     """
-    global _worker_progress_queue
     if _worker_progress_queue is not None:
         try:
             _worker_progress_queue.put(advance)
@@ -87,14 +86,13 @@ def worker_progress_callback(advance: int) -> None:
             pass  # Ignore queue errors
 
 
-def get_worker_progress_callback():
+def get_worker_progress_callback() -> Optional[Callable[[int], None]]:
     """
     Get a progress callback function for use in worker processes.
 
     Returns:
         A callback function if progress queue is available, None otherwise
     """
-    global _worker_progress_queue
     if _worker_progress_queue is not None:
         return worker_progress_callback
     return None
@@ -103,6 +101,7 @@ def get_worker_progress_callback():
 @dataclass
 class ScenarioResult:
     """Result container for a single scenario execution."""
+
     scenario_index: int
     label: str
     success: bool
@@ -115,14 +114,15 @@ def run_scenarios_parallel(
     scenarios: List[Dict[str, Any]],
     execute_fn: Callable[[Dict[str, Any], int], ScenarioResult],
     strategy: ParallelizationStrategy,
-    progress_callback: Optional[Callable[[int, int, str], None]] = None
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> List[ScenarioResult]:
     """
     Execute scenarios in parallel using multiprocessing.
 
     Args:
         scenarios: List of scenario configurations
-        execute_fn: Function to execute a single scenario (scenario_dict, scenario_index) -> ScenarioResult
+        execute_fn: Function to execute single scenario
+            (scenario_dict, scenario_index) -> ScenarioResult
         strategy: Parallelization strategy configuration
         progress_callback: Optional callback for progress updates (completed, total, label)
 
@@ -133,17 +133,17 @@ def run_scenarios_parallel(
 
     if strategy.scenario_workers <= 1 or num_scenarios <= 1:
         # Sequential execution
-        results = []
+        results: List[ScenarioResult] = []
         for i, scenario in enumerate(scenarios):
             result = execute_fn(scenario, i)
             results.append(result)
             if progress_callback:
-                label = scenario.get('label', f'scenario_{i+1}')
+                label = scenario.get("label", f"scenario_{i+1}")
                 progress_callback(i + 1, num_scenarios, label)
         return results
 
     # Parallel execution using ProcessPoolExecutor with spawn context
-    results: List[Optional[ScenarioResult]] = [None] * num_scenarios
+    parallel_results: List[Optional[ScenarioResult]] = [None] * num_scenarios
     completed = 0
     mp_context = _get_mp_context()
 
@@ -151,35 +151,31 @@ def run_scenarios_parallel(
         max_workers=strategy.scenario_workers,
         mp_context=mp_context,
         initializer=_init_worker,
-        initargs=(strategy.numba_threads,)
+        initargs=(strategy.numba_threads,),
     ) as executor:
         # Submit all scenarios
         future_to_index = {
-            executor.submit(execute_fn, scenario, i): i
-            for i, scenario in enumerate(scenarios)
+            executor.submit(execute_fn, scenario, i): i for i, scenario in enumerate(scenarios)
         }
 
         # Collect results as they complete
         for future in as_completed(future_to_index):
             index = future_to_index[future]
             scenario = scenarios[index]
-            label = scenario.get('label', f'scenario_{index+1}')
+            label = scenario.get("label", f"scenario_{index+1}")
 
             try:
-                results[index] = future.result()
+                parallel_results[index] = future.result()
             except Exception as e:
-                results[index] = ScenarioResult(
-                    scenario_index=index,
-                    label=label,
-                    success=False,
-                    error=str(e)
+                parallel_results[index] = ScenarioResult(
+                    scenario_index=index, label=label, success=False, error=str(e)
                 )
 
             completed += 1
             if progress_callback:
                 progress_callback(completed, num_scenarios, label)
 
-    return [r for r in results if r is not None]
+    return [r for r in parallel_results if r is not None]
 
 
 class ParallelBatchExecutor:
@@ -214,14 +210,15 @@ class ParallelBatchExecutor:
         scenarios: List[Dict[str, Any]],
         scenario_executor: Callable[[Dict[str, Any], int, ParallelizationStrategy], ScenarioResult],
         on_progress: Optional[Callable[[int, int, str], None]] = None,
-        on_error: Optional[Callable[[int, str, Exception], None]] = None
+        on_error: Optional[Callable[[int, str, Exception], None]] = None,
     ) -> List[ScenarioResult]:
         """
         Execute all scenarios with the configured strategy.
 
         Args:
             scenarios: List of scenario configurations
-            scenario_executor: Function to execute a single scenario (scenario, index, strategy) -> ScenarioResult
+            scenario_executor: Function to execute single scenario
+                (scenario, index, strategy) -> ScenarioResult
             on_progress: Callback (completed, total, scenario_label)
             on_error: Callback (scenario_index, label, exception)
 
@@ -235,17 +232,14 @@ class ParallelBatchExecutor:
         if self.strategy.scenario_workers <= 1:
             # Sequential execution
             for i, scenario in enumerate(scenarios):
-                label = scenario.get('label', f'scenario_{i+1}')
+                label = scenario.get("label", f"scenario_{i+1}")
                 try:
                     self._results[i] = scenario_executor(scenario, i, self.strategy)
                 except Exception as e:
                     if on_error:
                         on_error(i, label, e)
                     self._results[i] = ScenarioResult(
-                        scenario_index=i,
-                        label=label,
-                        success=False,
-                        error=str(e)
+                        scenario_index=i, label=label, success=False, error=str(e)
                     )
 
                 self._completed += 1
@@ -261,7 +255,7 @@ class ParallelBatchExecutor:
                 max_workers=self.strategy.scenario_workers,
                 mp_context=mp_context,
                 initializer=_init_worker,
-                initargs=(self.strategy.numba_threads,)
+                initargs=(self.strategy.numba_threads,),
             ) as executor:
                 future_to_index = {
                     executor.submit(wrapped_executor, scenario, i): i
@@ -271,7 +265,7 @@ class ParallelBatchExecutor:
                 for future in as_completed(future_to_index):
                     index = future_to_index[future]
                     scenario = scenarios[index]
-                    label = scenario.get('label', f'scenario_{index+1}')
+                    label = scenario.get("label", f"scenario_{index+1}")
 
                     try:
                         self._results[index] = future.result()
@@ -279,10 +273,7 @@ class ParallelBatchExecutor:
                         if on_error:
                             on_error(index, label, e)
                         self._results[index] = ScenarioResult(
-                            scenario_index=index,
-                            label=label,
-                            success=False,
-                            error=str(e)
+                            scenario_index=index, label=label, success=False, error=str(e)
                         )
 
                     self._completed += 1
@@ -298,6 +289,6 @@ class ParallelBatchExecutor:
         Returns:
             Tuple of (total, succeeded, failed)
         """
-        succeeded = sum(1 for r in self._results if r and r.success)
-        failed = sum(1 for r in self._results if r and not r.success)
+        succeeded = len([r for r in self._results if r and r.success])
+        failed = len([r for r in self._results if r and not r.success])
         return self._total, succeeded, failed

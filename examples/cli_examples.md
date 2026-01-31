@@ -249,27 +249,27 @@ def json_to_csv(json_file, csv_file):
     # Carregar os dados JSON
     with open(json_file, 'r') as f:
         data = json.load(f)
-    
+
     # Extrair os dados
     time = data.get('time', [])
     S = data.get('S_val', [])
     I = data.get('I_val', [])
     R = data.get('R_val', [])
-    
+
     # Escrever no CSV
     with open(csv_file, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Time', 'Susceptible', 'Infected', 'Recovered'])
         for t, s, i, r in zip(time, S, I, R):
             writer.writerow([t, s, i, r])
-    
+
     print(f"Dados convertidos de {json_file} para {csv_file}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Uso: python json_to_csv.py <arquivo_json> <arquivo_csv>")
         sys.exit(1)
-    
+
     json_to_csv(sys.argv[1], sys.argv[2])
 ```
 
@@ -292,13 +292,13 @@ def json_to_excel(json_file, excel_file):
     # Carregar os dados JSON
     with open(json_file, 'r') as f:
         data = json.load(f)
-    
+
     # Extrair os dados
     time = data.get('time', [])
     S = data.get('S_val', [])
     I = data.get('I_val', [])
     R = data.get('R_val', [])
-    
+
     # Criar DataFrame
     df = pd.DataFrame({
         'Time': time,
@@ -306,25 +306,25 @@ def json_to_excel(json_file, excel_file):
         'Infected': I,
         'Recovered': R
     })
-    
+
     # Extrair metadados
     metadata = data.get('metadata', {})
-    
+
     # Criar um escritor Excel
     with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
         # Escrever os dados
         df.to_excel(writer, sheet_name='Data', index=False)
-        
+
         # Escrever os metadados
         pd.DataFrame([metadata]).to_excel(writer, sheet_name='Metadata', index=False)
-    
+
     print(f"Dados convertidos de {json_file} para {excel_file}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Uso: python json_to_excel.py <arquivo_json> <arquivo_excel>")
         sys.exit(1)
-    
+
     json_to_excel(sys.argv[1], sys.argv[2])
 ```
 

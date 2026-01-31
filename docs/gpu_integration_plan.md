@@ -32,7 +32,7 @@ Criar um novo arquivo `spkmc/utils/gpu_utils.py` com o seguinte conteúdo:
 def check_gpu_dependencies():
     """
     Verifica se as dependências para GPU estão instaladas.
-    
+
     Returns:
         bool: True se todas as dependências estão disponíveis, False caso contrário
     """
@@ -47,13 +47,13 @@ def check_gpu_dependencies():
 def is_gpu_available():
     """
     Verifica se a GPU está disponível para uso.
-    
+
     Returns:
         bool: True se a GPU está disponível, False caso contrário
     """
     if not check_gpu_dependencies():
         return False
-    
+
     try:
         import cupy as cp
         # Tenta alocar um pequeno array na GPU
@@ -67,17 +67,17 @@ try:
     import cupy as cp
     import cudf
     import cugraph
-    
+
     def get_dist_gpu(N, edges, sources, params):
         """
         Calcula as distâncias mínimas dos nós de origem para todos os outros nós usando GPU.
-        
+
         Args:
             N: Número de nós
             edges: Arestas do grafo como matriz (u, v)
             sources: Nós de origem
             params: Parâmetros da distribuição
-            
+
         Returns:
             Tupla com (distâncias, tempos de recuperação)
         """
@@ -127,16 +127,16 @@ try:
         # 8. Extração das distâncias de volta ao host
         dist_gpu = result['distance'].to_numpy()[:N]
         return dist_gpu, recovery_times.get()
-    
+
     def get_states_gpu(time_to_infect, recovery_times, t):
         """
         Calcula os estados (S, I, R) para cada nó em um determinado tempo usando GPU.
-        
+
         Args:
             time_to_infect: Tempo para infecção de cada nó
             recovery_times: Tempo para recuperação de cada nó
             t: Tempo atual da simulação
-            
+
         Returns:
             Tupla com arrays booleanos (S, I, R) indicando o estado de cada nó
         """
@@ -144,17 +144,17 @@ try:
         I = (~S) & (time_to_infect + recovery_times > t)
         R = (~S) & (~I)
         return S, I, R
-    
+
     def calculate_gpu(N, time_to_infect, recovery_times, time_steps):
         """
         Calcula a proporção de indivíduos em cada estado (S, I, R) para cada passo de tempo usando GPU.
-        
+
         Args:
             N: Número de nós
             time_to_infect: Tempo para infecção de cada nó
             recovery_times: Tempo para recuperação de cada nó
             time_steps: Array com os passos de tempo
-            
+
         Returns:
             Tupla com arrays (S_time, I_time, R_time) contendo a proporção de indivíduos em cada estado
         """
@@ -162,7 +162,7 @@ try:
         S_time = cp.zeros(steps)
         I_time = cp.zeros(steps)
         R_time = cp.zeros(steps)
-        
+
         for idx, t in enumerate(time_steps):
             S, I, R = get_states_gpu(
                 cp.asarray(time_to_infect), cp.asarray(recovery_times), t
@@ -170,17 +170,17 @@ try:
             S_time[idx] = cp.sum(S) / N
             I_time[idx] = cp.sum(I) / N
             R_time[idx] = cp.sum(R) / N
-            
+
         return S_time.get(), I_time.get(), R_time.get()
-    
+
 except ImportError:
     # Funções stub para quando as dependências não estão disponíveis
     def get_dist_gpu(N, edges, sources, params):
         raise ImportError("Dependências GPU (cupy-cuda12x, cudf-cu12, cugraph-cu12) não estão instaladas")
-    
+
     def get_states_gpu(time_to_infect, recovery_times, t):
         raise ImportError("Dependências GPU (cupy-cuda12x) não estão instaladas")
-    
+
     def calculate_gpu(N, time_to_infect, recovery_times, time_steps):
         raise ImportError("Dependências GPU (cupy-cuda12x) não estão instaladas")
 ```
@@ -206,35 +206,35 @@ from spkmc.utils.gpu_utils import is_gpu_available, get_dist_gpu, calculate_gpu
 class SPKMC:
     """
     Implementação do algoritmo Shortest Path Kinetic Monte Carlo (SPKMC).
-    
+
     Esta classe implementa o algoritmo SPKMC para simulação de propagação de epidemias
     em redes, utilizando o modelo SIR (Susceptible-Infected-Recovered).
     """
-    
+
     def __init__(self, distribution: Distribution, use_gpu: bool = False):
         """
         Inicializa o simulador SPKMC.
-        
+
         Args:
             distribution: Objeto de distribuição a ser usado na simulação
             use_gpu: Se True, usa aceleração GPU (se disponível)
         """
         self.distribution = distribution
         self.use_gpu = use_gpu and is_gpu_available()
-        
+
         if use_gpu and not is_gpu_available():
             import warnings
             warnings.warn("GPU solicitada, mas não disponível. Usando CPU.")
-    
+
     def get_dist_sparse(self, N: int, edges: np.ndarray, sources: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calcula as distâncias mínimas dos nós de origem para todos os outros nós.
-        
+
         Args:
             N: Número de nós
             edges: Arestas do grafo como matriz (u, v)
             sources: Nós de origem
-            
+
         Returns:
             Tupla com (distâncias, tempos de recuperação)
         """
@@ -252,38 +252,38 @@ class SPKMC:
             # Versão CPU original
             # Gera os tempos de recuperação
             recovery_weights = self.distribution.get_recovery_weights(N)
-            
+
             # Calcula os tempos de infecção
             infection_times = self.distribution.get_infection_times(recovery_weights, edges)
-            
+
             # Cria a matriz esparsa do grafo
             row_indices = edges[:, 0]
             col_indices = edges[:, 1]
             graph_matrix = csr_matrix((infection_times, (row_indices, col_indices)), shape=(N, N))
-            
+
             # Calcula as distâncias mínimas
             dist_matrix = dijkstra(csgraph=graph_matrix, directed=True, indices=sources, return_predecessors=False)
             dist = np.min(dist_matrix, axis=0)
-            
+
             return dist, recovery_weights
-    
-    def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray, 
+
+    def run_single_simulation(self, N: int, edges: np.ndarray, sources: np.ndarray,
                              time_steps: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa uma única simulação SPKMC.
-        
+
         Args:
             N: Número de nós
             edges: Arestas do grafo como matriz (u, v)
             sources: Nós de origem
             time_steps: Array com os passos de tempo
-            
+
         Returns:
             Tupla com (S, I, R) contendo a proporção de indivíduos em cada estado
         """
         # Calcula os tempos de infecção e recuperação
         time_to_infect, recovery_times = self.get_dist_sparse(N, edges, sources)
-        
+
         # Calcula os estados para cada passo de tempo
         if self.use_gpu:
             # Versão GPU
@@ -292,51 +292,51 @@ class SPKMC:
             # Versão CPU original
             steps = time_steps.shape[0]
             return calculate(N, time_to_infect, recovery_times, time_steps, steps)
-    
-    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray, 
+
+    def run_multiple_simulations(self, G: nx.DiGraph, sources: np.ndarray, time_steps: np.ndarray,
                                 samples: int, show_progress: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Executa múltiplas simulações SPKMC e retorna a média.
-        
+
         Args:
             G: Grafo da rede
             sources: Nós de origem
             time_steps: Array com os passos de tempo
             samples: Número de amostras
             show_progress: Se True, mostra barra de progresso
-            
+
         Returns:
             Tupla com (S_mean, I_mean, R_mean) contendo a média da proporção de indivíduos em cada estado
         """
         steps = time_steps.shape[0]
-        
+
         S_values = np.zeros((samples, steps))
         I_values = np.zeros((samples, steps))
         R_values = np.zeros((samples, steps))
-        
+
         edges = np.array(G.edges())
         N = G.number_of_nodes()
-        
+
         # Configura a barra de progresso
         if show_progress:
             sample_items = tqdm(range(samples), desc="Amostras")
         else:
             sample_items = range(samples)
-        
+
         # Executa as simulações
         for sample in sample_items:
             S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
             S_values[sample, :] = S
             I_values[sample, :] = I
             R_values[sample, :] = R
-        
+
         # Calcula as médias
         S_mean = np.mean(S_values, axis=0)
         I_mean = np.mean(I_values, axis=0)
         R_mean = np.mean(R_values, axis=0)
-        
+
         return S_mean, I_mean, R_mean
-    
+
     # Os outros métodos permanecem inalterados, pois eles já usam os métodos modificados acima
 ```
 
@@ -355,19 +355,19 @@ def cli(verbose, no_color, simple, gpu):
     """Grupo principal de comandos da CLI SPKMC."""
     # Configura o modo verboso
     os.environ["SPKMC_VERBOSE"] = "1" if verbose else "0"
-    
+
     # Configura o uso de GPU
     os.environ["SPKMC_USE_GPU"] = "1" if gpu else "0"
-    
+
     if verbose:
         log_info("Modo verboso ativado")
-        
+
     if no_color:
         log_info("Cores desativadas na saída")
-        
+
     if simple:
         log_info("Modo de saída simplificada em CSV ativado")
-        
+
     if gpu:
         from spkmc.utils.gpu_utils import is_gpu_available
         if is_gpu_available():
@@ -386,10 +386,10 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
         save_plot, overwrite, verbose):
     """Executa uma simulação SPKMC com os parâmetros especificados."""
     # ... código existente ...
-    
+
     # Verificar se a GPU foi solicitada
     use_gpu = os.environ.get("SPKMC_USE_GPU") == "1"
-    
+
     # Criar a distribuição
     distribution_params = {
         "shape": shape,
@@ -399,10 +399,10 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
     }
     distribution = create_distribution(dist_type, **distribution_params)
     log_debug(f"Distribuição {dist_type.capitalize()} criada com parâmetros: {distribution_params}", verbose_only=True)
-    
+
     # Criar o simulador com a opção GPU
     simulator = SPKMC(distribution, use_gpu=use_gpu)
-    
+
     # ... resto do código existente ...
 ```
 
@@ -414,22 +414,22 @@ Da mesma forma, modificar o comando `batch` para usar a opção GPU:
 def batch(simple, scenarios_file, output_dir, prefix, compare, no_plot, save_plot, verbose):
     """Executa múltiplos cenários de simulação a partir de um arquivo JSON."""
     # ... código existente ...
-    
+
     # Verificar se a GPU foi solicitada
     use_gpu = os.environ.get("SPKMC_USE_GPU") == "1"
-    
+
     # ... código existente ...
-    
+
     # Para cada cenário
     for i, scenario in enumerate(scenarios):
         # ... código existente ...
-        
+
         # Criar a distribuição
         distribution = create_distribution(dist_type, **dist_params)
-        
+
         # Criar o simulador com a opção GPU
         simulator = SPKMC(distribution, use_gpu=use_gpu)
-        
+
         # ... resto do código existente ...
 ```
 
@@ -531,7 +531,7 @@ classDiagram
         +get_params_string()
         +get_params_dict()
     }
-    
+
     class GammaDistribution {
         +shape
         +scale
@@ -539,14 +539,14 @@ classDiagram
         +get_recovery_weights()
         +get_infection_times()
     }
-    
+
     class ExponentialDistribution {
         +mu
         +lmbd
         +get_recovery_weights()
         +get_infection_times()
     }
-    
+
     class SPKMC {
         +distribution
         +use_gpu
@@ -558,7 +558,7 @@ classDiagram
         +simulate_complete_graph()
         +run_simulation()
     }
-    
+
     class GPUUtils {
         +is_gpu_available()
         +check_gpu_dependencies()
@@ -566,7 +566,7 @@ classDiagram
         +calculate_gpu()
         +get_states_gpu()
     }
-    
+
     Distribution <|-- GammaDistribution
     Distribution <|-- ExponentialDistribution
     SPKMC --> Distribution
@@ -582,7 +582,7 @@ sequenceDiagram
     participant SPKMC
     participant Distribution
     participant GPUUtils
-    
+
     User->>CLI: Executa comando com --gpu
     CLI->>SPKMC: Cria simulador com use_gpu=True
     SPKMC->>GPUUtils: is_gpu_available()
@@ -590,7 +590,7 @@ sequenceDiagram
     SPKMC->>Distribution: Cria distribuição
     User->>CLI: Executa simulação
     CLI->>SPKMC: run_simulation()
-    
+
     alt GPU disponível e solicitada
         SPKMC->>GPUUtils: get_dist_gpu()
         GPUUtils-->>SPKMC: Distâncias calculadas com GPU
@@ -603,7 +603,7 @@ sequenceDiagram
         Distribution-->>SPKMC: Tempos de infecção
         SPKMC->>SPKMC: Cálculos com CPU
     end
-    
+
     SPKMC-->>CLI: Resultados da simulação
     CLI-->>User: Exibe resultados
 ```
