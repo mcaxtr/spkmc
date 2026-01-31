@@ -15,24 +15,20 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 import time
 import zipfile
 from datetime import datetime
+import threading
 import questionary
 from questionary import Style
 
-from spkmc.core.distributions import create_distribution
-from spkmc.core.networks import NetworkFactory
-from spkmc.core.simulation import SPKMC
-from spkmc.io.results import ResultManager
+# Lazy imports for heavy modules (to speed up CLI startup)
+# These are imported inside functions that need them:
+#   - spkmc.core.distributions (imports numba_utils - 60s JIT compilation)
+#   - spkmc.core.simulation (imports numba_utils)
+#   - spkmc.utils.hardware (GPU detection)
+#   - spkmc.utils.parallel (imports simulation)
+#
+# Light imports that can stay at module level:
 from spkmc.io.experiments import ExperimentManager, Experiment, PlotConfig
-from spkmc.visualization.plots import Visualizer
-from spkmc.io.export import ExportManager
-from spkmc.utils.hardware import (
-    get_hardware_info,
-    detect_gpu,
-    ParallelizationStrategy,
-    format_hardware_box,
-    HardwareInfo
-)
-from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult, _get_mp_context, _init_worker
+from spkmc.io.results import NumpyJSONEncoder
 from spkmc.cli.formatting import (
     colorize, format_title, format_param, format_success, format_error,
     format_warning, format_info, create_progress_bar, print_rich_table,
@@ -173,6 +169,16 @@ def _execute_single_scenario(
     Returns:
         Tuple of (result_dict, output_file_path, scenario_label)
     """
+    # Lazy imports for heavy modules
+    from spkmc.core.distributions import create_distribution
+    from spkmc.core.simulation import SPKMC
+    from spkmc.utils.parallel import get_worker_progress_callback
+    from spkmc.visualization.plots import Visualizer
+
+    # In parallel mode, get callback from the worker's global queue (set by initializer)
+    # In sequential mode, use the passed callback
+    if progress_callback is None:
+        progress_callback = get_worker_progress_callback()
     scenario_num = scenario_index + 1
 
     # Extract parameters
@@ -239,6 +245,12 @@ def _execute_single_scenario(
         except Exception:
             pass
 
+    # Debug output for worker process
+    import sys
+    if os.environ.get('SPKMC_DEBUG') == '1':
+        print(f"[WORKER {scenario_index+1}] Starting: network={network_type}, nodes={nodes}, "
+              f"samples={samples}, runs={num_runs}, use_gpu={use_gpu}", file=sys.stderr)
+
     # Create distribution
     distribution_params = {
         "shape": shape,
@@ -250,6 +262,11 @@ def _execute_single_scenario(
 
     # Create simulator
     simulator = SPKMC(distribution, use_gpu=use_gpu)
+
+    # Debug: check if GPU is actually available in worker
+    if os.environ.get('SPKMC_DEBUG') == '1':
+        print(f"[WORKER {scenario_index+1}] Simulator created: use_gpu={simulator.use_gpu}, "
+              f"gpu_available={simulator._gpu_available}", file=sys.stderr)
 
     # Create time steps
     time_steps = np.linspace(0, t_max, steps)
@@ -331,7 +348,7 @@ def _execute_single_scenario(
 
     # Save result
     with open(output_file, 'w') as f:
-        json.dump(output_result, f, indent=2)
+        json.dump(output_result, f, indent=2, cls=NumpyJSONEncoder)
 
     # Generate CSV if needed
     if use_simple:
@@ -363,9 +380,10 @@ def _execute_single_scenario(
     return (output_result, output_file, scenario_label)
 
 
-def _display_hardware_panel(hardware: HardwareInfo, strategy: ParallelizationStrategy) -> None:
+def _display_hardware_panel(hardware: "HardwareInfo", strategy: "ParallelizationStrategy") -> None:
     """Display hardware detection panel."""
     from rich.panel import Panel
+    from spkmc.utils.hardware import detect_gpu
 
     lines = []
 
@@ -427,6 +445,9 @@ def run_experiment_scenarios(
         Lista de caminhos dos arquivos de resultado gerados
     """
     from concurrent.futures import ProcessPoolExecutor, as_completed
+    from spkmc.utils.hardware import get_hardware_info, ParallelizationStrategy
+    from spkmc.utils.parallel import _get_mp_context, _init_worker
+    from spkmc.visualization.plots import Visualizer
 
     # Detect hardware and configure parallelization
     hardware = get_hardware_info()
@@ -434,6 +455,10 @@ def run_experiment_scenarios(
         hardware,
         num_scenarios=len(experiment.scenarios)
     )
+
+    # Configure Numba to use the calculated thread count
+    from spkmc.utils.hardware import configure_numba_threads
+    configure_numba_threads(strategy.numba_threads)
 
     # Display hardware panel
     _display_hardware_panel(hardware, strategy)
@@ -466,9 +491,10 @@ def run_experiment_scenarios(
             total_samples += num_runs * samples
 
     # Determine execution mode
-    # NOTE: Parallel scenario execution is disabled because Numba's @njit(parallel=True)
-    # conflicts with ProcessPoolExecutor on Linux. Numba handles inner-loop parallelism.
-    use_parallel = False  # Disabled: strategy.scenario_workers > 1 and num_scenarios > 1
+    # Use parallel execution when we have multiple scenarios AND multiple workers available
+    # GPU mode: The GPU driver handles time-slicing between processes, so parallel
+    # execution is safe. Each process submits work to the GPU queue.
+    use_parallel = strategy.scenario_workers > 1 and num_scenarios > 1
     parallel_label = f"Executando {num_scenarios} cenários ({total_samples} amostras)"
 
     with create_progress_bar(parallel_label, total_samples, verbose) as progress:
@@ -482,6 +508,9 @@ def run_experiment_scenarios(
         if use_parallel:
             # Parallel execution using ProcessPoolExecutor with spawn context
             # to avoid OpenMP fork issues on Linux
+            if verbose:
+                log_debug(f"PARALLEL MODE: {strategy.scenario_workers} workers, {num_scenarios} scenarios")
+                log_debug(f"GPU enabled: {strategy.use_gpu}, Numba threads: {strategy.numba_threads}")
             futures_results: List[Optional[Tuple]] = [None] * num_scenarios
             mp_context = _get_mp_context()
 
@@ -490,43 +519,83 @@ def run_experiment_scenarios(
             os.environ['NUMBA_NUM_THREADS'] = str(strategy.numba_threads)
             os.environ['OMP_NUM_THREADS'] = str(strategy.numba_threads)
 
-            with ProcessPoolExecutor(
-                max_workers=strategy.scenario_workers,
-                mp_context=mp_context,
-                initializer=_init_worker,
-                initargs=(strategy.numba_threads,)
-            ) as executor:
-                future_to_index = {}
+            # Create a Queue for progress updates from workers
+            # Queue must be created from the same mp_context as the workers
+            # and passed via initializer (inherited, not pickled)
+            progress_queue = mp_context.Queue()
 
-                for i, scenario in enumerate(experiment.scenarios):
-                    future = executor.submit(
-                        _execute_single_scenario,
-                        scenario,
-                        i,
-                        results_dir,
-                        experiment.name,
-                        use_simple,
-                        create_zip,
-                        no_plot,
-                        save_plot,
-                        strategy.use_gpu,
-                        force_rerun
-                    )
-                    future_to_index[future] = i
+            # Flag to signal the consumer thread to stop
+            stop_consumer = threading.Event()
 
-                for future in as_completed(future_to_index):
-                    index = future_to_index[future]
-                    scenario = experiment.scenarios[index]
-                    scenario_label = scenario.get('label', f'scenario_{index+1:03d}')
-
+            # Consumer thread that reads progress updates from the queue
+            def progress_consumer():
+                while not stop_consumer.is_set():
                     try:
-                        result_tuple = future.result()
-                        futures_results[index] = result_tuple
-                    except Exception as e:
-                        log_error(f"Erro no cenário {index+1} ({scenario_label}): {e}")
-                        futures_results[index] = None
+                        # Non-blocking get with short timeout
+                        advance = progress_queue.get(timeout=0.1)
+                        progress.update(task, advance=advance)
+                    except Exception:
+                        # Queue.Empty or other errors - just continue
+                        pass
 
-                    progress.update(task, advance=1)
+            # Start the consumer thread
+            consumer_thread = threading.Thread(target=progress_consumer, daemon=True)
+            consumer_thread.start()
+
+            try:
+                with ProcessPoolExecutor(
+                    max_workers=strategy.scenario_workers,
+                    mp_context=mp_context,
+                    initializer=_init_worker,
+                    initargs=(strategy.numba_threads, progress_queue)  # Queue passed via initializer
+                ) as executor:
+                    future_to_index = {}
+
+                    for i, scenario in enumerate(experiment.scenarios):
+                        future = executor.submit(
+                            _execute_single_scenario,
+                            scenario,
+                            i,
+                            results_dir,
+                            experiment.name,
+                            use_simple,
+                            create_zip,
+                            no_plot,
+                            save_plot,
+                            strategy.use_gpu,
+                            force_rerun
+                            # No progress_callback - workers get it from global queue
+                        )
+                        future_to_index[future] = i
+
+                    scenario_start_times = {i: time.time() for i in range(num_scenarios)}
+                    parallel_start = time.time()
+
+                    for future in as_completed(future_to_index):
+                        index = future_to_index[future]
+                        scenario = experiment.scenarios[index]
+                        scenario_label = scenario.get('label', f'scenario_{index+1:03d}')
+                        scenario_time = time.time() - parallel_start
+
+                        try:
+                            result_tuple = future.result()
+                            futures_results[index] = result_tuple
+                            if verbose:
+                                log_debug(f"Scenario {index+1} ({scenario_label}) completed in {scenario_time:.1f}s")
+                        except Exception as e:
+                            log_error(f"Erro no cenário {index+1} ({scenario_label}): {e}")
+                            futures_results[index] = None
+            finally:
+                # Stop the consumer thread and drain remaining queue items
+                stop_consumer.set()
+                # Drain remaining items from the queue
+                while True:
+                    try:
+                        advance = progress_queue.get_nowait()
+                        progress.update(task, advance=advance)
+                    except Exception:
+                        break
+                consumer_thread.join(timeout=1.0)
 
             # Collect results in order
             for i, result_tuple in enumerate(futures_results):
@@ -538,6 +607,9 @@ def run_experiment_scenarios(
 
         else:
             # Sequential execution (original behavior)
+            if verbose:
+                log_debug(f"SEQUENTIAL MODE: 1 worker, {num_scenarios} scenarios")
+                log_debug(f"GPU enabled: {strategy.use_gpu}, Numba threads: {strategy.numba_threads}")
             for i, scenario in enumerate(experiment.scenarios):
                 scenario_label = scenario.get('label', f'scenario_{i+1:03d}')
 
@@ -702,6 +774,13 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
         samples, num_runs, initial_perc, t_max, steps, output, export_format, no_plot,
         save_plot, overwrite, zip, verbose):
     """Executa uma simulação SPKMC com os parâmetros especificados."""
+    # Lazy imports for heavy modules
+    from spkmc.core.distributions import create_distribution
+    from spkmc.core.simulation import SPKMC
+    from spkmc.io.results import ResultManager
+    from spkmc.io.export import ExportManager
+    from spkmc.visualization.plots import Visualizer
+
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
@@ -850,7 +929,7 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
             os.makedirs(os.path.dirname(output) if os.path.dirname(output) else ".", exist_ok=True)
             
             with open(output, 'w') as f:
-                json.dump(output_result, f, indent=2)
+                json.dump(output_result, f, indent=2, cls=NumpyJSONEncoder)
             log_success(f"Resultados salvos em: {output}")
             
             # Verificar se o parâmetro --simple foi passado globalmente ou localmente
@@ -942,10 +1021,15 @@ def run(simple, network_type, dist_type, shape, scale, mu, lambda_val, exponent,
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas")
 def plot(simple, path, with_error, output, format, dpi, export, states, separate, verbose):
+    """Visualiza os resultados de uma simulação anterior."""
+    # Lazy imports for heavy modules
+    from spkmc.io.results import ResultManager
+    from spkmc.io.export import ExportManager
+    from spkmc.visualization.plots import Visualizer
+
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
-    """Visualiza os resultados de uma simulação anterior."""
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
@@ -1194,10 +1278,14 @@ def plot(simple, path, with_error, output, format, dpi, export, states, separate
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas")
 def info(simple, result_file, list_files, export, output, verbose):
+    """Mostra informações sobre simulações salvas."""
+    # Lazy imports for heavy modules
+    from spkmc.io.results import ResultManager
+    from spkmc.io.export import ExportManager
+
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
-    """Mostra informações sobre simulações salvas."""
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"
@@ -1337,10 +1425,15 @@ def info(simple, result_file, list_files, export, output, verbose):
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Mostrar informações detalhadas")
 def compare(simple, result_files, labels, output, format, dpi, export, verbose):
+    """Compara os resultados de múltiplas simulações."""
+    # Lazy imports for heavy modules
+    from spkmc.io.results import ResultManager
+    from spkmc.io.export import ExportManager
+    from spkmc.visualization.plots import Visualizer
+
     # Verificar se o parâmetro --simple foi passado globalmente ou localmente
     ctx = click.get_current_context()
     use_simple = simple or ctx.parent.params.get('simple', False)
-    """Compara os resultados de múltiplas simulações."""
     # Configurar o modo verboso
     if verbose:
         os.environ["SPKMC_VERBOSE"] = "1"

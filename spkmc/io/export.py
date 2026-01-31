@@ -14,6 +14,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+from spkmc.io.results import NumpyJSONEncoder
+
 # Importações condicionais
 try:
     import pandas as pd
@@ -164,7 +166,7 @@ class ExportManager:
         
         # Salva como JSON
         with open(output_path, 'w') as f:
-            json.dump(result, f, indent=2)
+            json.dump(result, f, indent=2, cls=NumpyJSONEncoder)
         
         return output_path
     
