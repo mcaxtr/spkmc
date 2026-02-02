@@ -160,21 +160,36 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
         libs_missing.append("cupy")
         return False, {"libs_missing": libs_missing, "reason": "cupy not installed"}
     except Exception as e:
-        return False, {"reason": f"CUDA initialization failed: {e}"}
+        # Simplify common CUDA errors for user-friendly display
+        error_str = str(e)
+        if "CompatNotSupportedOnDevice" in error_str or "forward compatibility" in error_str:
+            reason = "GPU driver/CUDA version mismatch"
+        elif "NoDevice" in error_str or "no CUDA-capable device" in error_str.lower():
+            reason = "no CUDA-capable GPU found"
+        elif "InsufficientDriver" in error_str:
+            reason = "CUDA driver too old"
+        elif "OutOfMemory" in error_str:
+            reason = "GPU out of memory"
+        else:
+            # Generic message for other errors
+            reason = "CUDA initialization failed"
+        return False, {"reason": reason}
 
     # Check for optional RAPIDS libraries
+    # Catch Exception (not just ImportError) because these libraries may fail
+    # during initialization with CUDA/driver errors, not just missing imports
     try:
         import cudf  # noqa: F401
 
         libs_available.append("cudf")
-    except ImportError:
+    except Exception:
         libs_missing.append("cudf")
 
     try:
         import cugraph  # noqa: F401
 
         libs_available.append("cugraph")
-    except ImportError:
+    except Exception:
         libs_missing.append("cugraph")
 
     gpu_info["libs_available"] = libs_available
