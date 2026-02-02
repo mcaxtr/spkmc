@@ -169,7 +169,7 @@ class TestRandomRegularEdges:
             assert (dst, src) in edge_set, f"Edge ({src},{dst}) but not ({dst},{src})"
 
 
-class TestComplexNetworkEdges:
+class TestScaleFreeNetworkEdges:
     """Tests for scale-free network edge generation."""
 
     def test_approximate_average_degree(self):
@@ -180,7 +180,7 @@ class TestComplexNetworkEdges:
 
         degrees = []
         for _ in range(10):
-            _, edges = NetworkFactory.create_complex_network_edges(N, exponent, k_avg)
+            _, edges = NetworkFactory.create_scale_free_network_edges(N, exponent, k_avg)
             # Out-degree (directed)
             out_degree = np.bincount(edges[:, 0], minlength=N)
             degrees.extend(out_degree)
@@ -197,7 +197,7 @@ class TestComplexNetworkEdges:
         k_avg = 10
         exponent = 2.5
 
-        _, edges = NetworkFactory.create_complex_network_edges(N, exponent, k_avg)
+        _, edges = NetworkFactory.create_scale_free_network_edges(N, exponent, k_avg)
         self_loops = edges[:, 0] == edges[:, 1]
         assert not np.any(self_loops), "Found self-loops"
 
@@ -207,7 +207,7 @@ class TestComplexNetworkEdges:
         k_avg = 10
         exponent = 2.5
 
-        _, edges = NetworkFactory.create_complex_network_edges(N, exponent, k_avg)
+        _, edges = NetworkFactory.create_scale_free_network_edges(N, exponent, k_avg)
         out_degree = np.bincount(edges[:, 0], minlength=N)
 
         # Check that high-degree nodes exist (power-law has heavy tail)
