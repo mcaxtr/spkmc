@@ -119,15 +119,16 @@ dmypy.json
 *.swp
 *.swo
 
-# Project specific
-data/spkmc/**/*.json
-!data/spkmc/**/example_*.json
+# Project specific - simulation results
+data/
 
 # Generated version file (setuptools-scm)
 spkmc/_version.py
 
 # Simulation results
 results/
-experiments/*/results/
+
+# Experiments (user-created, not tracked in git)
+experiments/
 
 **/.DS_Store

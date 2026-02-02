@@ -1,6 +1,6 @@
 # SPKMC Usage Guide
 
-This document provides detailed information on how to use the SPKMC package for epidemic spread simulations on complex networks.
+This document provides detailed information on how to use the SPKMC package for epidemic spread simulations on networks.
 
 ## Installation
 
@@ -10,7 +10,7 @@ This document provides detailed information on how to use the SPKMC package for 
 - Dependencies listed in `requirements.txt`:
   - NumPy: Efficient numerical operations
   - SciPy: Scientific and mathematical algorithms
-  - NetworkX: Creation and manipulation of complex networks
+  - NetworkX: Creation and manipulation of networks
   - Matplotlib: Result visualization
   - Numba: Python code acceleration
   - tqdm: Progress bars
@@ -93,13 +93,13 @@ python spkmc_cli.py run [OPTIONS]
 
 | Option | Abbrev | Type | Default | Description |
 |--------|--------|------|---------|-------------|
-| `--network-type` | `-n` | string | `er` | Network type: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg), Random Regular Network (rrn) |
+| `--network-type` | `-n` | string | `er` | Network type: Erdos-Renyi (er), Scale-Free Network (sf), Complete Graph (cg), Random Regular Network (rrn) |
 | `--dist-type` | `-d` | string | `gamma` | Distribution type: Gamma or Exponential |
 | `--shape` | | float | `2.0` | Shape parameter for Gamma distribution |
 | `--scale` | | float | `1.0` | Scale parameter for Gamma distribution |
 | `--mu` | | float | `1.0` | Mu parameter for Exponential distribution (recovery) |
 | `--lambda` | | float | `1.0` | Lambda parameter for infection times |
-| `--exponent` | | float | `2.5` | Exponent for complex networks (CN) |
+| `--exponent` | | float | `2.5` | Exponent for scale-free networks (SF) |
 | `--nodes` | `-N` | int | `1000` | Number of nodes in the network |
 | `--k-avg` | | float | `10` | Average degree of the network |
 | `--samples` | `-s` | int | `50` | Number of samples per run |
@@ -118,8 +118,8 @@ python spkmc_cli.py run [OPTIONS]
 # Basic simulation with Erdos-Renyi network and Gamma distribution
 python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 --k-avg 10 -s 50
 
-# Simulation with complex network and Exponential distribution
-python spkmc_cli.py run -n cn -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
+# Simulation with scale-free network and Exponential distribution
+python spkmc_cli.py run -n sf -d exponential --mu 1.0 --lambda 1.0 --exponent 2.5 -N 1000 --k-avg 10 -s 50
 
 # Simulation with complete graph, saving results
 python spkmc_cli.py run -n cg -d gamma --shape 2.0 --scale 1.0 -N 500 -s 50 -o results/cg_gamma.json
@@ -143,6 +143,8 @@ python spkmc_cli.py run -n er -d gamma --shape 2.0 --scale 1.0 -N 1000 -o result
 
 The `plot` command visualizes results from a previous simulation.
 
+**Supported file formats:** JSON (`.json`), CSV (`.csv`), Excel (`.xlsx`, `.xls`)
+
 #### Syntax
 
 ```bash
@@ -153,7 +155,7 @@ python spkmc_cli.py plot RESULT_FILE [OPTIONS]
 
 | Argument | Description |
 |----------|-------------|
-| `RESULT_FILE` | Path to the results file |
+| `RESULT_FILE` | Path to the results file (JSON, CSV, or Excel) or directory |
 
 #### Options
 
@@ -165,14 +167,23 @@ python spkmc_cli.py plot RESULT_FILE [OPTIONS]
 #### Examples
 
 ```bash
-# Visualize basic results
+# Visualize results from JSON
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json
+
+# Visualize results from CSV export
+python spkmc_cli.py plot results.csv
+
+# Visualize results from Excel export
+python spkmc_cli.py plot results.xlsx
 
 # Visualize with error bars
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json --with-error
 
 # Save the plot to a file
 python spkmc_cli.py plot data/spkmc/gamma/ER/results_1000_50_2.0.json -o plots/er_gamma.png
+
+# Plot all results in a directory
+python spkmc_cli.py plot data/my_experiment/
 ```
 
 ### `info` Command
@@ -274,11 +285,11 @@ exp_dist = ExponentialDistribution(mu=1.0, lmbd=1.0)
 G = NetworkFactory.create_erdos_renyi(N=1000, k_avg=10)
 ```
 
-#### Complex Network
+#### Scale-Free Network
 
 ```python
 # Parameters: number of nodes, exponent, average degree
-G = NetworkFactory.create_complex_network(N=1000, exponent=2.5, k_avg=10)
+G = NetworkFactory.create_scale_free_network(N=1000, exponent=2.5, k_avg=10)
 ```
 
 #### Complete Graph
@@ -332,11 +343,11 @@ S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
 )
 ```
 
-#### Complex Network Simulation
+#### Scale-Free Network Simulation
 
 ```python
 # Run the simulation
-S, I, R, S_err, I_err, R_err = simulator.simulate_complex_network(
+S, I, R, S_err, I_err, R_err = simulator.simulate_scale_free_network(
     num_runs=2,
     exponent=2.5,
     time_steps=time_steps,
@@ -364,7 +375,7 @@ S, I, R = simulator.simulate_complete_graph(
 ```python
 # Run the simulation based on the network type
 result = simulator.run_simulation(
-    network_type="er",  # or "cn", "cg"
+    network_type="er",  # or "sf", "cg"
     time_steps=time_steps,
     N=N,
     k_avg=k_avg,
@@ -447,7 +458,7 @@ result = {
     "R_val": list(R),
     "time": list(time_steps),
     "metadata": {
-        "network_type": "ER",
+        "network": "ER",
         "distribution": "gamma",
         "N": N,
         "k_avg": k_avg,
@@ -505,7 +516,7 @@ For complete usage examples, see the following files:
 ### Choosing Network Type
 
 - **Erdos-Renyi (ER)**: Good for initial simulations and tests, as it is a simple random network.
-- **Complex Network (CN)**: More realistic for social and biological networks, as it follows a power-law distribution.
+- **Scale-Free Network (SF)**: More realistic for social and biological networks, as it follows a power-law distribution.
 - **Complete Graph (CG)**: Useful for extreme cases where all nodes are connected.
 
 ### Choosing Distribution
@@ -546,7 +557,6 @@ Argument | Description |
 Option | Abbrev | Type | Default | Description |
 |-------|--------|------|---------|-------------|
 `--output-dir` | `-o` | string | `./results` | Directory to save results |
-`--prefix` | `-p` | string | | Prefix for output filenames |
 `--compare` | `-c` | flag | `False` | Generate comparative visualization of results |
 `--no-plot` | | flag | `False` | Disable individual plot generation |
 `--save-plot` | | flag | `False` | Save plots to files |
@@ -562,13 +572,13 @@ Example JSON file:
 ```json
 [
   {
-    "network_type": "er",
-    "dist_type": "gamma",
+    "network": "er",
+    "distribution": "gamma",
     "nodes": 1000,
     "k_avg": 10,
     "shape": 2.0,
     "scale": 1.0,
-    "lambda_val": 0.5,
+    "lambda": 0.5,
     "samples": 50,
     "num_runs": 2,
     "initial_perc": 0.01,
@@ -577,19 +587,19 @@ Example JSON file:
     "label": "er_gamma_shape2"
   },
   {
-    "network_type": "cn",
-    "dist_type": "exponential",
+    "network": "sf",
+    "distribution": "exponential",
     "nodes": 2000,
     "k_avg": 8,
     "exponent": 2.5,
     "mu": 1.0,
-    "lambda_val": 0.5,
+    "lambda": 0.5,
     "samples": 50,
     "num_runs": 2,
     "initial_perc": 0.01,
     "t_max": 10.0,
     "steps": 100,
-    "label": "cn_exp_exponent2.5"
+    "label": "sf_exp_exponent2.5"
   }
 ]
 ```
@@ -598,15 +608,15 @@ Available parameters for each scenario:
 
 Parameter | Type | Default | Description |
 |----------|------|---------|-------------|
-`network_type` | string | `er` | Network type: Erdos-Renyi (er), Complex Network (cn), Complete Graph (cg) |
-`dist_type` | string | `gamma` | Distribution type: Gamma or Exponential |
+`network` | string | `er` | Network type: Erdos-Renyi (er), Scale-Free Network (sf), Complete Graph (cg) |
+`distribution` | string | `gamma` | Distribution type: Gamma or Exponential |
 `nodes` | int | `1000` | Number of nodes in the network |
-`k_avg` | float | `10` | Average degree (for er and cn) |
+`k_avg` | float | `10` | Average degree (for er and sf) |
 `shape` | float | `2.0` | Shape parameter for Gamma distribution |
 `scale` | float | `1.0` | Scale parameter for Gamma distribution |
 `mu` | float | `1.0` | Mu parameter for Exponential distribution |
 `lambda_val` | float | `1.0` | Lambda parameter for infection times |
-`exponent` | float | `2.5` | Exponent for complex networks (CN) |
+`exponent` | float | `2.5` | Exponent for scale-free networks (SF) |
 `samples` | int | `50` | Number of samples per run |
 `num_runs` | int | `2` | Number of runs (for averages) |
 `initial_perc` | float | `0.01` | Initial percentage of infected |
@@ -625,9 +635,6 @@ python spkmc_cli.py batch experiments/test_scenarios.json
 
 # Run scenarios and save results to a specific directory
 python spkmc_cli.py batch --output-dir results/experiment1
-
-# Run scenarios with an output prefix
-python spkmc_cli.py batch --prefix "exp1_"
 
 # Run scenarios and generate a comparison visualization
 python spkmc_cli.py batch --compare
