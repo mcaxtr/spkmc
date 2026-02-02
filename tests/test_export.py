@@ -1,7 +1,7 @@
 """
-Tests for the SPKMC export module.
+Tests for the SPKMC data export functionality.
 
-This module contains tests for the ExportManager class and its functionality.
+This module contains tests for the DataManager class export functionality.
 """
 
 import json
@@ -11,7 +11,7 @@ import tempfile
 import pandas as pd
 import pytest
 
-from spkmc.io.export import ExportManager
+from spkmc.io.data_manager import DataManager
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def sample_result():
         "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
         "metadata": {
-            "network_type": "er",
+            "network": "er",
             "distribution": "gamma",
             "N": 100,
             "k_avg": 5,
@@ -45,7 +45,7 @@ def sample_result_with_error():
         "R_err": [0.000, 0.001, 0.002, 0.003, 0.004],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
         "metadata": {
-            "network_type": "er",
+            "network": "er",
             "distribution": "gamma",
             "N": 100,
             "k_avg": 5,
@@ -62,8 +62,8 @@ def test_export_to_csv(sample_result):
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_csv(sample_result, path)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -94,8 +94,8 @@ def test_export_to_csv_with_error(sample_result_with_error):
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_csv(sample_result_with_error, path)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result_with_error, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -127,8 +127,8 @@ def test_export_to_excel(sample_result):
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_excel(sample_result, path)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -138,7 +138,6 @@ def test_export_to_excel(sample_result):
             # Verify sheets
             assert "Data" in xls.sheet_names
             assert "Metadata" in xls.sheet_names
-            assert "Statistics" in xls.sheet_names
 
             # Verify data sheet
             df_data = pd.read_excel(xls, "Data")
@@ -153,14 +152,6 @@ def test_export_to_excel(sample_result):
             assert "Parameter" in df_metadata.columns
             assert "Value" in df_metadata.columns
             assert len(df_metadata) == len(sample_result["metadata"])
-
-            # Verify statistics sheet
-            df_stats = pd.read_excel(xls, "Statistics")
-            assert "Statistic" in df_stats.columns
-            assert "Value" in df_stats.columns
-            assert "Max Infected" in df_stats["Statistic"].values
-            assert "Final Recovered" in df_stats["Statistic"].values
-            assert "Time to Peak" in df_stats["Statistic"].values
     finally:
         # Remove the file
         if os.path.exists(path):
@@ -174,8 +165,8 @@ def test_export_to_json(sample_result):
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_json(sample_result, path)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -212,8 +203,8 @@ def test_export_to_markdown(sample_result, monkeypatch):
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_markdown(sample_result, path, include_plot=False)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -244,31 +235,18 @@ def test_export_to_html(sample_result, monkeypatch):
     def mock_plot_result(*args, **kwargs):
         pass
 
-    # Mock export_to_markdown to avoid generating Markdown files
-    def mock_export_to_markdown(result, output_path, include_plot=True):
-        # Create a sample Markdown file
-        with open(output_path, "w") as f:
-            content = (
-                "# SPKMC Simulation Report\n\n"
-                "## Simulation Parameters\n\n"
-                "| Parameter | Value |\n|-----------|-------|\n| Network Type | ER |\n"
-            )
-            f.write(content)
-        return output_path
-
-    # Apply mocks
+    # Apply the mock
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-    monkeypatch.setattr(ExportManager, "export_to_markdown", mock_export_to_markdown)
 
     # Create a temporary file
     with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
         path = f.name
 
     try:
-        # Export the results
-        exported_path = ExportManager.export_to_html(sample_result, path, include_plot=False)
+        # Export the results using DataManager
+        exported_path = DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(exported_path)
@@ -292,72 +270,41 @@ def test_export_to_html(sample_result, monkeypatch):
             os.remove(path)
 
 
-def test_export_plot(sample_result, monkeypatch):
-    """Test plot export."""
+def test_export_invalid_format(sample_result):
+    """Test export with an invalid format."""
+    with pytest.raises(ValueError, match="Unsupported format"):
+        DataManager.save(sample_result, "output.xyz")
+
+
+def test_export_valid_formats(sample_result, monkeypatch):
+    """Test export with valid formats."""
+    import tempfile
 
     # Mock Visualizer.plot_result to avoid generating plots
     def mock_plot_result(*args, **kwargs):
-        # Create an empty file at the specified path
-        with open(kwargs.get("save_path", args[-1]), "w") as f:
-            f.write("")
+        pass
 
-    # Apply the mock
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
-    # Create a temporary file
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        path = f.name
+    # Test each valid format
+    formats = [
+        (".json", "json"),
+        (".csv", "csv"),
+        (".xlsx", "excel"),
+        (".md", "markdown"),
+        (".html", "html"),
+    ]
 
-    try:
-        # Export the plot
-        exported_path = ExportManager.export_plot(sample_result, path, format="png", dpi=300)
+    for ext, _fmt_name in formats:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+            path = f.name
 
-        # Verify the file was created
-        assert os.path.exists(exported_path)
-    finally:
-        # Remove the file
-        if os.path.exists(path):
-            os.remove(path)
-
-
-def test_export_results_invalid_format(sample_result):
-    """Test export with an invalid format."""
-    with pytest.raises(ValueError):
-        ExportManager.export_results(sample_result, "output.xyz", format="invalid")
-
-
-def test_export_results_valid_formats(sample_result, monkeypatch):
-    """Test export with valid formats."""
-
-    # Mock export methods
-    def mock_export(*args, **kwargs):
-        return "mock_path.ext"
-
-    # Apply mocks
-    monkeypatch.setattr(ExportManager, "export_to_json", mock_export)
-    monkeypatch.setattr(ExportManager, "export_to_csv", mock_export)
-    monkeypatch.setattr(ExportManager, "export_to_excel", mock_export)
-    monkeypatch.setattr(ExportManager, "export_to_markdown", mock_export)
-    monkeypatch.setattr(ExportManager, "export_to_html", mock_export)
-
-    # Test valid formats
-    assert (
-        ExportManager.export_results(sample_result, "output.json", format="json") == "mock_path.ext"
-    )
-    assert (
-        ExportManager.export_results(sample_result, "output.csv", format="csv") == "mock_path.ext"
-    )
-    assert (
-        ExportManager.export_results(sample_result, "output.xlsx", format="excel")
-        == "mock_path.ext"
-    )
-    assert ExportManager.export_results(sample_result, "output.md", format="md") == "mock_path.ext"
-    assert (
-        ExportManager.export_results(sample_result, "output.md", format="markdown")
-        == "mock_path.ext"
-    )
-    assert (
-        ExportManager.export_results(sample_result, "output.html", format="html") == "mock_path.ext"
-    )
+        try:
+            result = DataManager.save(sample_result, path)
+            assert result == path
+            assert os.path.exists(path)
+        finally:
+            if os.path.exists(path):
+                os.remove(path)

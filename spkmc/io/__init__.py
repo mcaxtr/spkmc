@@ -1,42 +1,56 @@
 """
 Input/output module for the SPKMC algorithm.
 
-This module contains classes and functions for managing results,
-experiments, and data export.
+This module contains classes and functions for managing data I/O,
+experiments, and result storage.
 
 Usage:
-    from spkmc.io.results import ResultManager
-    from spkmc.io.experiments import ExperimentManager
+    from spkmc.io import DataManager, Scenario, Experiment
+    from spkmc.io import ExperimentManager, PlotConfig
 """
 
 __all__ = [
-    "ResultManager",
-    "ExportManager",
-    "ExperimentManager",
+    "DataManager",
+    "Scenario",
+    "ScenarioOverride",
     "Experiment",
+    "ExperimentConfig",
+    "ExperimentManager",
     "PlotConfig",
 ]
 
 
 def __getattr__(name: str) -> object:
     """Lazy import for IO modules."""
-    if name == "ResultManager":
-        from spkmc.io.results import ResultManager
+    if name == "DataManager":
+        from spkmc.io.data_manager import DataManager
 
-        globals()["ResultManager"] = ResultManager
-        return ResultManager
-    elif name == "ExportManager":
-        from spkmc.io.export import ExportManager
-
-        globals()["ExportManager"] = ExportManager
-        return ExportManager
-    elif name in ("ExperimentManager", "Experiment", "PlotConfig"):
-        from spkmc.io.experiments import Experiment, ExperimentManager, PlotConfig
+        globals()["DataManager"] = DataManager
+        return DataManager
+    elif name in (
+        "Scenario",
+        "ScenarioOverride",
+        "Experiment",
+        "ExperimentConfig",
+        "ExperimentManager",
+        "PlotConfig",
+    ):
+        from spkmc.io.experiments import (
+            Experiment,
+            ExperimentConfig,
+            ExperimentManager,
+            PlotConfig,
+            Scenario,
+            ScenarioOverride,
+        )
 
         globals().update(
             {
-                "ExperimentManager": ExperimentManager,
+                "Scenario": Scenario,
+                "ScenarioOverride": ScenarioOverride,
                 "Experiment": Experiment,
+                "ExperimentConfig": ExperimentConfig,
+                "ExperimentManager": ExperimentManager,
                 "PlotConfig": PlotConfig,
             }
         )
