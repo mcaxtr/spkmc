@@ -1,99 +1,36 @@
 """
-Experiment management for the SPKMC algorithm.
+Experiment management and I/O operations for the SPKMC algorithm.
 
-This module contains functions and classes for managing experiments,
-including discovery, loading, validation, and execution.
+This module contains the ExperimentManager class for loading and managing
+experiments from the filesystem.
+
+Domain models (Scenario, Experiment, etc.) are now in spkmc.models.
+This module re-exports them for backward compatibility.
 """
 
 import json
-import os
-import shutil
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 
+# Re-export models for backward compatibility
+from spkmc.models import (
+    Experiment,
+    ExperimentConfig,
+    PlotConfig,
+    Scenario,
+    ScenarioOverride,
+    SimulationResult,
+)
 
-@dataclass
-class PlotConfig:
-    """Configuration for plotting results."""
-
-    title: Optional[str] = None
-    xlabel: str = "Time"
-    ylabel: str = "Proportion of Individuals"
-    legend_position: str = "best"
-    figsize: Tuple[float, float] = (10, 6)
-    colors: Dict[str, str] = field(default_factory=lambda: {"S": "blue", "I": "red", "R": "green"})
-    states_to_plot: List[str] = field(default_factory=lambda: ["S", "I", "R"])
-    dpi: int = 300
-    grid: bool = True
-    grid_alpha: float = 0.3
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PlotConfig":
-        """
-        Create PlotConfig from a dictionary.
-
-        Args:
-            data: Dictionary with plot settings
-
-        Returns:
-            PlotConfig instance
-        """
-        figsize = data.get("figsize", [10, 6])
-        return cls(
-            title=data.get("title"),
-            xlabel=data.get("xlabel", "Time"),
-            ylabel=data.get("ylabel", "Proportion of Individuals"),
-            legend_position=data.get("legend_position", "best"),
-            figsize=tuple(figsize) if isinstance(figsize, list) else figsize,
-            colors=data.get("colors", {"S": "blue", "I": "red", "R": "green"}),
-            states_to_plot=data.get("states_to_plot", ["S", "I", "R"]),
-            dpi=data.get("dpi", 300),
-            grid=data.get("grid", True),
-            grid_alpha=data.get("grid_alpha", 0.3),
-        )
-
-
-@dataclass
-class Experiment:
-    """Represents an SPKMC experiment."""
-
-    name: str
-    path: Path
-    description: Optional[str] = None
-    plot_config: PlotConfig = field(default_factory=PlotConfig)
-    scenarios: List[Dict[str, Any]] = field(default_factory=list)
-    parameters: Dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def results_dir(self) -> Path:
-        """Return the results directory path."""
-        return self.path / "results"
-
-    @property
-    def has_results(self) -> bool:
-        """Check whether the experiment has results."""
-        return self.results_dir.exists() and any(self.results_dir.glob("*.json"))
-
-    @property
-    def result_count(self) -> int:
-        """Return the number of result files."""
-        if not self.results_dir.exists():
-            return 0
-        # Count all JSON files except comparison metadata
-        return len(
-            [f for f in self.results_dir.glob("*.json") if not f.name.startswith("comparison")]
-        )
-
-    def clean_results(self) -> None:
-        """Remove all results from the experiment."""
-        if self.results_dir.exists():
-            shutil.rmtree(self.results_dir)
-
-    def ensure_results_dir(self) -> Path:
-        """Ensure the results directory exists."""
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-        return self.results_dir
+__all__ = [
+    "Scenario",
+    "ScenarioOverride",
+    "PlotConfig",
+    "ExperimentConfig",
+    "Experiment",
+    "SimulationResult",
+    "ExperimentManager",
+]
 
 
 class ExperimentManager:
@@ -109,6 +46,8 @@ class ExperimentManager:
         Args:
             experiments_dir: Base directory for experiments (optional)
         """
+        import os
+
         self.experiments_dir = Path(
             experiments_dir
             or os.environ.get("SPKMC_EXPERIMENTS_DIR")
@@ -169,46 +108,9 @@ class ExperimentManager:
         if "scenarios" not in data or not data["scenarios"]:
             raise ValueError(f"Required field 'scenarios' missing or empty in {data_file}")
 
-        # Filter out comment objects from scenarios
-        scenarios = [s for s in data["scenarios"] if not s.get("_comment")]
-
-        # Parse plot config
-        plot_config = PlotConfig.from_dict(data.get("plot", {}))
-
-        # Extract global parameters (used as defaults for scenarios)
-        global_params = data.get("parameters", {})
-
-        # Normalize parameter key names (data.json format -> internal format)
-        key_mapping = {
-            "time_max": "t_max",
-            "time_points": "steps",
-        }
-
-        def normalize_params(params: Dict[str, Any]) -> Dict[str, Any]:
-            """Normalize parameter keys to internal format."""
-            normalized = {}
-            for key, value in params.items():
-                normalized_key = key_mapping.get(key, key)
-                normalized[normalized_key] = value
-            return normalized
-
-        normalized_global = normalize_params(global_params)
-
-        # Merge global parameters into each scenario (scenario values override global)
-        merged_scenarios = []
-        for scenario in scenarios:
-            normalized_scenario = normalize_params(scenario)
-            merged = {**normalized_global, **normalized_scenario}
-            merged_scenarios.append(merged)
-
-        return Experiment(
-            name=data["name"],
-            path=exp_path,
-            description=data.get("description"),
-            plot_config=plot_config,
-            scenarios=merged_scenarios,
-            parameters=global_params,
-        )
+        # Create config and convert to experiment
+        config = ExperimentConfig.from_dict(data)
+        return Experiment.from_config(config, path=exp_path)
 
     def get_experiment_by_index(self, index: int) -> Optional[Experiment]:
         """

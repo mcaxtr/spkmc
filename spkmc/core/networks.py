@@ -2,7 +2,7 @@
 Network classes for the SPKMC algorithm.
 
 This module contains implementations of different network types that can be
-used in SPKMC simulations, such as Erdos-Renyi networks, complex networks, and complete graphs.
+used in SPKMC simulations, such as Erdos-Renyi networks, scale-free networks, and complete graphs.
 
 Includes fast edge-list generators that bypass NetworkX for GPU workflows.
 """
@@ -16,7 +16,7 @@ import numpy as np
 class NetworkFactory:
     """Factory for creating different network types."""
 
-    NETWORK_TYPES = ["er", "cn", "cg", "rrn"]  # Supported network types
+    NETWORK_TYPES = ["er", "sf", "cg", "rrn"]  # Supported network types
 
     @staticmethod
     def create_network(network_type: str, **kwargs: Any) -> nx.DiGraph:
@@ -24,7 +24,7 @@ class NetworkFactory:
         Create a network based on the type and provided parameters.
 
         Args:
-            network_type: Network type ('er', 'cn', 'cg', 'rrn')
+            network_type: Network type ('er', 'sf', 'cg', 'rrn')
             **kwargs: Network-specific parameters
 
         Returns:
@@ -40,11 +40,11 @@ class NetworkFactory:
             k_avg = kwargs.get("k_avg", 10)
             return NetworkFactory.create_erdos_renyi(N, k_avg)
 
-        elif network_type == "cn":
+        elif network_type == "sf":
             N = kwargs.get("N", 1000)
             exponent = kwargs.get("exponent", 2.5)
             k_avg = kwargs.get("k_avg", 10)
-            return NetworkFactory.create_complex_network(N, exponent, k_avg)
+            return NetworkFactory.create_scale_free_network(N, exponent, k_avg)
 
         elif network_type == "cg":
             N = kwargs.get("N", 1000)
@@ -104,9 +104,9 @@ class NetworkFactory:
             return result
 
     @staticmethod
-    def create_complex_network(N: int, exponent: float, k_avg: float) -> nx.DiGraph:
+    def create_scale_free_network(N: int, exponent: float, k_avg: float) -> nx.DiGraph:
         """
-        Create a complex network with a power-law degree distribution.
+        Create a scale-free network with a power-law degree distribution.
 
         Args:
             N: Number of nodes
@@ -114,7 +114,7 @@ class NetworkFactory:
             k_avg: Average degree
 
         Returns:
-            Directed complex graph
+            Directed scale-free graph
         """
         degree_sequence = NetworkFactory.generate_discrete_power_law(N, exponent, 2, np.sqrt(N))
         degree_sequence = np.round(degree_sequence * (k_avg / np.mean(degree_sequence))).astype(int)
@@ -162,7 +162,7 @@ class NetworkFactory:
         Return network information for metadata.
 
         Args:
-            network_type: Network type ('er', 'cn', 'cg', 'rrn')
+            network_type: Network type ('er', 'sf', 'cg', 'rrn')
             **kwargs: Network-specific parameters
 
         Returns:
@@ -172,10 +172,10 @@ class NetworkFactory:
 
         info = {"type": network_type, "N": kwargs.get("N", 1000)}
 
-        if network_type in ["er", "cn", "rrn"]:
+        if network_type in ["er", "sf", "rrn"]:
             info["k_avg"] = kwargs.get("k_avg", 10)
 
-        if network_type == "cn":
+        if network_type == "sf":
             info["exponent"] = kwargs.get("exponent", 2.5)
 
         return info
@@ -193,7 +193,7 @@ class NetworkFactory:
         especially for GPU workflows where only the edge array is needed.
 
         Args:
-            network_type: Type of network ('er', 'cn', 'cg', 'rrn')
+            network_type: Type of network ('er', 'sf', 'cg', 'rrn')
             **kwargs: Network-specific parameters (N, k_avg, exponent)
 
         Returns:
@@ -209,11 +209,11 @@ class NetworkFactory:
             k_avg = kwargs.get("k_avg", 10)
             return NetworkFactory.create_erdos_renyi_edges(N, k_avg)
 
-        elif network_type == "cn":
+        elif network_type == "sf":
             N = kwargs.get("N", 1000)
             exponent = kwargs.get("exponent", 2.5)
             k_avg = kwargs.get("k_avg", 10)
-            return NetworkFactory.create_complex_network_edges(N, exponent, k_avg)
+            return NetworkFactory.create_scale_free_network_edges(N, exponent, k_avg)
 
         elif network_type == "cg":
             N = kwargs.get("N", 1000)
@@ -301,7 +301,7 @@ class NetworkFactory:
         return N, edges
 
     @staticmethod
-    def create_complex_network_edges(
+    def create_scale_free_network_edges(
         N: int, exponent: float, k_avg: float
     ) -> Tuple[int, np.ndarray]:
         """

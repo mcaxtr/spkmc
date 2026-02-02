@@ -85,7 +85,7 @@ def build_experiment_prompt(metrics: ExperimentMetrics) -> str:
         network_type = scenario.network_type.upper()
         if network_type == "ER":
             network_name = "Erdos-Renyi"
-        elif network_type == "CN":
+        elif network_type == "SF":
             network_name = "Scale-free (Power-law)"
         elif network_type == "RRN":
             network_name = "Random Regular"

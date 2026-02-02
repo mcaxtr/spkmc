@@ -121,12 +121,8 @@ def test_run_multiple_simulations(gamma_distribution, small_network, time_steps)
     assert R[0] == 0.0  # There should be no initially recovered nodes
 
 
-@patch("os.path.exists")
-def test_simulate_erdos_renyi(mock_exists, gamma_distribution, time_steps):
+def test_simulate_erdos_renyi(gamma_distribution, time_steps):
     """Test simulation on Erdos-Renyi networks."""
-    # Configure mock to simulate missing file
-    mock_exists.return_value = False
-
     # Create the simulator
     simulator = SPKMC(gamma_distribution)
 
@@ -138,19 +134,14 @@ def test_simulate_erdos_renyi(mock_exists, gamma_distribution, time_steps):
     initial_perc = 0.1
 
     # Run the simulation with a reduced number of nodes/samples
-    with patch("spkmc.io.results.ResultManager.save_result") as mock_save:
-        S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
-            num_runs=num_runs,
-            time_steps=time_steps,
-            N=N,
-            k_avg=k_avg,
-            samples=samples,
-            initial_perc=initial_perc,
-            load_if_exists=False,
-        )
-
-        # Verify save_result was called
-        assert mock_save.called
+    S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
+        num_runs=num_runs,
+        time_steps=time_steps,
+        N=N,
+        k_avg=k_avg,
+        samples=samples,
+        initial_perc=initial_perc,
+    )
 
     # Verify results
     assert isinstance(S, np.ndarray)
@@ -168,12 +159,8 @@ def test_simulate_erdos_renyi(mock_exists, gamma_distribution, time_steps):
     assert np.isclose(S + I + R, 1.0).all()  # Sum must be 1
 
 
-@patch("os.path.exists")
-def test_simulate_complex_network(mock_exists, gamma_distribution, time_steps):
-    """Test simulation on complex networks."""
-    # Configure mock to simulate missing file
-    mock_exists.return_value = False
-
+def test_simulate_scale_free_network(gamma_distribution, time_steps):
+    """Test simulation on scale-free networks."""
     # Create the simulator
     simulator = SPKMC(gamma_distribution)
 
@@ -186,20 +173,15 @@ def test_simulate_complex_network(mock_exists, gamma_distribution, time_steps):
     exponent = 2.5
 
     # Run the simulation with a reduced number of nodes/samples
-    with patch("spkmc.io.results.ResultManager.save_result") as mock_save:
-        S, I, R, S_err, I_err, R_err = simulator.simulate_complex_network(
-            num_runs=num_runs,
-            exponent=exponent,
-            time_steps=time_steps,
-            N=N,
-            k_avg=k_avg,
-            samples=samples,
-            initial_perc=initial_perc,
-            load_if_exists=False,
-        )
-
-        # Verify save_result was called
-        assert mock_save.called
+    S, I, R, S_err, I_err, R_err = simulator.simulate_scale_free_network(
+        num_runs=num_runs,
+        exponent=exponent,
+        time_steps=time_steps,
+        N=N,
+        k_avg=k_avg,
+        samples=samples,
+        initial_perc=initial_perc,
+    )
 
     # Verify results
     assert isinstance(S, np.ndarray)
@@ -217,12 +199,8 @@ def test_simulate_complex_network(mock_exists, gamma_distribution, time_steps):
     assert np.isclose(S + I + R, 1.0).all()  # Sum must be 1
 
 
-@patch("os.path.exists")
-def test_simulate_complete_graph(mock_exists, gamma_distribution, time_steps):
+def test_simulate_complete_graph(gamma_distribution, time_steps):
     """Test simulation on complete graphs."""
-    # Configure mock to simulate missing file
-    mock_exists.return_value = False
-
     # Create the simulator
     simulator = SPKMC(gamma_distribution)
 
@@ -230,23 +208,30 @@ def test_simulate_complete_graph(mock_exists, gamma_distribution, time_steps):
     N = 10  # Use a small value for the test
     samples = 2
     initial_perc = 0.1
+    num_runs = 2
 
     # Run the simulation with a reduced number of nodes/samples
-    with patch("spkmc.io.results.ResultManager.save_result") as mock_save:
-        S, I, R = simulator.simulate_complete_graph(
-            time_steps=time_steps, N=N, samples=samples, initial_perc=initial_perc, overwrite=True
-        )
-
-        # Verify save_result was called
-        assert mock_save.called
+    S, I, R, S_err, I_err, R_err = simulator.simulate_complete_graph(
+        num_runs=num_runs,
+        time_steps=time_steps,
+        N=N,
+        samples=samples,
+        initial_perc=initial_perc,
+    )
 
     # Verify results
     assert isinstance(S, np.ndarray)
     assert isinstance(I, np.ndarray)
     assert isinstance(R, np.ndarray)
+    assert isinstance(S_err, np.ndarray)
+    assert isinstance(I_err, np.ndarray)
+    assert isinstance(R_err, np.ndarray)
     assert S.shape == time_steps.shape
     assert I.shape == time_steps.shape
     assert R.shape == time_steps.shape
+    assert S_err.shape == time_steps.shape
+    assert I_err.shape == time_steps.shape
+    assert R_err.shape == time_steps.shape
     assert np.isclose(S + I + R, 1.0).all()  # Sum must be 1
 
 
@@ -287,7 +272,6 @@ def test_run_simulation_er(gamma_distribution, time_steps):
         assert kwargs["k_avg"] == 5
         assert kwargs["samples"] == 10
         assert kwargs["initial_perc"] == 0.01
-        assert kwargs["load_if_exists"] is False
 
         # Verify the result
         assert "S_val" in result
@@ -301,13 +285,13 @@ def test_run_simulation_er(gamma_distribution, time_steps):
         assert result["has_error"] is True
 
 
-def test_run_simulation_cn(gamma_distribution, time_steps):
-    """Test run_simulation for complex networks."""
+def test_run_simulation_sf(gamma_distribution, time_steps):
+    """Test run_simulation for scale-free networks."""
     # Create the simulator
     simulator = SPKMC(gamma_distribution)
 
     # Configure the simulation
-    with patch.object(simulator, "simulate_complex_network") as mock_simulate:
+    with patch.object(simulator, "simulate_scale_free_network") as mock_simulate:
         # Configure the mock to return valid values
         mock_simulate.return_value = (
             np.zeros_like(time_steps),
@@ -320,7 +304,7 @@ def test_run_simulation_cn(gamma_distribution, time_steps):
 
         # Run the simulation
         result = simulator.run_simulation(
-            network_type="cn",
+            network_type="sf",
             time_steps=time_steps,
             N=100,
             k_avg=5,
@@ -331,7 +315,7 @@ def test_run_simulation_cn(gamma_distribution, time_steps):
             overwrite=True,
         )
 
-        # Verify simulate_complex_network was called with correct parameters
+        # Verify simulate_scale_free_network was called with correct parameters
         mock_simulate.assert_called_once()
         args, kwargs = mock_simulate.call_args
         assert kwargs["num_runs"] == 2
@@ -340,7 +324,6 @@ def test_run_simulation_cn(gamma_distribution, time_steps):
         assert kwargs["k_avg"] == 5
         assert kwargs["samples"] == 10
         assert kwargs["initial_perc"] == 0.01
-        assert kwargs["load_if_exists"] is False
 
         # Verify the result
         assert "S_val" in result
@@ -361,8 +344,11 @@ def test_run_simulation_cg(gamma_distribution, time_steps):
 
     # Configure the simulation
     with patch.object(simulator, "simulate_complete_graph") as mock_simulate:
-        # Configure the mock to return valid values
+        # Configure the mock to return valid values (now includes error arrays)
         mock_simulate.return_value = (
+            np.zeros_like(time_steps),
+            np.zeros_like(time_steps),
+            np.zeros_like(time_steps),
             np.zeros_like(time_steps),
             np.zeros_like(time_steps),
             np.zeros_like(time_steps),
@@ -375,6 +361,7 @@ def test_run_simulation_cg(gamma_distribution, time_steps):
             N=100,
             samples=10,
             initial_perc=0.01,
+            num_runs=2,
             overwrite=True,
         )
 
@@ -384,15 +371,18 @@ def test_run_simulation_cg(gamma_distribution, time_steps):
         assert kwargs["N"] == 100
         assert kwargs["samples"] == 10
         assert kwargs["initial_perc"] == 0.01
-        assert kwargs["overwrite"] is True
+        assert kwargs["num_runs"] == 2
 
         # Verify the result
         assert "S_val" in result
         assert "I_val" in result
         assert "R_val" in result
+        assert "S_err" in result
+        assert "I_err" in result
+        assert "R_err" in result
         assert "time" in result
         assert "has_error" in result
-        assert result["has_error"] is False
+        assert result["has_error"] is True
 
 
 def test_run_simulation_invalid_network(gamma_distribution, time_steps):

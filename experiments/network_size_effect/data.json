@@ -25,8 +25,8 @@
   "scenarios": [
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 500,
+      "network": "er",
+      "nodes": 500,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -40,8 +40,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 1000,
+      "network": "er",
+      "nodes": 1000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -55,8 +55,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 2500,
+      "network": "er",
+      "nodes": 2500,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -70,8 +70,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 5000,
+      "network": "er",
+      "nodes": 5000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -85,8 +85,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 10000,
+      "network": "er",
+      "nodes": 10000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -100,8 +100,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 25000,
+      "network": "er",
+      "nodes": 25000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -115,8 +115,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 50000,
+      "network": "er",
+      "nodes": 50000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,
@@ -130,8 +130,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "er",
-      "network_size": 100000,
+      "network": "er",
+      "nodes": 100000,
       "k_avg": 10,
       "shape": 2.0,
       "scale": 0.5,

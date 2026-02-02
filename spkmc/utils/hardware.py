@@ -228,7 +228,7 @@ def configure_numba_threads(thread_count: Optional[int] = None) -> int:
     os.environ.setdefault("KMP_WARNINGS", "0")
     os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1")
 
-    from numba import config, get_num_threads, set_num_threads
+    from numba import get_num_threads, set_num_threads
 
     if thread_count is None:
         _, physical_cores = detect_cpu_cores()
@@ -242,11 +242,10 @@ def configure_numba_threads(thread_count: Optional[int] = None) -> int:
 
     # Try to set the thread count, but it may fail if threads are already launched
     try:
-        config.THREADING_LAYER = "omp"
         set_num_threads(thread_count)
         return thread_count
-    except RuntimeError:
-        # Threads already launched, return current count
+    except Exception:
+        # Threads already launched or other error, return current count
         return int(current_threads)
 
 

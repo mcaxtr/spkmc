@@ -61,10 +61,13 @@ def _init_worker(numba_threads: int, progress_queue: Optional[Any] = None) -> No
         progress_queue: Optional Queue for progress updates (inherited from parent)
     """
     global _worker_progress_queue
-    # Set environment variable BEFORE any Numba import
-    # Numba reads NUMBA_NUM_THREADS when first imported
-    os.environ["NUMBA_NUM_THREADS"] = str(numba_threads)
-    os.environ["OMP_NUM_THREADS"] = str(numba_threads)
+
+    # Only set thread env vars if Numba hasn't been imported yet
+    # This avoids "Cannot set NUMBA_NUM_THREADS" errors
+    if "numba" not in sys.modules:
+        os.environ["NUMBA_NUM_THREADS"] = str(numba_threads)
+        os.environ["OMP_NUM_THREADS"] = str(numba_threads)
+
     # Store the progress queue for use by worker functions
     _worker_progress_queue = progress_queue
 

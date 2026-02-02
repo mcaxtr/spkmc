@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**SPKMC** (Shortest Path Kinetic Monte Carlo) is a Python implementation for simulating epidemic propagation in complex networks using the SIR (Susceptible-Infected-Recovered) model. The algorithm uses shortest path calculations on weighted graphs to efficiently model disease spread dynamics.
+**SPKMC** (Shortest Path Kinetic Monte Carlo) is a Python implementation for simulating epidemic propagation on networks using the SIR (Susceptible-Infected-Recovered) model. The algorithm uses shortest path calculations on weighted graphs to efficiently model disease spread dynamics.
 
 **Version:** 1.0.0
 **Python:** 3.8+
@@ -57,7 +57,7 @@ spkmc/
 
 ### Network Types
 - `er` - Erdos-Renyi (random networks)
-- `cn` - Complex Networks (power-law degree distribution)
+- `sf` - Scale-Free Networks (power-law degree distribution)
 - `cg` - Complete Graph (fully connected)
 - `rrn` - Random Regular Network (uniform degree)
 
@@ -151,7 +151,7 @@ def compute_infection_times_gamma(weights: np.ndarray, shape: float, scale: floa
 ### `run` - Execute simulation
 ```bash
 spkmc run -n <network_type> -d <distribution> [OPTIONS]
-  -n, --network-type    Network type (er|cn|cg|rrn)
+  -n, --network-type    Network type (er|sf|cg|rrn)
   -d, --dist-type       Distribution (gamma|exponential)
   -N, --nodes           Number of nodes (default: 1000)
   -s, --samples         Samples per run (default: 50)

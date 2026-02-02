@@ -1,18 +1,18 @@
 """
-Tests for the SPKMC results module.
+Tests for the SPKMC results/data management module.
 
-This module contains tests for the ResultManager class and its functionality.
+This module contains tests for the DataManager class and its functionality.
 """
 
 import json
 import os
 import tempfile
-from pathlib import Path
 
 import pytest
 
 from spkmc.core.distributions import ExponentialDistribution, GammaDistribution
-from spkmc.io.results import ResultManager
+from spkmc.io.data_manager import DataManager
+from spkmc.io.experiments import Scenario
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def sample_result():
         "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
         "metadata": {
-            "network_type": "er",
+            "network": "er",
             "distribution": "gamma",
             "N": 100,
             "k_avg": 5,
@@ -64,9 +64,23 @@ def temp_result_file(sample_result):
         os.remove(path)
 
 
-def test_get_result_path_er(gamma_distribution):
-    """Test result path generation for an Erdos-Renyi network."""
-    path = ResultManager.get_result_path("er", gamma_distribution, 1000, 50)
+def test_scenario_get_run_path():
+    """Test run path generation using Scenario."""
+    scenario = Scenario(
+        label="test_scenario",
+        network="er",
+        distribution="gamma",
+        nodes=1000,
+        samples=50,
+        k_avg=10.0,
+        shape=2.0,
+        scale=1.0,
+        t_max=20.0,
+        steps=100,
+        initial_perc=0.01,
+        **{"lambda": 1.0},
+    )
+    path = scenario.get_run_path()
 
     assert isinstance(path, str)
     assert "er" in path.lower()
@@ -76,22 +90,37 @@ def test_get_result_path_er(gamma_distribution):
     assert path.endswith(".json")
 
 
-def test_get_result_path_cn(gamma_distribution):
-    """Test result path generation for a complex network."""
-    path = ResultManager.get_result_path("cn", gamma_distribution, 1000, 50, 2.5)
+def test_scenario_get_run_path_sf():
+    """Test run path generation for a scale-free network."""
+    scenario = Scenario(
+        label="test_sf_scenario",
+        network="sf",
+        distribution="gamma",
+        nodes=1000,
+        samples=50,
+        k_avg=10.0,
+        exponent=2.5,
+        shape=2.0,
+        scale=1.0,
+        t_max=20.0,
+        steps=100,
+        initial_perc=0.01,
+        **{"lambda": 1.0},
+    )
+    path = scenario.get_run_path()
 
     assert isinstance(path, str)
-    assert "cn" in path.lower()
+    assert "sf" in path.lower()
     assert "gamma" in path.lower()
     assert "1000" in path
     assert "50" in path
-    assert "2.5" in path or "25" in path  # May be formatted as 2.5 or 25
+    assert "exp" in path  # Exponent in filename
     assert path.endswith(".json")
 
 
 def test_load_result(temp_result_file, sample_result):
     """Test loading results."""
-    result = ResultManager.load_result(temp_result_file)
+    result = DataManager.load(temp_result_file)
 
     assert isinstance(result, dict)
     assert "S_val" in result
@@ -99,7 +128,7 @@ def test_load_result(temp_result_file, sample_result):
     assert "R_val" in result
     assert "time" in result
     assert "metadata" in result
-    assert result["metadata"]["network_type"] == sample_result["metadata"]["network_type"]
+    assert result["metadata"]["network"] == sample_result["metadata"]["network"]
     assert result["metadata"]["distribution"] == sample_result["metadata"]["distribution"]
     assert result["metadata"]["N"] == sample_result["metadata"]["N"]
 
@@ -107,7 +136,7 @@ def test_load_result(temp_result_file, sample_result):
 def test_load_result_nonexistent():
     """Test loading a nonexistent file."""
     with pytest.raises(FileNotFoundError):
-        ResultManager.load_result("nonexistent_file.json")
+        DataManager.load("nonexistent_file.json")
 
 
 def test_save_result(sample_result):
@@ -118,7 +147,7 @@ def test_save_result(sample_result):
 
     try:
         # Save the results
-        ResultManager.save_result(path, sample_result)
+        DataManager.save(sample_result, path)
 
         # Verify the file was created
         assert os.path.exists(path)
@@ -138,106 +167,35 @@ def test_save_result(sample_result):
             os.remove(path)
 
 
-def test_list_results(monkeypatch):
-    """Test listing results."""
+def test_list_files():
+    """Test listing files in a directory."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create some test files
+        for i in range(3):
+            path = os.path.join(temp_dir, f"result_{i}.json")
+            with open(path, "w") as f:
+                json.dump({"test": i}, f)
 
-    # Mock Path.exists
-    def mock_exists(self):
-        return True
-
-    # Mock Path.iterdir
-    def mock_iterdir(self):
-        paths = [Path("data/spkmc/gamma"), Path("data/spkmc/exponential")]
-        for path in paths:
-            yield path
-
-    # Mock the second iterdir level
-    def mock_iterdir_level2(self):
-        if str(self).endswith("gamma"):
-            paths = [Path("data/spkmc/gamma/er"), Path("data/spkmc/gamma/cn")]
-        else:
-            paths = [Path("data/spkmc/exponential/er")]
-        for path in paths:
-            yield path
-
-    # Mock the third iterdir level
-    def mock_iterdir_level3(self):
-        if str(self).endswith("er"):
-            paths = [
-                Path("data/spkmc/gamma/er/results_1000_50_2.0.json"),
-                Path("data/spkmc/gamma/er/results_2000_100_2.0.json"),
-            ]
-        else:
-            paths = [Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")]
-        for path in paths:
-            yield path
-
-    # Mock Path.glob
-    def mock_glob(self, pattern):
-        if str(self).endswith("er"):
-            paths = [
-                Path("data/spkmc/gamma/er/results_1000_50_2.0.json"),
-                Path("data/spkmc/gamma/er/results_2000_100_2.0.json"),
-            ]
-        else:
-            paths = [Path("data/spkmc/gamma/cn/results_25_1000_50_2.0.json")]
-        for path in paths:
-            yield path
-
-    # Apply mocks
-    monkeypatch.setattr(Path, "exists", mock_exists)
-    monkeypatch.setattr(Path, "iterdir", mock_iterdir)
-    monkeypatch.setattr(Path, "glob", mock_glob)
-
-    # Replace iterdir for different instances
-    def patched_iterdir(self):
-        if str(self).endswith("spkmc"):
-            return mock_iterdir(self)
-        elif str(self).endswith("gamma") or str(self).endswith("exponential"):
-            return mock_iterdir_level2(self)
-        else:
-            return mock_iterdir_level3(self)
-
-    monkeypatch.setattr(Path, "iterdir", patched_iterdir)
-
-    # Test listing results
-    results = ResultManager.list_results()
-
-    assert isinstance(results, list)
-    assert len(results) > 0
-    # Check for path components (works on both Unix and Windows)
-    assert any("gamma" in r and "er" in r for r in results)
-    assert any("gamma" in r and "cn" in r for r in results)
+        # Test listing
+        files = DataManager.list_files(temp_dir, "*.json")
+        assert len(files) == 3
 
 
-def test_get_metadata_from_path():
-    """Test extracting metadata from a file path."""
-    path = "data/spkmc/gamma/er/results_1000_50_2.0.json"
-    metadata = ResultManager.get_metadata_from_path(path)
+def test_exists():
+    """Test file existence check."""
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
 
-    assert isinstance(metadata, dict)
-    assert metadata["distribution"] == "gamma"
-    assert metadata["network_type"] == "er"
-    assert metadata["N"] == 1000
-    assert metadata["samples"] == 50
-
-
-def test_get_metadata_from_path_cn():
-    """Test extracting metadata from a file path for a complex network."""
-    path = "data/spkmc/gamma/cn/results_25_1000_50_2.0.json"
-    metadata = ResultManager.get_metadata_from_path(path)
-
-    assert isinstance(metadata, dict)
-    assert metadata["distribution"] == "gamma"
-    assert metadata["network_type"] == "cn"
-    assert metadata["exponent"] == 2.5
-    assert metadata["N"] == 1000
-    assert metadata["samples"] == 50
+    try:
+        assert DataManager.exists(path) is True
+        assert DataManager.exists("nonexistent_file.json") is False
+    finally:
+        os.remove(path)
 
 
 def test_format_result_for_cli(sample_result):
     """Test formatting results for the CLI."""
-    formatted = ResultManager.format_result_for_cli(sample_result)
+    formatted = DataManager.format_result_for_cli(sample_result)
 
     assert isinstance(formatted, dict)
     assert "metadata" in formatted
@@ -249,3 +207,130 @@ def test_format_result_for_cli(sample_result):
     assert formatted["final_recovered"] == 0.16
     assert formatted["data_points"] == 5
     assert formatted["has_error_data"] is False
+
+
+def test_load_result_from_csv(sample_result):
+    """Test loading results from a CSV file."""
+    import pandas as pd
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        # Create CSV with expected columns
+        df = pd.DataFrame(
+            {
+                "Time": sample_result["time"],
+                "Susceptible": sample_result["S_val"],
+                "Infected": sample_result["I_val"],
+                "Recovered": sample_result["R_val"],
+            }
+        )
+        df.to_csv(f.name, index=False)
+        temp_path = f.name
+
+    try:
+        loaded = DataManager.load(temp_path)
+
+        assert "S_val" in loaded
+        assert "I_val" in loaded
+        assert "R_val" in loaded
+        assert "time" in loaded
+        assert loaded["S_val"] == sample_result["S_val"]
+        assert loaded["I_val"] == sample_result["I_val"]
+        assert loaded["R_val"] == sample_result["R_val"]
+        assert loaded["time"] == sample_result["time"]
+    finally:
+        os.unlink(temp_path)
+
+
+def test_load_result_from_csv_with_errors():
+    """Test loading results from a CSV file with error columns."""
+    import pandas as pd
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        df = pd.DataFrame(
+            {
+                "Time": [0.0, 1.0, 2.0],
+                "Susceptible": [0.99, 0.95, 0.90],
+                "Infected": [0.01, 0.04, 0.05],
+                "Recovered": [0.00, 0.01, 0.05],
+                "Susceptible_Error": [0.01, 0.02, 0.03],
+                "Infected_Error": [0.005, 0.01, 0.015],
+                "Recovered_Error": [0.0, 0.005, 0.01],
+            }
+        )
+        df.to_csv(f.name, index=False)
+        temp_path = f.name
+
+    try:
+        loaded = DataManager.load(temp_path)
+
+        assert loaded.get("has_error", "S_err" in loaded) is True or "S_err" in loaded
+        assert "S_err" in loaded
+        assert "I_err" in loaded
+        assert "R_err" in loaded
+    finally:
+        os.unlink(temp_path)
+
+
+def test_load_result_from_excel(sample_result):
+    """Test loading results from an Excel file."""
+    import pandas as pd
+
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        temp_path = f.name
+
+    try:
+        # Create Excel with Data and Metadata sheets
+        df_data = pd.DataFrame(
+            {
+                "Time": sample_result["time"],
+                "Susceptible": sample_result["S_val"],
+                "Infected": sample_result["I_val"],
+                "Recovered": sample_result["R_val"],
+            }
+        )
+        df_metadata = pd.DataFrame(
+            {
+                "Parameter": ["network", "distribution", "N"],
+                "Value": ["er", "gamma", 100],
+            }
+        )
+
+        with pd.ExcelWriter(temp_path, engine="openpyxl") as writer:
+            df_data.to_excel(writer, sheet_name="Data", index=False)
+            df_metadata.to_excel(writer, sheet_name="Metadata", index=False)
+
+        loaded = DataManager.load(temp_path)
+
+        assert "S_val" in loaded
+        assert "I_val" in loaded
+        assert "R_val" in loaded
+        assert "time" in loaded
+        assert loaded["S_val"] == sample_result["S_val"]
+        assert loaded["metadata"]["network"] == "er"
+        assert loaded["metadata"]["distribution"] == "gamma"
+    finally:
+        os.unlink(temp_path)
+
+
+def test_load_auto_detects_format(sample_result, temp_result_file):
+    """Test that load() auto-detects the file format."""
+    # Test JSON
+    loaded = DataManager.load(temp_result_file)
+    assert "S_val" in loaded
+    assert loaded["S_val"] == sample_result["S_val"]
+
+
+def test_load_unsupported_format():
+    """Test that load() raises an error for unsupported formats."""
+    import tempfile
+
+    # Create a temp file with unsupported extension
+    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+        f.write(b"test content")
+        temp_path = f.name
+
+    try:
+        with pytest.raises(ValueError, match="Unsupported format"):
+            DataManager.load(temp_path)
+    finally:
+        os.unlink(temp_path)

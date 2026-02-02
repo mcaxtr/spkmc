@@ -25,8 +25,8 @@ def validate_percentage(ctx: click.Context, param: click.Parameter, value: float
     Raises:
         click.BadParameter: If the value is not a valid percentage
     """
-    if value < 0 or value > 1:
-        raise click.BadParameter("The percentage must be between 0 and 1.")
+    if value <= 0 or value > 1:
+        raise click.BadParameter("The percentage must be greater than 0 and at most 1.")
     return value
 
 
@@ -85,10 +85,12 @@ def validate_network_type(ctx: click.Context, param: click.Parameter, value: str
     Raises:
         click.BadParameter: If the network type is not valid
     """
-    valid_types = ["er", "cn", "cg", "rrn"]
-    if value.lower() not in valid_types:
+    valid_types = ["er", "sf", "cg", "rrn"]
+    normalized = value.lower()
+
+    if normalized not in valid_types:
         raise click.BadParameter(f"Invalid network type. Choose from: {', '.join(valid_types)}")
-    return value.lower()
+    return normalized
 
 
 def validate_distribution_type(ctx: click.Context, param: click.Parameter, value: str) -> str:
@@ -204,13 +206,20 @@ def validate_output_file(ctx: click.Context, param: click.Parameter, value: str)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
 
-        # Check whether the file can be created
-        with open(value, "a"):
-            pass
+        # Check whether the directory is writable (don't create the file yet)
+        if directory:
+            if not os.access(directory, os.W_OK):
+                raise click.BadParameter(f"Directory is not writable: {directory}")
+        else:
+            # No directory specified, check current directory
+            if not os.access(".", os.W_OK):
+                raise click.BadParameter("Current directory is not writable")
 
         return value
+    except click.BadParameter:
+        raise
     except Exception as e:
-        raise click.BadParameter(f"Unable to create the output file: {e}")
+        raise click.BadParameter(f"Unable to validate output path: {e}")
 
 
 def validate_conditional(

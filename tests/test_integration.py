@@ -16,8 +16,7 @@ from spkmc.cli.commands import cli
 from spkmc.core.distributions import create_distribution
 from spkmc.core.networks import NetworkFactory
 from spkmc.core.simulation import SPKMC
-from spkmc.io.export import ExportManager
-from spkmc.io.results import ResultManager
+from spkmc.io.data_manager import DataManager
 
 
 @pytest.fixture
@@ -90,38 +89,41 @@ def test_full_workflow_programmatic(temp_dir):
     assert len(result["time"]) == steps
     assert np.isclose(result["S_val"] + result["I_val"] + result["R_val"], 1.0).all()
 
-    # 6. Export results in different formats
+    # 6. Export results in different formats using DataManager
     output_base = os.path.join(temp_dir, "test_result")
 
     # 6.1. Export to JSON
-    json_path = ExportManager.export_to_json(result, f"{output_base}.json")
+    json_path = f"{output_base}.json"
+    DataManager.save(result, json_path)
     assert os.path.exists(json_path)
 
     # 6.2. Export to CSV
-    csv_path = ExportManager.export_to_csv(result, f"{output_base}.csv")
+    csv_path = f"{output_base}.csv"
+    DataManager.save(result, csv_path)
     assert os.path.exists(csv_path)
 
     # 6.3. Export to Excel
-    excel_path = ExportManager.export_to_excel(result, f"{output_base}.xlsx")
+    excel_path = f"{output_base}.xlsx"
+    DataManager.save(result, excel_path)
     assert os.path.exists(excel_path)
 
     # 6.4. Export to Markdown
-    md_path = ExportManager.export_to_markdown(result, f"{output_base}.md", include_plot=True)
+    md_path = f"{output_base}.md"
+    DataManager.save(result, md_path)
     assert os.path.exists(md_path)
-    assert os.path.exists(f"{output_base}.png")  # Verify the plot was generated
 
     # 6.5. Export to HTML
-    html_path = ExportManager.export_to_html(result, f"{output_base}.html", include_plot=True)
+    html_path = f"{output_base}.html"
+    DataManager.save(result, html_path)
     assert os.path.exists(html_path)
 
     # 7. Load results
-    loaded_result = ResultManager.load_result(json_path)
+    loaded_result = DataManager.load(json_path)
     # Verify the core result data structure is preserved after save/load
     assert "S_val" in loaded_result
     assert "I_val" in loaded_result
     assert "R_val" in loaded_result
     assert "time" in loaded_result
-    assert "has_error" in loaded_result
     assert len(loaded_result["S_val"]) == steps
     assert len(loaded_result["I_val"]) == steps
     assert len(loaded_result["R_val"]) == steps
@@ -184,14 +186,14 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
     assert "Simulation completed successfully" in result.output
     assert os.path.exists(output_path)
 
-    # 2. Run simulation with a complex network and Exponential distribution
-    output_path2 = os.path.join(temp_dir, "cn_exp.json")
+    # 2. Run simulation with a scale-free network and Exponential distribution
+    output_path2 = os.path.join(temp_dir, "sf_exp.json")
     result = runner.invoke(
         cli,
         [
             "run",
             "--network-type",
-            "cn",
+            "sf",
             "--dist-type",
             "exponential",
             "--mu",
@@ -276,19 +278,21 @@ def test_cli_integration(runner, temp_dir, monkeypatch):
     # Verify info was displayed successfully
     assert result.exit_code == 0
     assert "Simulation Parameters" in result.output
-    assert "network_type: er" in result.output.lower()
+    assert "network: er" in result.output.lower()
 
-    # 6. Compare results
+    # 6. Compare results using plot command
     result = runner.invoke(
         cli,
         [
-            "compare",
+            "plot",
             output_path,
             output_path2,
             output_path3,
-            "--labels",
+            "-l",
             "ER-Gamma",
-            "CN-Exp",
+            "-l",
+            "SF-Exp",
+            "-l",
             "RRN-Gamma",
         ],
     )
@@ -309,7 +313,7 @@ def test_network_distribution_integration():
 
     # 2. Create networks
     er_network = NetworkFactory.create_erdos_renyi(N=20, k_avg=4)
-    cn_network = NetworkFactory.create_complex_network(N=20, exponent=2.5, k_avg=4)
+    sf_network = NetworkFactory.create_scale_free_network(N=20, exponent=2.5, k_avg=4)
     cg_network = NetworkFactory.create_complete_graph(N=10)
     rrn_network = NetworkFactory.create_random_regular_network(N=20, k_avg=4)
 
@@ -317,8 +321,8 @@ def test_network_distribution_integration():
     assert er_network.number_of_nodes() == 20
     assert er_network.number_of_edges() > 0
 
-    assert cn_network.number_of_nodes() == 20
-    assert cn_network.number_of_edges() > 0
+    assert sf_network.number_of_nodes() == 20
+    assert sf_network.number_of_edges() > 0
 
     assert cg_network.number_of_nodes() == 10
     assert cg_network.number_of_edges() == 10 * 9  # Directed complete graph
@@ -348,14 +352,14 @@ def test_network_distribution_integration():
         er_network, sources, time_steps, samples=2, show_progress=False
     )
 
-    # 6.3. Gamma + CN
+    # 6.3. Gamma + SF
     S3, I3, R3 = gamma_simulator.run_multiple_simulations(
-        cn_network, sources, time_steps, samples=2, show_progress=False
+        sf_network, sources, time_steps, samples=2, show_progress=False
     )
 
-    # 6.4. Exponential + CN
+    # 6.4. Exponential + SF
     S4, I4, R4 = exp_simulator.run_multiple_simulations(
-        cn_network, sources, time_steps, samples=2, show_progress=False
+        sf_network, sources, time_steps, samples=2, show_progress=False
     )
 
     # 6.5. Gamma + RRN

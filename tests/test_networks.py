@@ -28,19 +28,19 @@ def test_create_erdos_renyi():
     assert abs(avg_out_degree - k_avg) < k_avg * 0.3  # 30% tolerance
 
 
-def test_create_complex_network():
-    """Test creating a complex network."""
+def test_create_scale_free_network():
+    """Test creating a scale-free network."""
     N = 100
     exponent = 2.5
     k_avg = 5
 
-    G = NetworkFactory.create_complex_network(N, exponent, k_avg)
+    G = NetworkFactory.create_scale_free_network(N, exponent, k_avg)
 
     assert isinstance(G, nx.DiGraph)
     assert G.number_of_nodes() == N
     assert G.number_of_edges() > 0
 
-    # For DiGraph created from undirected CN, G.degree() returns in+out degree
+    # For DiGraph created from undirected SF, G.degree() returns in+out degree
     # which is ~2*k_avg. We check out_degree which should be ~k_avg
     avg_out_degree = sum(dict(G.out_degree()).values()) / N
     assert abs(avg_out_degree - k_avg) < k_avg * 0.3  # 30% tolerance
@@ -98,9 +98,9 @@ def test_create_network_er():
     assert G.number_of_nodes() == 100
 
 
-def test_create_network_cn():
-    """Test create_network for a complex network."""
-    G = NetworkFactory.create_network("cn", N=100, exponent=2.5, k_avg=5)
+def test_create_network_sf():
+    """Test create_network for a scale-free network."""
+    G = NetworkFactory.create_network("sf", N=100, exponent=2.5, k_avg=5)
 
     assert isinstance(G, nx.DiGraph)
     assert G.number_of_nodes() == 100
@@ -141,12 +141,12 @@ def test_get_network_info():
     assert info_er["N"] == 100
     assert info_er["k_avg"] == 5
 
-    # Complex network
-    info_cn = NetworkFactory.get_network_info("cn", N=100, k_avg=5, exponent=2.5)
-    assert info_cn["type"] == "cn"
-    assert info_cn["N"] == 100
-    assert info_cn["k_avg"] == 5
-    assert info_cn["exponent"] == 2.5
+    # Scale-free network
+    info_sf = NetworkFactory.get_network_info("sf", N=100, k_avg=5, exponent=2.5)
+    assert info_sf["type"] == "sf"
+    assert info_sf["N"] == 100
+    assert info_sf["k_avg"] == 5
+    assert info_sf["exponent"] == 2.5
 
     # Complete graph
     info_cg = NetworkFactory.get_network_info("cg", N=10)
