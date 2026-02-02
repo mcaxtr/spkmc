@@ -486,10 +486,8 @@ def create_experiment_interactive(
         style=custom_style,
     ).ask()
 
-    # Build scenarios
-    scenarios: List[Dict[str, Any]] = []
-
-    base_scenario = {
+    # Build base parameters (global defaults)
+    base_parameters: Dict[str, Any] = {
         "network": network_type,
         "distribution": dist_type,
         "nodes": nodes,
@@ -503,18 +501,20 @@ def create_experiment_interactive(
     }
 
     if dist_type == "gamma":
-        base_scenario["shape"] = shape
-        base_scenario["scale"] = scale
+        base_parameters["shape"] = shape
+        base_parameters["scale"] = scale
     else:
-        base_scenario["mu"] = mu
+        base_parameters["mu"] = mu
 
     if network_type == "sf":
-        base_scenario["exponent"] = exponent
+        base_parameters["exponent"] = exponent
+
+    # Build scenarios (only overrides, inheriting from parameters)
+    scenarios: List[Dict[str, Any]] = []
 
     if vary_param is None:
-        # Single scenario
-        base_scenario["label"] = "baseline"
-        scenarios.append(base_scenario)
+        # Single scenario - only needs a label
+        scenarios.append({"label": "baseline"})
     else:
         # Get variation values
         values_str = questionary.text(
@@ -532,14 +532,16 @@ def create_experiment_interactive(
             return None
 
         for val in values:
-            scenario = base_scenario.copy()
-            scenario[vary_param] = val
-            # Create label from parameter and value
+            # Scenario only contains the override and label
             label_val = str(val).replace(".", "_")
-            scenario["label"] = f"{vary_param}_{label_val}"
-            scenarios.append(scenario)
+            scenarios.append(
+                {
+                    vary_param: val,
+                    "label": f"{vary_param}_{label_val}",
+                }
+            )
 
-    # Create experiment data structure
+    # Create experiment data structure with parameters inheritance
     experiment_data = {
         "name": name.replace("_", " ").title(),
         "description": description,
@@ -553,6 +555,7 @@ def create_experiment_interactive(
             "dpi": 300,
             "grid": True,
         },
+        "parameters": base_parameters,
         "scenarios": scenarios,
     }
 
