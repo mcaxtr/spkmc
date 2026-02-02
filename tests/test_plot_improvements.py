@@ -15,7 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from spkmc.cli.commands import cli
-from spkmc.io.results import ResultManager
+from spkmc.io.data_manager import DataManager
 from spkmc.visualization.plots import Visualizer
 
 
@@ -34,7 +34,7 @@ def sample_result_data():
         "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
         "metadata": {
-            "network_type": "er",
+            "network": "er",
             "distribution": "gamma",
             "N": 100,
             "k_avg": 5,
@@ -111,7 +111,7 @@ def test_plot_directory(runner, temp_results_dir, monkeypatch):
     result = runner.invoke(cli, ["plot", temp_results_dir])
 
     assert result.exit_code == 0
-    assert "Found 3 JSON files in directory" in result.output
+    assert "Found 3 result files" in result.output
     assert "Generating comparison visualization for 3 scenarios" in result.output
 
 
@@ -120,7 +120,7 @@ def test_plot_with_states_filter(runner, temp_single_result, monkeypatch):
     # Mock to capture passed arguments
     plot_calls = []
 
-    def mock_plot_result(s_vals, i_vals, r_vals, time, title, save_path, states_to_plot):
+    def mock_plot_result(s_vals, i_vals, r_vals, time, title, save_path, states_to_plot, dpi=300):
         plot_calls.append({"states_to_plot": states_to_plot})
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
@@ -148,7 +148,8 @@ def test_plot_directory_separate(runner, temp_results_dir, monkeypatch):
     plot_calls = []
 
     def mock_plot_result(*args, **kwargs):
-        plot_calls.append(kwargs.get("save_path") or args[-2] if len(args) > 2 else None)
+        # save_path is at index 5 (S, I, R, time, title, save_path, states, dpi)
+        plot_calls.append(kwargs.get("save_path") or args[5] if len(args) > 5 else None)
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
 
@@ -181,7 +182,7 @@ def test_plot_empty_directory(runner):
         result = runner.invoke(cli, ["plot", temp_dir])
 
         assert result.exit_code != 0
-        assert "No JSON files found in directory" in result.output
+        assert "No result files found in directory" in result.output
 
 
 def test_plot_nonexistent_path(runner):
@@ -203,7 +204,7 @@ def test_plot_with_error_bars(runner, monkeypatch):
         "I_err": [0.001, 0.002, 0.003, 0.002, 0.001],
         "R_err": [0.000, 0.001, 0.002, 0.003, 0.004],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
-        "metadata": {"network_type": "er", "distribution": "gamma", "N": 100},
+        "metadata": {"network": "er", "distribution": "gamma", "N": 100},
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -229,7 +230,7 @@ def test_plot_with_error_bars(runner, monkeypatch):
 
 
 def test_load_results_from_directory():
-    """Test the load_results_from_directory helper."""
+    """Test loading results from a directory using DataManager."""
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create some JSON files
         for i in range(3):
@@ -249,9 +250,12 @@ def test_load_results_from_directory():
         with open(os.path.join(temp_dir, "readme.txt"), "w") as f:
             f.write("This is not a JSON file")
 
-        # Test the function
-        results = ResultManager.load_results_from_directory(temp_dir)
+        # Test listing and loading files using DataManager
+        json_files = DataManager.list_files(temp_dir, "*.json")
+        assert len(json_files) == 3
 
+        # Load each file and verify
+        results = [(Path(f), DataManager.load(f)) for f in json_files]
         assert len(results) == 3
         assert all(isinstance(r[0], Path) for r in results)
         assert all(isinstance(r[1], dict) for r in results)
@@ -269,7 +273,7 @@ def test_plot_directory_with_export(runner, temp_results_dir, monkeypatch):
 
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # ExportManager is imported at module level; just verify the command runs
+    # DataManager handles export via file extension; just verify the command runs
     result = runner.invoke(cli, ["plot", temp_results_dir, "--export", "csv"])
 
     # The command should run without errors; actual export may fail with multiple files
@@ -329,3 +333,290 @@ def test_plot_help(runner):
     # Check parts of the message
     assert "Specific states to plot" in result.output
     assert "separate charts" in result.output
+
+
+class TestPlotFormatFlag:
+    """Tests for the --format/-f flag in the plot command."""
+
+    @pytest.fixture
+    def temp_result_file(self, sample_result_data):
+        """Create a temporary result file."""
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+
+        with open(path, "w") as f:
+            json.dump(sample_result_data, f)
+
+        yield path
+
+        if os.path.exists(path):
+            os.remove(path)
+
+    def test_plot_format_pdf(self, runner, temp_result_file, monkeypatch):
+        """Test that --format pdf creates a .pdf file, not .png."""
+        saved_paths = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base, "-f", "pdf"])
+
+            assert result.exit_code == 0
+            # The saved path should have .pdf extension
+            assert len(saved_paths) == 1
+            assert saved_paths[0].endswith(
+                ".pdf"
+            ), f"Expected .pdf extension, got: {saved_paths[0]}"
+
+    def test_plot_format_svg(self, runner, temp_result_file, monkeypatch):
+        """Test that --format svg creates a .svg file."""
+        saved_paths = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base, "-f", "svg"])
+
+            assert result.exit_code == 0
+            assert len(saved_paths) == 1
+            assert saved_paths[0].endswith(
+                ".svg"
+            ), f"Expected .svg extension, got: {saved_paths[0]}"
+
+    def test_plot_format_jpg(self, runner, temp_result_file, monkeypatch):
+        """Test that --format jpg creates a .jpg file."""
+        saved_paths = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base, "-f", "jpg"])
+
+            assert result.exit_code == 0
+            assert len(saved_paths) == 1
+            assert saved_paths[0].endswith(
+                ".jpg"
+            ), f"Expected .jpg extension, got: {saved_paths[0]}"
+
+    def test_plot_format_default_png(self, runner, temp_result_file, monkeypatch):
+        """Test that default format is png."""
+        saved_paths = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            # No --format flag, should default to png
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base])
+
+            assert result.exit_code == 0
+            assert len(saved_paths) == 1
+            assert saved_paths[0].endswith(
+                ".png"
+            ), f"Expected .png extension, got: {saved_paths[0]}"
+
+    def test_plot_format_preserves_explicit_extension(self, runner, temp_result_file, monkeypatch):
+        """Test that explicit extension in output path is preserved."""
+        saved_paths = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # User explicitly specifies .pdf in the output path
+            output_with_ext = os.path.join(temp_dir, "output.pdf")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_with_ext])
+
+            assert result.exit_code == 0
+            assert len(saved_paths) == 1
+            # Should preserve the .pdf extension even without -f flag
+            assert saved_paths[0].endswith(
+                ".pdf"
+            ), f"Expected .pdf extension, got: {saved_paths[0]}"
+
+    def test_plot_format_success_message(self, runner, temp_result_file, monkeypatch):
+        """Test that success message shows correct file path with format."""
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            pass
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "myplot")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base, "-f", "pdf"])
+
+            assert result.exit_code == 0
+            # Success message should show the full path with .pdf extension
+            assert "myplot.pdf" in result.output
+
+    def test_plot_format_comparison(self, runner, monkeypatch):
+        """Test that --format works with comparison plots (multiple files)."""
+        saved_paths = []
+
+        def mock_compare_results(results, labels, title, save_path, states, dpi=300):
+            saved_paths.append(save_path)
+
+        monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create two result files
+            sample_data = {
+                "S_val": [0.99, 0.95, 0.90],
+                "I_val": [0.01, 0.04, 0.05],
+                "R_val": [0.00, 0.01, 0.05],
+                "time": [0.0, 2.5, 5.0],
+                "metadata": {"network": "er", "distribution": "gamma", "N": 100},
+            }
+
+            file1 = os.path.join(temp_dir, "result1.json")
+            file2 = os.path.join(temp_dir, "result2.json")
+
+            with open(file1, "w") as f:
+                json.dump(sample_data, f)
+            with open(file2, "w") as f:
+                json.dump(sample_data, f)
+
+            output_base = os.path.join(temp_dir, "comparison")
+
+            result = runner.invoke(cli, ["plot", file1, file2, "-o", output_base, "-f", "svg"])
+
+            assert result.exit_code == 0
+            assert len(saved_paths) == 1
+            assert saved_paths[0].endswith(
+                ".svg"
+            ), f"Expected .svg extension for comparison, got: {saved_paths[0]}"
+
+
+class TestPlotDpiFlag:
+    """Tests for the --dpi flag in the plot command."""
+
+    @pytest.fixture
+    def temp_result_file(self, sample_result_data):
+        """Create a temporary result file."""
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+
+        with open(path, "w") as f:
+            json.dump(sample_result_data, f)
+
+        yield path
+
+        if os.path.exists(path):
+            os.remove(path)
+
+    def test_plot_dpi_passed_to_visualizer(self, runner, temp_result_file, monkeypatch):
+        """Test that --dpi value is passed to Visualizer."""
+        captured_dpi = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            captured_dpi.append(dpi)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(
+                cli, ["plot", temp_result_file, "-o", output_base, "--dpi", "150"]
+            )
+
+            assert result.exit_code == 0
+            assert len(captured_dpi) == 1
+            assert captured_dpi[0] == 150, f"Expected dpi=150, got: {captured_dpi[0]}"
+
+    def test_plot_dpi_default_value(self, runner, temp_result_file, monkeypatch):
+        """Test that default DPI (300) is used when not specified."""
+        captured_dpi = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            captured_dpi.append(dpi)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(cli, ["plot", temp_result_file, "-o", output_base])
+
+            assert result.exit_code == 0
+            assert len(captured_dpi) == 1
+            assert captured_dpi[0] == 300, f"Expected dpi=300, got: {captured_dpi[0]}"
+
+    def test_plot_dpi_high_value(self, runner, temp_result_file, monkeypatch):
+        """Test that high DPI value (600) is passed correctly."""
+        captured_dpi = []
+
+        def mock_plot_result(s, i, r, t, title, save_path, states, dpi=300):
+            captured_dpi.append(dpi)
+
+        monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = os.path.join(temp_dir, "output")
+
+            result = runner.invoke(
+                cli, ["plot", temp_result_file, "-o", output_base, "--dpi", "600"]
+            )
+
+            assert result.exit_code == 0
+            assert len(captured_dpi) == 1
+            assert captured_dpi[0] == 600, f"Expected dpi=600, got: {captured_dpi[0]}"
+
+    def test_plot_dpi_comparison(self, runner, monkeypatch):
+        """Test that --dpi works with comparison plots."""
+        captured_dpi = []
+
+        def mock_compare_results(results, labels, title, save_path, states, dpi=300):
+            captured_dpi.append(dpi)
+
+        monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create two result files
+            sample_data = {
+                "S_val": [0.99, 0.95, 0.90],
+                "I_val": [0.01, 0.04, 0.05],
+                "R_val": [0.00, 0.01, 0.05],
+                "time": [0.0, 2.5, 5.0],
+                "metadata": {"network": "er", "distribution": "gamma", "N": 100},
+            }
+
+            file1 = os.path.join(temp_dir, "result1.json")
+            file2 = os.path.join(temp_dir, "result2.json")
+
+            with open(file1, "w") as f:
+                json.dump(sample_data, f)
+            with open(file2, "w") as f:
+                json.dump(sample_data, f)
+
+            output_base = os.path.join(temp_dir, "comparison")
+
+            result = runner.invoke(cli, ["plot", file1, file2, "-o", output_base, "--dpi", "200"])
+
+            assert result.exit_code == 0
+            assert len(captured_dpi) == 1
+            assert captured_dpi[0] == 200, f"Expected dpi=200, got: {captured_dpi[0]}"
