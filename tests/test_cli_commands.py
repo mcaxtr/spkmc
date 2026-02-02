@@ -13,7 +13,6 @@ import pytest
 from click.testing import CliRunner
 
 from spkmc.cli.commands import cli
-from spkmc.io.results import ResultManager
 
 
 @pytest.fixture
@@ -36,7 +35,7 @@ def temp_result_file():
         "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
         "time": [0.0, 2.5, 5.0, 7.5, 10.0],
         "metadata": {
-            "network_type": "er",
+            "network": "er",
             "distribution": "gamma",
             "N": 100,
             "k_avg": 5,
@@ -75,7 +74,7 @@ def test_plot_command_help(runner):
     """Test the help text for the plot command."""
     result = runner.invoke(cli, ["plot", "--help"])
     assert result.exit_code == 0
-    assert "Visualize results" in result.output
+    assert "Visualize and compare" in result.output
 
 
 def test_info_command_help(runner):
@@ -83,13 +82,6 @@ def test_info_command_help(runner):
     result = runner.invoke(cli, ["info", "--help"])
     assert result.exit_code == 0
     assert "Show information" in result.output
-
-
-def test_compare_command_help(runner):
-    """Test the help text for the compare command."""
-    result = runner.invoke(cli, ["compare", "--help"])
-    assert result.exit_code == 0
-    assert "Compare results" in result.output
 
 
 def test_run_command_invalid_network(runner):
@@ -124,7 +116,7 @@ def test_run_command_invalid_initial_perc(runner):
     """Test run command with an invalid initial percentage."""
     result = runner.invoke(cli, ["run", "--initial-perc", "1.5"])
     assert result.exit_code != 0
-    assert "percentage must be between 0 and 1" in result.output
+    assert "percentage must be greater than 0 and at most 1" in result.output
 
 
 def test_plot_command_nonexistent_file(runner):
@@ -149,7 +141,7 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
             "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
             "time": [0.0, 2.5, 5.0, 7.5, 10.0],
             "metadata": {
-                "network_type": "er",
+                "network": "er",
                 "distribution": "gamma",
                 "N": 100,
                 "k_avg": 5,
@@ -159,11 +151,11 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
         }
 
     # Apply mocks
-    from spkmc.io.results import ResultManager
+    from spkmc.io.data_manager import DataManager
     from spkmc.visualization.plots import Visualizer
 
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-    monkeypatch.setattr(ResultManager, "load_result", mock_load_result)
+    monkeypatch.setattr(DataManager, "load", mock_load_result)
 
     # Run the command
     result = runner.invoke(cli, ["plot", temp_result_file])
@@ -174,13 +166,14 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
 
 def test_info_command_list(runner, monkeypatch):
     """Test info command with the --list option."""
+    from spkmc.io.data_manager import DataManager
 
-    # Mock list_results
-    def mock_list_results():
+    # Mock list_all_results
+    def mock_list_all_results(base_dir="data/runs"):
         return ["file1.json", "file2.json"]
 
     # Apply the mock
-    monkeypatch.setattr(ResultManager, "list_results", mock_list_results)
+    monkeypatch.setattr(DataManager, "list_all_results", mock_list_all_results)
 
     # Run the command
     result = runner.invoke(cli, ["info", "--list"])
@@ -199,29 +192,7 @@ def test_info_command_with_file(runner, temp_result_file):
     # Verify the result
     assert result.exit_code == 0
     assert "Simulation Parameters" in result.output
-    assert "network_type: er" in result.output.lower()
-
-
-@pytest.mark.skip(reason="Test temporarily disabled due to issues with the --simple parameter")
-def test_compare_command_with_files(runner, temp_result_file, monkeypatch):
-    """Test compare command with valid files."""
-
-    # Mock compare_results to avoid showing the plot
-    def mock_compare_results(*args, **kwargs):
-        pass
-
-    # Apply the mock
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
-
-    # Run the command
-    result = runner.invoke(
-        cli, ["compare", temp_result_file, temp_result_file, "--labels", "Test1", "Test2"]
-    )
-
-    # Verify the result
-    assert result.exit_code == 0
+    assert "network: er" in result.output.lower()
 
 
 def test_create_time_steps():
@@ -240,30 +211,32 @@ def test_create_time_steps():
     assert np.allclose(time_steps, np.array([0.0, 2.5, 5.0, 7.5, 10.0]))
 
 
-def test_batch_command_help(runner):
-    """Test the help text for the batch command."""
-    result = runner.invoke(cli, ["batch", "--help"])
+def test_experiments_command_help(runner):
+    """Test the help text for the experiment command."""
+    result = runner.invoke(cli, ["experiments", "--help"])
     assert result.exit_code == 0
-    assert "Run multiple simulation scenarios" in result.output
+    assert "Run or create experiments" in result.output
 
 
 @pytest.fixture
-def temp_batch_file():
+def temp_experiment_file():
     """Fixture to create a temporary scenarios file."""
     # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
-    # Sample data with two scenarios
+    # Sample data with two scenarios - each scenario has all required fields
+    # (Current CLI code expects scenarios with all params, not merged from global)
     scenarios = [
         {
-            "network_type": "er",
-            "dist_type": "gamma",
+            "label": "ER-Gamma",
+            "network": "er",
+            "distribution": "gamma",
             "nodes": 100,
             "k_avg": 5,
             "shape": 2.0,
             "scale": 1.0,
-            "lambda_val": 0.5,
+            "lambda": 0.5,
             "samples": 10,
             "num_runs": 1,
             "initial_perc": 0.01,
@@ -271,13 +244,14 @@ def temp_batch_file():
             "steps": 5,
         },
         {
-            "network_type": "cn",
-            "dist_type": "exponential",
+            "label": "SF-Exponential",
+            "network": "sf",
+            "distribution": "exponential",
             "nodes": 100,
             "k_avg": 5,
             "exponent": 2.5,
             "mu": 1.0,
-            "lambda_val": 0.5,
+            "lambda": 0.5,
             "samples": 10,
             "num_runs": 1,
             "initial_perc": 0.01,
@@ -298,14 +272,14 @@ def temp_batch_file():
 
 
 @pytest.fixture
-def temp_invalid_batch_file():
+def temp_invalid_experiment_file():
     """Fixture to create an invalid scenarios file."""
     # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
     # Invalid data (not a list)
-    invalid_data = {"network_type": "er", "dist_type": "gamma"}
+    invalid_data = {"network": "er", "distribution": "gamma"}
 
     # Save data to the file
     with open(path, "w") as f:
@@ -333,8 +307,10 @@ def temp_output_dir():
         shutil.rmtree(output_dir)
 
 
-def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_dir, monkeypatch):
-    """Test batch command with default parameters."""
+def test_experiments_command_with_default_params(
+    runner, temp_experiment_file, temp_output_dir, monkeypatch
+):
+    """Test experiment command with default parameters."""
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -365,8 +341,8 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
     result = runner.invoke(
         cli,
         [
-            "batch",
-            temp_batch_file,
+            "experiments",
+            temp_experiment_file,
             "--output-dir",
             temp_output_dir,
             "--no-plot",  # Avoid trying to show plots
@@ -379,12 +355,12 @@ def test_batch_command_with_default_params(runner, temp_batch_file, temp_output_
     assert "Execution completed" in result.output
 
     # Note: With mocked run_simulation, files may not be created in temp_output_dir
-    # The batch command creates files in its own output directory structure
+    # The experiment command creates files in its own output directory structure
     # We only verify the command completed successfully and produced expected output
 
 
-def test_batch_command_with_invalid_json(runner, temp_invalid_batch_file, monkeypatch):
-    """Test batch command with an invalid JSON file."""
+def test_experiments_command_with_invalid_json(runner, temp_invalid_experiment_file, monkeypatch):
+    """Test experiment command with an invalid JSON file."""
     # Mock json.load to simulate a format error
     original_load = json.load
 
@@ -399,16 +375,16 @@ def test_batch_command_with_invalid_json(runner, temp_invalid_batch_file, monkey
     monkeypatch.setattr(json, "load", mock_load)
 
     # Run the command
-    result = runner.invoke(cli, ["batch", temp_invalid_batch_file])
+    result = runner.invoke(cli, ["experiments", temp_invalid_experiment_file])
 
     # Verify the result
     assert "The scenarios file must contain a list of JSON objects" in result.output
 
 
-def test_batch_command_with_multiple_scenarios(
-    runner, temp_batch_file, temp_output_dir, monkeypatch
+def test_experiments_command_with_multiple_scenarios(
+    runner, temp_experiment_file, temp_output_dir, monkeypatch
 ):
-    """Test batch command with multiple scenarios."""
+    """Test experiment command with multiple scenarios."""
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -434,8 +410,8 @@ def test_batch_command_with_multiple_scenarios(
     result = runner.invoke(
         cli,
         [
-            "batch",
-            temp_batch_file,
+            "experiments",
+            temp_experiment_file,
             "--output-dir",
             temp_output_dir,
             "--no-plot",  # Avoid trying to show plots
@@ -449,10 +425,10 @@ def test_batch_command_with_multiple_scenarios(
     assert "Scenarios processed: 2" in result.output
 
 
-def test_batch_command_respects_output_options(
-    runner, temp_batch_file, temp_output_dir, monkeypatch
+def test_experiments_command_respects_output_options(
+    runner, temp_experiment_file, temp_output_dir, monkeypatch
 ):
-    """Test that batch command respects output options."""
+    """Test that experiment command respects output options."""
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -482,21 +458,14 @@ def test_batch_command_respects_output_options(
     monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
     monkeypatch.setattr(Visualizer, "compare_results", mock_compare_results)
 
-    # Define a prefix for output files
-    prefix = "test_prefix_"
-
     # Run the command with specific options
     result = runner.invoke(
         cli,
         [
-            "batch",
-            temp_batch_file,
+            "experiments",
+            temp_experiment_file,
             "--output-dir",
             temp_output_dir,
-            "--prefix",
-            prefix,
-            "--compare",  # Generate comparison visualization
-            "--save-plot",  # Save plots
             "--no-plot",  # Do not show plots on screen
         ],
     )
@@ -507,365 +476,398 @@ def test_batch_command_respects_output_options(
     assert "Execution completed" in result.output
 
 
-def test_simple_parameter_recognition(runner):
-    """Test that the --simple parameter is recognized by the CLI."""
-    result = runner.invoke(cli, ["--simple", "--help"])
-    assert result.exit_code == 0
-    assert "Generate simplified CSV result file" in result.output
-
-
 @pytest.fixture
-def temp_output_file():
-    """Fixture to create a temporary output file."""
-    # Create a temporary file
+def temp_experiment_file_missing_params():
+    """Fixture to create a scenarios file with missing required parameters."""
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
+    # Scenarios missing required parameters (no k_avg, samples, etc.)
+    scenarios = [
+        {
+            "label": "Incomplete Scenario",
+            "network": "er",
+            "distribution": "gamma",
+            "nodes": 100,
+            # Missing: k_avg, shape, scale, lambda, samples, num_runs, etc.
+        },
+    ]
+
+    with open(path, "w") as f:
+        json.dump(scenarios, f)
+
     yield path
 
-    # Remove the file after the test
+    # Cleanup
     if os.path.exists(path):
         os.remove(path)
 
-    # Also remove simplified CSV file if present
-    csv_path = path.replace(".json", "_simple.csv")
-    if os.path.exists(csv_path):
-        os.remove(csv_path)
 
-
-def test_run_command_with_simple_parameter(runner, temp_output_file, monkeypatch):
-    """Test run command with the --simple parameter."""
-
-    # Mock run_simulation to avoid real execution
-    def mock_run_simulation(*args, **kwargs):
-        # Create arrays with the same size as time_steps (100 points)
-        size = 100
-        s_vals = np.ones(size) * 0.99
-        i_vals = np.ones(size) * 0.01
-        r_vals = np.zeros(size)
-        s_err = np.ones(size) * 0.001
-        i_err = np.ones(size) * 0.001
-        r_err = np.ones(size) * 0.001
-
-        # Modify some values to simulate dynamics
-        for idx in range(1, size):
-            factor = min(idx / 20, 1.0)
-            s_vals[idx] = max(0.8, 0.99 - 0.19 * factor)
-            i_vals[idx] = (
-                min(0.05, 0.01 + 0.04 * factor)
-                if idx < 50
-                else max(0.01, 0.05 - 0.01 * (idx - 50) / 50)
-            )
-            r_vals[idx] = min(0.16, 0.0 + 0.16 * factor)
-
-        return {
-            "S_val": s_vals,
-            "I_val": i_vals,
-            "R_val": r_vals,
-            "has_error": True,
-            "S_err": s_err,
-            "I_err": i_err,
-            "R_err": r_err,
-        }
-
-    # Mock plot_result to avoid showing the plot
-    def mock_plot_result(*args, **kwargs):
-        pass
-
-    # Apply mocks
-    from spkmc.core.simulation import SPKMC
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
-    monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-
-    # Run the command with --simple
-    result = runner.invoke(
-        cli,
-        [
-            "--simple",
-            "run",
-            "--output",
-            temp_output_file,
-            "--no-plot",  # Avoid trying to show plots
-        ],
-    )
-
-    # Verify the result
-    assert result.exit_code == 0
-    assert "Simplified CSV output mode enabled" in result.output
-    assert "Simulation completed successfully" in result.output
-    # Simple mode message: "Simplified CSV output mode enabled"
-    assert (
-        "Simplified CSV output mode enabled" in result.output
-        or "Execution completed" in result.output
-    )
-
-    # Verify the simplified CSV file was created
-    csv_path = temp_output_file.replace(".json", "_simple.csv")
-    assert os.path.exists(csv_path)
-
-    # Verify the simplified CSV file content
-    with open(csv_path, "r") as f:
-        lines = f.readlines()
-        assert len(lines) == 100  # 100 time points
-
-        # Verify the format of each line (time, infected, error)
-        for line in lines:
-            parts = line.strip().split(",")
-            assert len(parts) == 3
-
-            # Verify values are valid numbers
-            time_val = float(parts[0])
-            infected_val = float(parts[1])
-            error_val = float(parts[2])
-
-            assert 0 <= time_val <= 10.0
-            assert 0 <= infected_val <= 1.0
-            assert 0 <= error_val <= 1.0
-
-
-def test_batch_command_with_simple_parameter(runner, temp_batch_file, temp_output_dir, monkeypatch):
-    """Test batch command with the --simple parameter."""
-
-    # Mock run_simulation to avoid real execution
-    def mock_run_simulation(*args, **kwargs):
-        return {
-            "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
-            "I_val": np.array([0.01, 0.04, 0.05, 0.05, 0.04]),
-            "R_val": np.array([0.00, 0.01, 0.05, 0.10, 0.16]),
-            "has_error": True,
-            "S_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "I_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-        }
-
-    # Mock plot_result to avoid showing the plot
-    def mock_plot_result(*args, **kwargs):
-        pass
-
-    # Apply mocks
-    from spkmc.core.simulation import SPKMC
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
-    monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-
-    # Run the command with --simple
-    result = runner.invoke(
-        cli,
-        [
-            "--simple",
-            "batch",
-            temp_batch_file,
-            "--output-dir",
-            temp_output_dir,
-            "--no-plot",  # Avoid trying to show plots
-        ],
-    )
-
-    # Verify the result - with mocked run_simulation, the command should complete
-    # successfully. File creation tests require non-mocked execution.
-    assert result.exit_code == 0
-    assert "Simplified CSV output mode enabled" in result.output
-    assert "Loaded 2 scenarios for execution" in result.output
-    assert "Execution completed" in result.output
-
-
-def test_simple_csv_format(runner, temp_output_file, monkeypatch):
-    """Test that the simplified CSV contains 3 columns: time, infected, error."""
-
-    # Mock run_simulation to avoid real execution
-    def mock_run_simulation(*args, **kwargs):
-        return {
-            "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
-            "I_val": np.array([0.01, 0.04, 0.05, 0.05, 0.04]),
-            "R_val": np.array([0.00, 0.01, 0.05, 0.10, 0.16]),
-            "has_error": True,
-            "S_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "I_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-        }
-
-    # Mock plot_result to avoid showing the plot
-    def mock_plot_result(*args, **kwargs):
-        pass
-
-    # Apply mocks
-    from spkmc.core.simulation import SPKMC
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
-    monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-
-    # Run the command with --simple
-    result = runner.invoke(
-        cli,
-        [
-            "--simple",
-            "run",
-            "--output",
-            temp_output_file,
-            "--no-plot",  # Avoid trying to show plots
-        ],
-    )
-
-    # Verify the result
-    assert result.exit_code == 0
-
-    # Verify the simplified CSV file was created
-    csv_path = temp_output_file.replace(".json", "_simple.csv")
-    assert os.path.exists(csv_path)
-
-    # Read the CSV file and verify its contents
-    with open(csv_path, "r") as f:
-        lines = f.readlines()
-
-        # Verify there is at least one line
-        assert len(lines) > 0
-
-        # Verify each line has exactly 3 columns (time, infected, error)
-        for line in lines:
-            parts = line.strip().split(",")
-            assert len(parts) == 3
-
-            # Verify values are valid numbers
-            time_val = float(parts[0])
-            infected_val = float(parts[1])
-            error_val = float(parts[2])
-
-            # Verify values are within expected ranges
-            assert 0 <= time_val <= 10.0  # time between 0 and 10
-            assert 0 <= infected_val <= 1.0  # infected between 0 and 1
-            assert 0 <= error_val <= 1.0  # error between 0 and 1
-
-
-def test_simple_parameter_after_command(runner, temp_output_file, monkeypatch):
-    """Test that --simple works when used after the command."""
-
-    # Mock run_simulation to avoid real execution
-    def mock_run_simulation(*args, **kwargs):
-        # Create arrays with the same size as time_steps (100 points)
-        size = 100
-        s_vals = np.ones(size) * 0.99
-        i_vals = np.ones(size) * 0.01
-        r_vals = np.zeros(size)
-        s_err = np.ones(size) * 0.001
-        i_err = np.ones(size) * 0.001
-        r_err = np.ones(size) * 0.001
-
-        # Modify some values to simulate dynamics
-        for idx in range(1, size):
-            factor = min(idx / 20, 1.0)
-            s_vals[idx] = max(0.8, 0.99 - 0.19 * factor)
-            i_vals[idx] = (
-                min(0.05, 0.01 + 0.04 * factor)
-                if idx < 50
-                else max(0.01, 0.05 - 0.01 * (idx - 50) / 50)
-            )
-            r_vals[idx] = min(0.16, 0.0 + 0.16 * factor)
-
-        return {
-            "S_val": s_vals,
-            "I_val": i_vals,
-            "R_val": r_vals,
-            "has_error": True,
-            "S_err": s_err,
-            "I_err": i_err,
-            "R_err": r_err,
-        }
-
-    # Mock plot_result to avoid showing the plot
-    def mock_plot_result(*args, **kwargs):
-        pass
-
-    # Apply mocks
-    from spkmc.core.simulation import SPKMC
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
-    monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-
-    # Run the command with --simple after the command
-    result = runner.invoke(
-        cli,
-        ["run", "--output", temp_output_file, "--no-plot", "--simple"],  # Parameter after command
-    )
-
-    # Verify the result
-    assert result.exit_code == 0
-    assert "Simulation completed successfully" in result.output
-    # Simple mode outputs \"Simplified results saved to CSV\" when saving
-    assert "simplified" in result.output.lower() or "simple" in result.output.lower()
-
-    # Verify the simplified CSV file was created
-    csv_path = temp_output_file.replace(".json", "_simple.csv")
-    assert os.path.exists(csv_path)
-
-    # Verify the simplified CSV file content
-    with open(csv_path, "r") as f:
-        lines = f.readlines()
-        assert len(lines) == 100  # 100 time points
-
-        # Verify the format of each line (time, infected, error)
-        for line in lines:
-            parts = line.strip().split(",")
-            assert len(parts) == 3
-
-            # Verify values are valid numbers
-            time_val = float(parts[0])
-            infected_val = float(parts[1])
-            error_val = float(parts[2])
-
-            # Verify values are within expected ranges
-            assert 0 <= time_val <= 10.0
-            assert 0 <= infected_val <= 1.0
-            assert 0 <= error_val <= 1.0
-
-
-def test_batch_command_with_simple_parameter_after_command(
-    runner, temp_batch_file, temp_output_dir, monkeypatch
+def test_experiments_command_fails_with_missing_params(
+    runner, temp_experiment_file_missing_params, temp_output_dir
 ):
-    """Test batch command with --simple after the command."""
-
-    # Mock run_simulation to avoid real execution
-    def mock_run_simulation(*args, **kwargs):
-        return {
-            "S_val": np.array([0.99, 0.95, 0.90, 0.85, 0.80]),
-            "I_val": np.array([0.01, 0.04, 0.05, 0.05, 0.04]),
-            "R_val": np.array([0.00, 0.01, 0.05, 0.10, 0.16]),
-            "has_error": True,
-            "S_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "I_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-            "R_err": np.array([0.001, 0.002, 0.003, 0.004, 0.005]),
-        }
-
-    # Mock plot_result to avoid showing the plot
-    def mock_plot_result(*args, **kwargs):
-        pass
-
-    # Apply mocks
-    from spkmc.core.simulation import SPKMC
-    from spkmc.visualization.plots import Visualizer
-
-    monkeypatch.setattr(SPKMC, "run_simulation", mock_run_simulation)
-    monkeypatch.setattr(Visualizer, "plot_result", mock_plot_result)
-
-    # Run the command with --simple after the command
+    """Test experiment command fails with validation error for missing parameters."""
     result = runner.invoke(
         cli,
         [
-            "batch",
-            temp_batch_file,
+            "experiments",
+            temp_experiment_file_missing_params,
             "--output-dir",
             temp_output_dir,
             "--no-plot",
-            "--simple",  # Parameter after the command
         ],
     )
 
-    # Verify the result - with mocked run_simulation, the command should complete
-    # successfully. File creation tests require non-mocked execution.
+    # Should abort with missing parameter error
+    assert result.exit_code == 1
+    # CLI shows "Missing required parameter" message
+    assert "Missing required parameter" in result.output
+
+
+# ============================================================
+# Analyze command tests
+# ============================================================
+
+
+def test_analyze_command_help(runner):
+    """Test the help text for the analyze command."""
+    result = runner.invoke(cli, ["analyze", "--help"])
     assert result.exit_code == 0
-    assert "Loaded 2 scenarios for execution" in result.output
-    assert "Execution completed" in result.output
+    assert "Generate AI-powered analysis" in result.output
+    assert "[PATHS]" in result.output
+    assert "--all" in result.output
+    assert "--model" in result.output
+    assert "--force" in result.output
+
+
+def test_analyze_command_no_api_key(runner, temp_result_file, monkeypatch):
+    """Test analyze command fails gracefully without API key."""
+    # Ensure no API key is set
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    result = runner.invoke(cli, ["analyze", temp_result_file])
+
+    assert result.exit_code == 1
+    assert "OPENAI_API_KEY" in result.output
+
+
+def test_analyze_command_single_file(runner, temp_result_file, monkeypatch):
+    """Test analyze command with a single file."""
+    # Mock the API key
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    # Mock the AIAnalyzer at the source module level
+    analyze_calls = []
+
+    class MockAIAnalyzer:
+        def __init__(self, model="gpt-4o-mini"):
+            self.model = model
+
+        @staticmethod
+        def is_available():
+            return True
+
+        def analyze_experiment(self, experiment_name, experiment_description, results, output_dir):
+            analyze_calls.append(
+                {
+                    "experiment_name": experiment_name,
+                    "results_count": len(results),
+                    "output_dir": str(output_dir),
+                }
+            )
+            return output_dir / "analysis.md"
+
+    import spkmc.analysis.ai_analyzer
+
+    monkeypatch.setattr(spkmc.analysis.ai_analyzer, "AIAnalyzer", MockAIAnalyzer)
+
+    result = runner.invoke(cli, ["analyze", temp_result_file])
+
+    assert result.exit_code == 0
+    assert len(analyze_calls) == 1
+    assert analyze_calls[0]["results_count"] == 1
+
+
+def test_analyze_command_multiple_files(runner, monkeypatch):
+    """Test analyze command with multiple files."""
+    # Create multiple temp files
+    temp_files = []
+    for i in range(3):
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        result_data = {
+            "S_val": [0.99, 0.95, 0.90],
+            "I_val": [0.01, 0.04, 0.05],
+            "R_val": [0.00, 0.01, 0.05],
+            "time": [0.0, 2.5, 5.0],
+            "metadata": {"network": "er", "distribution": "gamma", "N": 100, "scenario": i},
+        }
+        with open(path, "w") as f:
+            json.dump(result_data, f)
+        temp_files.append(path)
+
+    try:
+        # Mock the API key
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+        # Mock the AIAnalyzer at the source module level
+        analyze_calls = []
+
+        class MockAIAnalyzer:
+            def __init__(self, model="gpt-4o-mini"):
+                self.model = model
+
+            @staticmethod
+            def is_available():
+                return True
+
+            def analyze_experiment(
+                self, experiment_name, experiment_description, results, output_dir
+            ):
+                analyze_calls.append({"experiment_name": experiment_name})
+                return output_dir / "analysis.md"
+
+        import spkmc.analysis.ai_analyzer
+
+        monkeypatch.setattr(spkmc.analysis.ai_analyzer, "AIAnalyzer", MockAIAnalyzer)
+
+        result = runner.invoke(cli, ["analyze", *temp_files])
+
+        assert result.exit_code == 0
+        # Should have called analyze 3 times (once per file)
+        assert len(analyze_calls) == 3
+        # Check progress messages
+        assert "Analyzing [1/3]" in result.output
+        assert "Analyzing [2/3]" in result.output
+        assert "Analyzing [3/3]" in result.output
+    finally:
+        # Cleanup
+        for path in temp_files:
+            if os.path.exists(path):
+                os.remove(path)
+
+
+def test_analyze_command_output_ignored_for_multiple_files(runner, monkeypatch):
+    """Test that --output is ignored when multiple paths are provided."""
+    # Create two temp files
+    temp_files = []
+    for _ in range(2):
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        result_data = {
+            "S_val": [0.99],
+            "I_val": [0.01],
+            "R_val": [0.00],
+            "time": [0.0],
+            "metadata": {"network": "er"},
+        }
+        with open(path, "w") as f:
+            json.dump(result_data, f)
+        temp_files.append(path)
+
+    try:
+        # Mock the API key
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+        class MockAIAnalyzer:
+            def __init__(self, model="gpt-4o-mini"):
+                pass
+
+            @staticmethod
+            def is_available():
+                return True
+
+            def analyze_experiment(
+                self, experiment_name, experiment_description, results, output_dir
+            ):
+                return output_dir / "analysis.md"
+
+        import spkmc.analysis.ai_analyzer
+
+        monkeypatch.setattr(spkmc.analysis.ai_analyzer, "AIAnalyzer", MockAIAnalyzer)
+
+        result = runner.invoke(cli, ["analyze", *temp_files, "-o", "custom.md"])
+
+        assert result.exit_code == 0
+        assert "--output is ignored" in result.output
+    finally:
+        for path in temp_files:
+            if os.path.exists(path):
+                os.remove(path)
+
+
+def test_analyze_command_no_paths_shows_help(runner, monkeypatch):
+    """Test that analyze command without paths shows helpful error."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class MockAIAnalyzer:
+        def __init__(self, model="gpt-4o-mini"):
+            pass
+
+        @staticmethod
+        def is_available():
+            return True
+
+    import spkmc.analysis.ai_analyzer
+
+    monkeypatch.setattr(spkmc.analysis.ai_analyzer, "AIAnalyzer", MockAIAnalyzer)
+
+    result = runner.invoke(cli, ["analyze"])
+
+    assert result.exit_code == 1
+    assert "Specify one or more paths" in result.output
+
+
+def test_global_analyze_flag_with_run_no_output(runner, monkeypatch):
+    """Test that --analyze flag attempts analysis even without explicit output.
+
+    With the unified ExecutionEngine, results are always saved to a default location,
+    so --analyze will attempt to generate analysis. The analysis will fail with an
+    invalid API key, but the simulation should complete successfully.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    # Mock heavy imports at the source module level
+    class MockSPKMC:
+        def __init__(self, dist, use_gpu=False):
+            pass
+
+        def run_simulation(self, *args, **kwargs):
+            return {
+                "S_val": np.array([0.99, 0.95]),
+                "I_val": np.array([0.01, 0.04]),
+                "R_val": np.array([0.00, 0.01]),
+                "has_error": False,
+            }
+
+    class MockDistribution:
+        pass
+
+    def mock_create_distribution(*args, **kwargs):
+        return MockDistribution()
+
+    import spkmc.core.distributions
+    import spkmc.core.simulation
+    import spkmc.utils.gpu_utils
+
+    monkeypatch.setattr(spkmc.core.simulation, "SPKMC", MockSPKMC)
+    monkeypatch.setattr(spkmc.core.distributions, "create_distribution", mock_create_distribution)
+    monkeypatch.setattr(spkmc.utils.gpu_utils, "check_gpu_suggestion", lambda: None)
+
+    def mock_plot(*args, **kwargs):
+        pass
+
+    import spkmc.visualization.plots
+
+    monkeypatch.setattr(spkmc.visualization.plots.Visualizer, "plot_result", mock_plot)
+
+    result = runner.invoke(
+        cli,
+        [
+            "--analyze",
+            "run",
+            "-n",
+            "er",
+            "-d",
+            "gamma",
+            "--nodes",
+            "10",
+            "--samples",
+            "2",
+            "--initial-perc",
+            "0.1",  # Ensure at least 1 infected node (10 * 0.1 = 1)
+            "--no-plot",
+        ],
+    )
+
+    # Simulation should complete successfully
+    assert result.exit_code == 0
+    # Results are now always saved (unified ExecutionEngine behavior)
+    # Analysis is attempted but fails with invalid API key
+    assert (
+        "Simulation completed successfully" in result.output or "Results saved to" in result.output
+    )
+    # Analysis is attempted (may show "Generating AI analysis" or error)
+    assert "AI analysis" in result.output or "analysis" in result.output.lower()
+
+
+def test_global_analyze_flag_with_run_and_output(runner, monkeypatch, tmp_path):
+    """Test that --analyze flag runs analysis when output is provided."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    output_file = tmp_path / "result.json"
+
+    # Mock heavy imports at the source module level
+    class MockSPKMC:
+        def __init__(self, dist, use_gpu=False):
+            pass
+
+        def run_simulation(self, *args, **kwargs):
+            return {
+                "S_val": np.array([0.99, 0.95]),
+                "I_val": np.array([0.01, 0.04]),
+                "R_val": np.array([0.00, 0.01]),
+                "has_error": False,
+            }
+
+    class MockDistribution:
+        pass
+
+    def mock_create_distribution(*args, **kwargs):
+        return MockDistribution()
+
+    analyze_called = []
+
+    class MockAIAnalyzer:
+        def __init__(self, model="gpt-4o-mini"):
+            pass
+
+        @staticmethod
+        def is_available():
+            return True
+
+        def analyze_experiment(self, experiment_name, experiment_description, results, results_dir):
+            analyze_called.append(True)
+            return results_dir / "analysis.md"
+
+    import spkmc.analysis.ai_analyzer
+    import spkmc.core.distributions
+    import spkmc.core.simulation
+    import spkmc.utils.gpu_utils
+
+    monkeypatch.setattr(spkmc.core.simulation, "SPKMC", MockSPKMC)
+    monkeypatch.setattr(spkmc.core.distributions, "create_distribution", mock_create_distribution)
+    monkeypatch.setattr(spkmc.utils.gpu_utils, "check_gpu_suggestion", lambda: None)
+    monkeypatch.setattr(spkmc.analysis.ai_analyzer, "AIAnalyzer", MockAIAnalyzer)
+
+    def mock_plot(*args, **kwargs):
+        pass
+
+    import spkmc.visualization.plots
+
+    monkeypatch.setattr(spkmc.visualization.plots.Visualizer, "plot_result", mock_plot)
+
+    result = runner.invoke(
+        cli,
+        [
+            "--analyze",
+            "run",
+            "-n",
+            "er",
+            "-d",
+            "gamma",
+            "--nodes",
+            "10",
+            "--samples",
+            "2",
+            "--initial-perc",
+            "0.1",  # Ensure at least 1 infected node (10 * 0.1 = 1)
+            "--no-plot",
+            "-o",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Generating AI analysis" in result.output
+    assert len(analyze_called) == 1

@@ -26,6 +26,7 @@ import numpy as np
 _GPU_AVAILABLE: Optional[bool] = None
 _GPU_CHECK_ERROR: Optional[str] = None
 _MEMORY_POOL_CONFIGURED: bool = False
+_GPU_SUGGESTION_SHOWN: bool = False
 
 
 def is_gpu_available() -> bool:
@@ -70,10 +71,81 @@ def get_gpu_check_error() -> Optional[str]:
 
 def reset_gpu_cache() -> None:
     """Reset the GPU availability cache (useful for testing)."""
-    global _GPU_AVAILABLE, _GPU_CHECK_ERROR, _MEMORY_POOL_CONFIGURED
+    global _GPU_AVAILABLE, _GPU_CHECK_ERROR, _MEMORY_POOL_CONFIGURED, _GPU_SUGGESTION_SHOWN
     _GPU_AVAILABLE = None
     _GPU_CHECK_ERROR = None
     _MEMORY_POOL_CONFIGURED = False
+    _GPU_SUGGESTION_SHOWN = False
+
+
+def _has_nvidia_gpu() -> bool:
+    """
+    Check if an NVIDIA GPU is physically present on the system.
+
+    This checks for hardware presence, NOT whether CUDA packages are installed.
+    Uses nvidia-smi command which is typically installed with NVIDIA drivers.
+
+    Returns:
+        True if an NVIDIA GPU is detected, False otherwise
+    """
+    import shutil
+    import subprocess
+
+    # Check if nvidia-smi is available
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        # On Linux, also check for NVIDIA device files
+        if sys.platform.startswith("linux"):
+            import glob
+
+            nvidia_devices = glob.glob("/dev/nvidia*")
+            return len(nvidia_devices) > 0
+        return False
+
+    # Try running nvidia-smi to verify GPU is accessible
+    try:
+        result = subprocess.run(
+            [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0 and len(result.stdout.strip()) > 0
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+        return False
+
+
+def check_gpu_suggestion() -> None:
+    """
+    Check if GPU packages should be suggested to the user.
+
+    If an NVIDIA GPU is detected but GPU packages are not installed,
+    prints a helpful message suggesting GPU installation for better
+    performance on large networks. Only shows the message once per session.
+    """
+    global _GPU_SUGGESTION_SHOWN
+
+    # Only show the suggestion once per session
+    if _GPU_SUGGESTION_SHOWN:
+        return
+
+    # Skip if GPU packages are already available
+    if is_gpu_available():
+        return
+
+    # Check if user has NVIDIA hardware
+    if _has_nvidia_gpu():
+        _GPU_SUGGESTION_SHOWN = True
+        print(
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  NVIDIA GPU detected but GPU acceleration packages are not installed.\n"
+            "  For significantly faster simulations on large networks (10,000+ nodes),\n"
+            "  install GPU support with:\n"
+            "\n"
+            "      pip install spkmc[gpu]\n"
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
 
 
 def configure_gpu_memory_pool(fraction: float = 0.8) -> bool:

@@ -75,13 +75,16 @@ def temp_dir():
 
 def test_validate_percentage_valid(ctx, param):
     """Test percentage validation with valid values."""
-    assert validate_percentage(ctx, param, 0.0) == 0.0
+    assert validate_percentage(ctx, param, 0.01) == 0.01
     assert validate_percentage(ctx, param, 0.5) == 0.5
     assert validate_percentage(ctx, param, 1.0) == 1.0
 
 
 def test_validate_percentage_invalid(ctx, param):
     """Test percentage validation with invalid values."""
+    with pytest.raises(click.BadParameter):
+        validate_percentage(ctx, param, 0.0)  # 0 is invalid (must be > 0)
+
     with pytest.raises(click.BadParameter):
         validate_percentage(ctx, param, -0.1)
 
@@ -128,7 +131,7 @@ def test_validate_network_type_valid(ctx, param):
     """Test network type validation with valid values."""
     assert validate_network_type(ctx, param, "er") == "er"
     assert validate_network_type(ctx, param, "ER") == "er"
-    assert validate_network_type(ctx, param, "cn") == "cn"
+    assert validate_network_type(ctx, param, "sf") == "sf"
     assert validate_network_type(ctx, param, "cg") == "cg"
 
 
@@ -139,6 +142,12 @@ def test_validate_network_type_invalid(ctx, param):
 
     with pytest.raises(click.BadParameter):
         validate_network_type(ctx, param, "")
+
+
+def test_validate_network_type_cn_invalid(ctx, param):
+    """Test that 'cn' network type is now rejected as invalid."""
+    with pytest.raises(click.BadParameter):
+        validate_network_type(ctx, param, "cn")
 
 
 def test_validate_distribution_type_valid(ctx, param):
@@ -203,9 +212,8 @@ def test_validate_output_file_valid(ctx, param, temp_dir):
     output_path = os.path.join(temp_dir, "output.txt")
     assert validate_output_file(ctx, param, output_path) == output_path
 
-    # Verify the file was created and remove it
-    assert os.path.exists(output_path)
-    os.remove(output_path)
+    # Verify the file was NOT created (only directory writability is checked)
+    assert not os.path.exists(output_path)
 
 
 def test_validate_output_file_none(ctx, param):

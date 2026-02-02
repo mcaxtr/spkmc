@@ -136,7 +136,7 @@ def extract_scenario_metrics(result: Dict[str, Any]) -> ScenarioMetrics:
 
     return ScenarioMetrics(
         label=metadata.get("scenario_label", metadata.get("label", "Unknown")),
-        network_type=metadata.get("network_type", "unknown"),
+        network_type=metadata.get("network", "unknown"),
         distribution=metadata.get("distribution", "unknown"),
         nodes=metadata.get("N", 0),
         k_avg=metadata.get("k_avg"),
