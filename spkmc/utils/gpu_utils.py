@@ -720,8 +720,11 @@ try:
     # Mark GPU functions as available
     _GPU_FUNCTIONS_AVAILABLE = True
 
-except ImportError:
-    # Stub implementations when GPU dependencies are not available
+except Exception:
+    # Stub implementations when GPU dependencies are not available.
+    # We catch Exception (not just ImportError) because GPU libraries may fail
+    # during initialization with various errors (e.g., NVML version mismatch,
+    # missing CUDA drivers, GPU inaccessible) that are not ImportError.
     _GPU_FUNCTIONS_AVAILABLE = False
 
     def get_dist_gpu(
