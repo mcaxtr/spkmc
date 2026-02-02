@@ -1,8 +1,8 @@
 {
   "name": "Power-Law Exponent Effect",
-  "description": "Does the epidemic final size depend on the power-law exponent in Complex Networks?",
+  "description": "Does the epidemic final size depend on the power-law exponent in Scale-Free Networks?",
   "plot": {
-    "title": "Effect of Power-Law Exponent on Epidemic Dynamics (Complex Networks)",
+    "title": "Effect of Power-Law Exponent on Epidemic Dynamics (Scale-Free Networks)",
     "xlabel": "Time",
     "ylabel": "Proportion of Individuals",
     "legend_position": "upper right",
@@ -25,8 +25,8 @@
   "scenarios": [
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 2.0,
       "shape": 2.0,
@@ -41,8 +41,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 2.25,
       "shape": 2.0,
@@ -57,8 +57,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 2.5,
       "shape": 2.0,
@@ -73,8 +73,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 2.75,
       "shape": 2.0,
@@ -89,8 +89,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 3.0,
       "shape": 2.0,
@@ -105,8 +105,8 @@
     },
     {
       "distribution": "gamma",
-      "network_type": "cn",
-      "network_size": 10000,
+      "network": "sf",
+      "nodes": 10000,
       "k_avg": 10,
       "exponent": 3.5,
       "shape": 2.0,
