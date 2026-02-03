@@ -9,7 +9,6 @@ These paths are defined in Scenario.EXPERIMENTS_BASE and Scenario.RUNS_BASE.
 """
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -29,7 +28,8 @@ class TestExperimentResultsDir:
             scenarios=[{"label": "test"}],
         )
         # Results are always stored in Scenario.EXPERIMENTS_BASE
-        assert str(experiment.results_dir) == f"{Scenario.EXPERIMENTS_BASE}/test_experiment"
+        expected = Path(Scenario.EXPERIMENTS_BASE) / "test_experiment"
+        assert experiment.results_dir == expected
 
     def test_has_results_checks_standard_directory(self, tmp_path, monkeypatch):
         """has_results should check the standard directory (Scenario.EXPERIMENTS_BASE)."""

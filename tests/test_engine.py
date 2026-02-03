@@ -8,9 +8,8 @@ not silently swallowed.
 import numpy as np
 import pytest
 
-from spkmc.core.engine import ExecutionContext, ExecutionEngine
+from spkmc.core.engine import ExecutionEngine
 from spkmc.models.result import SimulationResult
-from spkmc.models.scenario import Scenario
 
 
 class TestExecutionEngineErrorReporting:

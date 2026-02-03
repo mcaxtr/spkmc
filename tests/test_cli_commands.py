@@ -166,7 +166,6 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
 
 def test_plot_command_skips_incompatible_step_counts(runner, tmp_path, monkeypatch):
     """Test plot command skips files with incompatible step counts."""
-    from spkmc.io.data_manager import DataManager
     from spkmc.visualization.plots import Visualizer
 
     # Create files with different step counts
@@ -207,7 +206,6 @@ def test_plot_command_skips_incompatible_step_counts(runner, tmp_path, monkeypat
 
 def test_plot_command_skips_inconsistent_arrays(runner, tmp_path, monkeypatch):
     """Test plot command skips files with inconsistent internal array lengths."""
-    from spkmc.io.data_manager import DataManager
     from spkmc.visualization.plots import Visualizer
 
     # Create files - one valid, one with inconsistent arrays
