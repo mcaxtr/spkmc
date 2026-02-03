@@ -120,6 +120,10 @@ def validate_exponent(ctx: click.Context, param: click.Parameter, value: float) 
     """
     Validator to ensure the power-law exponent is valid.
 
+    For scale-free networks, the power-law exponent (gamma) controls the degree
+    distribution P(k) ~ k^(-gamma). Values less than 2 cause the mean degree to
+    diverge, which can lead to network generation issues.
+
     Args:
         ctx: Click context
         param: Parameter being validated
@@ -133,6 +137,15 @@ def validate_exponent(ctx: click.Context, param: click.Parameter, value: float) 
     """
     if value <= 1:
         raise click.BadParameter("The power-law exponent must be greater than 1.")
+    if value < 2:
+        click.echo(
+            click.style(
+                f"Warning: Exponent {value} < 2 may cause network generation issues. "
+                "Values >= 2 are recommended for stable scale-free networks.",
+                fg="yellow",
+            ),
+            err=True,
+        )
     return value
 
 

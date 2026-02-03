@@ -1767,13 +1767,15 @@ def plot(
             reference_steps = len(results_data[0]["time"])
             compatible_results = []
             compatible_labels = []
+            compatible_indices = []  # Track which original indices are kept
             skipped_count = 0
 
-            for result, label in zip(results_data, file_labels):
+            for idx, (result, label) in enumerate(zip(results_data, file_labels)):
                 steps = len(result["time"])
                 if steps == reference_steps:
                     compatible_results.append(result)
                     compatible_labels.append(label)
+                    compatible_indices.append(idx)
                 else:
                     log_warning(
                         f"Skipping '{label}': incompatible step count "
@@ -1796,10 +1798,15 @@ def plot(
 
             # Use custom labels if provided, otherwise use file names
             if labels:
-                # Fill in missing labels with file names
-                final_labels = list(labels)
-                if len(final_labels) < len(file_labels):
-                    final_labels.extend(file_labels[len(final_labels) :])
+                # Filter custom labels to only include compatible files
+                labels_list = list(labels)
+                final_labels = []
+                for idx in compatible_indices:
+                    if idx < len(labels_list):
+                        final_labels.append(labels_list[idx])
+                    else:
+                        # Fall back to file label if custom label wasn't provided for this index
+                        final_labels.append(file_labels[compatible_indices.index(idx)])
             else:
                 final_labels = file_labels
 
@@ -2285,6 +2292,12 @@ def _analyze_all_experiments(
     help="Enable debug mode with detailed Numba logs",
 )
 @click.option("--clear-cache", is_flag=True, default=False, help="Clear Numba cache before running")
+@click.option(
+    "--analyze",
+    is_flag=True,
+    default=False,
+    help="Run AI analysis after execution (requires OPENAI_API_KEY)",
+)
 @click.pass_context
 def experiment(
     ctx: click.Context,
@@ -2295,6 +2308,7 @@ def experiment(
     export: str,
     debug: bool,
     clear_cache: bool,
+    analyze: bool,
 ) -> None:
     """
     Run or create experiments from the experiments directory.
@@ -2317,7 +2331,12 @@ def experiment(
 
     cli_context = get_cli_context()
     verbose = cli_context.verbose
-    analyze = cli_context.analyze
+    # Merge global --analyze flag with command-specific --analyze flag
+    analyze_enabled = cli_context.analyze or analyze
+    if analyze_enabled:
+        from spkmc.cli.utils import require_analyze_api_key
+
+        require_analyze_api_key()
 
     # Configure debug mode
     if debug:
@@ -2429,7 +2448,7 @@ def experiment(
                 verbose=verbose,
                 no_plot=no_plot,
                 force_rerun=force_rerun,
-                run_analysis=analyze,
+                run_analysis=analyze_enabled,
                 export_format=export,
             )
 
@@ -2465,7 +2484,7 @@ def experiment(
             log_success(f"All {experiments_completed} experiments completed.")
 
             # Generate AI collection summary for --all mode (only when --analyze is enabled)
-            if analyze:
+            if analyze_enabled:
                 from spkmc.analysis import AIAnalyzer, extract_experiment_metrics
 
                 if AIAnalyzer.is_available():
@@ -2502,6 +2521,43 @@ def experiment(
                         except Exception:
                             # AI analysis is optional - fail silently
                             pass
+
+                    # Generate cross-experiment analysis from individual analysis.md files
+                    experiment_analyses: List[Dict[str, str]] = []
+                    for exp in experiments_to_run:
+                        if exp.has_results:
+                            analysis_path = exp.results_dir / "analysis.md"
+                            if analysis_path.exists():
+                                try:
+                                    with open(analysis_path, "r", encoding="utf-8") as f:
+                                        analysis_content = f.read()
+                                    experiment_analyses.append(
+                                        {
+                                            "name": exp.name,
+                                            "analysis": analysis_content,
+                                        }
+                                    )
+                                except Exception:
+                                    continue
+
+                    if experiment_analyses:
+                        try:
+                            analyzer = AIAnalyzer()
+                            cross_analysis_path = Path("cross_experiment_analysis.md")
+                            result = analyzer.generate_cross_experiment_analysis(
+                                experiment_analyses,
+                                cross_analysis_path,
+                                force=override,
+                            )
+                            if result:
+                                log_success(f"Cross-experiment analysis saved to: {result}")
+                            elif cross_analysis_path.exists():
+                                log_info(
+                                    "Cross-experiment analysis already exists. "
+                                    "Use --override to regenerate."
+                                )
+                        except Exception as e:
+                            log_warning(f"Failed to generate cross-experiment analysis: {e}")
 
         return
 
@@ -2575,7 +2631,7 @@ def experiment(
         verbose=verbose,
         no_plot=no_plot,
         force_rerun=force_rerun,
-        run_analysis=analyze,
+        run_analysis=analyze_enabled,
         export_format=export,
     )
 

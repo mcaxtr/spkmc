@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
-
 import numpy as np
 
 from spkmc.models import Scenario, SimulationResult
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from spkmc.utils.hardware import HardwareInfo, ParallelizationStrategy

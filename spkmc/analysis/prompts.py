@@ -5,7 +5,7 @@ This module contains the system prompt and functions to build user prompts
 for generating academic-style analysis of epidemic simulation results.
 """
 
-from typing import List
+from typing import Dict, List
 
 from spkmc.analysis.metrics import ExperimentMetrics, ScenarioMetrics
 
@@ -153,5 +153,70 @@ Provide a 2-3 paragraph synthesis that:
 3. Suggests implications for understanding real-world epidemic spread
 
 Keep the summary focused and accessible while maintaining scientific rigor."""
+
+    return prompt
+
+
+CROSS_EXPERIMENT_SYSTEM_PROMPT = """You are a computational epidemiologist synthesizing findings \
+from multiple epidemic modeling experiments. You are given the individual AI-generated analyses \
+for each experiment. Your task is to create a comprehensive meta-analysis that identifies \
+overarching patterns and unified conclusions.
+
+Writing Style:
+- Use formal academic/scientific language
+- Be precise and quantitative - cite specific findings from the individual analyses
+- Use proper epidemiological terminology
+- Identify patterns that span multiple experiments
+- Highlight convergent and divergent findings across experiments
+
+Structure your meta-analysis with these sections:
+1. **Executive Summary** - 2-3 sentence overview of the key cross-cutting findings
+2. **Cross-Experiment Patterns** - Common themes and consistent findings across experiments
+3. **Notable Findings** - Unique or surprising results from individual experiments
+4. **Unified Conclusions** - What the collection of experiments tells us as a whole
+5. **Implications** - Practical implications for understanding epidemic dynamics on networks
+
+Keep the analysis focused and insightful (approximately 800-1200 words)."""
+
+
+def build_cross_experiment_prompt(experiment_analyses: List[Dict[str, str]]) -> str:
+    """
+    Build prompt for cross-experiment meta-analysis from individual analysis.md contents.
+
+    This creates a synthesis prompt that takes the text of individual experiment
+    analyses and asks for a meta-analysis identifying overarching patterns.
+
+    Args:
+        experiment_analyses: List of {"name": str, "analysis": str} dictionaries
+            where "analysis" is the content of each experiment's analysis.md file
+
+    Returns:
+        Formatted prompt string for the LLM
+    """
+    prompt = """Synthesize the following individual experiment analyses into a comprehensive \
+meta-analysis. Identify overarching patterns, common themes, and provide unified conclusions.
+
+## Individual Experiment Analyses
+
+"""
+    for exp in experiment_analyses:
+        prompt += f"""### {exp["name"]}
+
+{exp["analysis"]}
+
+---
+
+"""
+
+    prompt += """## Task
+
+Based on the individual analyses above, provide a meta-analysis that:
+1. Identifies patterns that appear consistently across multiple experiments
+2. Highlights any contradictions or tensions between experiment findings
+3. Synthesizes the individual conclusions into unified insights about epidemic dynamics
+4. Notes any methodological observations about the simulation approach
+
+Focus on what we learn from the collection of experiments as a whole, beyond what any \
+single experiment could tell us."""
 
     return prompt

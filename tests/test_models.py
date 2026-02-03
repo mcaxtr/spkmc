@@ -151,7 +151,9 @@ class TestExperimentResultsDir:
         """results_dir should use Scenario.EXPERIMENTS_BASE when no custom base."""
         # This is the exact code path that broke
         results_dir = minimal_experiment.results_dir
-        assert str(results_dir).startswith("data/experiments")
+        # Use Path for cross-platform comparison
+        expected_base = Path(Scenario.EXPERIMENTS_BASE)
+        assert results_dir.parent == expected_base
 
     def test_results_dir_always_uses_experiments_base(self):
         """results_dir should always use Scenario.EXPERIMENTS_BASE."""
