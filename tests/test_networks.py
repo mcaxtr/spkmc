@@ -133,6 +133,42 @@ def test_create_network_invalid():
         NetworkFactory.create_network("invalid_type")
 
 
+def test_create_random_regular_network_with_float_k_avg():
+    """Test creating a random regular network with float k_avg.
+
+    Regression test: k_avg may come from JSON/Pydantic as float (e.g., 10.0)
+    but np.repeat requires an integer. This test ensures RRN handles floats.
+    """
+    N = 100
+    k_avg = 10.0  # Float, as it would come from a Scenario model
+
+    # This should not raise "can't multiply sequence by non-int of type 'float'"
+    G = NetworkFactory.create_random_regular_network(N, k_avg)
+
+    assert isinstance(G, nx.DiGraph)
+    assert G.number_of_nodes() == N
+
+    # Each node should have out_degree == int(k_avg)
+    out_degrees = dict(G.out_degree()).values()
+    assert all(d == 10 for d in out_degrees)
+
+
+def test_create_random_regular_edges_with_float_k_avg():
+    """Test creating random regular edges with float k_avg.
+
+    Regression test for the edge-list generator that bypasses NetworkX.
+    """
+    N = 100
+    k_avg = 10.0  # Float
+
+    # This should not raise "can't multiply sequence by non-int of type 'float'"
+    n_nodes, edges = NetworkFactory.create_random_regular_edges(N, k_avg)
+
+    assert n_nodes == N
+    assert edges.shape[1] == 2  # Each row is (src, dst)
+    assert edges.shape[0] > 0  # Has edges
+
+
 def test_get_network_info():
     """Test get_network_info."""
     # Erdos-Renyi network

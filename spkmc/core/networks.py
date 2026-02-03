@@ -394,7 +394,7 @@ class NetworkFactory:
         return N, edges
 
     @staticmethod
-    def create_random_regular_edges(N: int, k_avg: int) -> Tuple[int, np.ndarray]:
+    def create_random_regular_edges(N: int, k_avg: float) -> Tuple[int, np.ndarray]:
         """
         Create random regular graph edge list.
 
@@ -406,11 +406,14 @@ class NetworkFactory:
 
         Args:
             N: Number of nodes
-            k_avg: Degree (must be even if N*k_avg is odd)
+            k_avg: Degree (will be converted to int; N*k_avg must be even)
 
         Returns:
             Tuple of (N, edges) where edges is ndarray of shape (E, 2)
         """
+        # Convert k_avg to int (may come from JSON/Pydantic as float)
+        k_avg = int(k_avg)
+
         # Ensure N*k_avg is even (required for regular graph)
         if (N * k_avg) % 2 != 0:
             raise ValueError(f"N*k_avg must be even. Got N={N}, k_avg={k_avg}")
