@@ -7,7 +7,7 @@ used for configuring and executing simulations.
 
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, ClassVar, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -50,8 +50,8 @@ class Scenario(BaseModel):
     This class also provides path generation methods for consistent file storage.
     """
 
-    RUNS_BASE: str = "data/runs"
-    EXPERIMENTS_BASE: str = "data/experiments"
+    RUNS_BASE: ClassVar[str] = "data/runs"
+    EXPERIMENTS_BASE: ClassVar[str] = "data/experiments"
 
     label: str
     network: Literal["er", "sf", "cg", "rrn"]
