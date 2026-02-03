@@ -164,6 +164,91 @@ def test_plot_command_with_file(runner, temp_result_file, monkeypatch):
     assert result.exit_code == 0
 
 
+def test_plot_command_skips_incompatible_step_counts(runner, tmp_path, monkeypatch):
+    """Test plot command skips files with incompatible step counts."""
+    from spkmc.io.data_manager import DataManager
+    from spkmc.visualization.plots import Visualizer
+
+    # Create files with different step counts
+    file1 = tmp_path / "result1.json"
+    file2 = tmp_path / "result2.json"
+
+    result1 = {
+        "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
+        "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
+        "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
+        "time": [0.0, 2.5, 5.0, 7.5, 10.0],
+        "metadata": {"network": "er"},
+    }
+    result2 = {
+        "S_val": [0.99, 0.90, 0.80],  # Different length
+        "I_val": [0.01, 0.05, 0.04],
+        "R_val": [0.00, 0.05, 0.16],
+        "time": [0.0, 5.0, 10.0],
+        "metadata": {"network": "sf"},
+    }
+
+    file1.write_text(json.dumps(result1))
+    file2.write_text(json.dumps(result2))
+
+    # Mock compare_results
+    def mock_compare(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(Visualizer, "compare_results", mock_compare)
+
+    # Run the command
+    result = runner.invoke(cli, ["plot", str(file1), str(file2)])
+
+    # Verify warning about incompatible step count
+    assert "incompatible step count" in result.output.lower()
+    assert "3 vs 5 expected" in result.output
+
+
+def test_plot_command_skips_inconsistent_arrays(runner, tmp_path, monkeypatch):
+    """Test plot command skips files with inconsistent internal array lengths."""
+    from spkmc.io.data_manager import DataManager
+    from spkmc.visualization.plots import Visualizer
+
+    # Create files - one valid, one with inconsistent arrays
+    file1 = tmp_path / "result1.json"
+    file2 = tmp_path / "result2.json"
+
+    result1 = {
+        "S_val": [0.99, 0.95, 0.90, 0.85, 0.80],
+        "I_val": [0.01, 0.04, 0.05, 0.05, 0.04],
+        "R_val": [0.00, 0.01, 0.05, 0.10, 0.16],
+        "time": [0.0, 2.5, 5.0, 7.5, 10.0],
+        "metadata": {"network": "er"},
+    }
+    result2 = {
+        "S_val": [0.99, 0.90],  # Inconsistent with time
+        "I_val": [0.01, 0.05],
+        "R_val": [0.00, 0.05],
+        "time": [0.0, 2.5, 5.0, 7.5, 10.0],  # 5 elements
+        "metadata": {"network": "sf"},
+    }
+
+    file1.write_text(json.dumps(result1))
+    file2.write_text(json.dumps(result2))
+
+    # Mock compare_results and plot_result
+    def mock_compare(*args, **kwargs):
+        pass
+
+    def mock_plot(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(Visualizer, "compare_results", mock_compare)
+    monkeypatch.setattr(Visualizer, "plot_result", mock_plot)
+
+    # Run the command
+    result = runner.invoke(cli, ["plot", str(file1), str(file2)])
+
+    # Verify warning about inconsistent array lengths
+    assert "inconsistent array lengths" in result.output.lower()
+
+
 def test_info_command_list(runner, monkeypatch):
     """Test info command with the --list option."""
     from spkmc.io.data_manager import DataManager
@@ -311,6 +396,10 @@ def test_experiments_command_with_default_params(
     runner, temp_experiment_file, temp_output_dir, monkeypatch
 ):
     """Test experiment command with default parameters."""
+    from spkmc.models.scenario import Scenario
+
+    # Override EXPERIMENTS_BASE to use temp directory for testing
+    monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", temp_output_dir)
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -343,8 +432,6 @@ def test_experiments_command_with_default_params(
         [
             "experiments",
             temp_experiment_file,
-            "--output-dir",
-            temp_output_dir,
             "--no-plot",  # Avoid trying to show plots
         ],
     )
@@ -385,6 +472,10 @@ def test_experiments_command_with_multiple_scenarios(
     runner, temp_experiment_file, temp_output_dir, monkeypatch
 ):
     """Test experiment command with multiple scenarios."""
+    from spkmc.models.scenario import Scenario
+
+    # Override EXPERIMENTS_BASE to use temp directory for testing
+    monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", temp_output_dir)
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -412,8 +503,6 @@ def test_experiments_command_with_multiple_scenarios(
         [
             "experiments",
             temp_experiment_file,
-            "--output-dir",
-            temp_output_dir,
             "--no-plot",  # Avoid trying to show plots
         ],
     )
@@ -429,6 +518,10 @@ def test_experiments_command_respects_output_options(
     runner, temp_experiment_file, temp_output_dir, monkeypatch
 ):
     """Test that experiment command respects output options."""
+    from spkmc.models.scenario import Scenario
+
+    # Override EXPERIMENTS_BASE to use temp directory for testing
+    monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", temp_output_dir)
 
     # Mock run_simulation to avoid real execution
     def mock_run_simulation(*args, **kwargs):
@@ -464,8 +557,6 @@ def test_experiments_command_respects_output_options(
         [
             "experiments",
             temp_experiment_file,
-            "--output-dir",
-            temp_output_dir,
             "--no-plot",  # Do not show plots on screen
         ],
     )
@@ -504,16 +595,19 @@ def temp_experiment_file_missing_params():
 
 
 def test_experiments_command_fails_with_missing_params(
-    runner, temp_experiment_file_missing_params, temp_output_dir
+    runner, temp_experiment_file_missing_params, temp_output_dir, monkeypatch
 ):
     """Test experiment command fails with validation error for missing parameters."""
+    from spkmc.models.scenario import Scenario
+
+    # Override EXPERIMENTS_BASE to use temp directory for testing
+    monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", temp_output_dir)
+
     result = runner.invoke(
         cli,
         [
             "experiments",
             temp_experiment_file_missing_params,
-            "--output-dir",
-            temp_output_dir,
             "--no-plot",
         ],
     )

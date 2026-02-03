@@ -153,15 +153,14 @@ class TestExperimentResultsDir:
         results_dir = minimal_experiment.results_dir
         assert str(results_dir).startswith("data/experiments")
 
-    def test_results_dir_with_custom_base(self):
-        """results_dir should use custom base when provided."""
-        custom_base = Path("/custom/path")
+    def test_results_dir_always_uses_experiments_base(self):
+        """results_dir should always use Scenario.EXPERIMENTS_BASE."""
         exp = Experiment(
             name="Test",
             scenarios=[{"label": "test"}],
-            results_base_dir=custom_base,
         )
-        assert exp.results_dir == custom_base / "test"
+        # Results always go to Scenario.EXPERIMENTS_BASE, not a custom path
+        assert exp.results_dir == Path(Scenario.EXPERIMENTS_BASE) / "test"
 
     def test_normalized_name(self, minimal_experiment):
         """Test experiment name normalization."""
@@ -172,14 +171,16 @@ class TestExperimentResultsDir:
         # This property triggered the original bug
         assert minimal_experiment.has_results is False
 
-    def test_has_results_true_when_files_exist(self):
+    def test_has_results_true_when_files_exist(self, monkeypatch):
         """has_results returns True when result files exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
+            # Override EXPERIMENTS_BASE for testing
+            monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", str(base))
+
             exp = Experiment(
                 name="test",
                 scenarios=[{"label": "test"}],
-                results_base_dir=base,
             )
             # Create the results directory and a result file
             exp.ensure_results_dir()
@@ -187,14 +188,16 @@ class TestExperimentResultsDir:
 
             assert exp.has_results is True
 
-    def test_result_count(self):
+    def test_result_count(self, monkeypatch):
         """Test result_count returns correct count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
+            # Override EXPERIMENTS_BASE for testing
+            monkeypatch.setattr(Scenario, "EXPERIMENTS_BASE", str(base))
+
             exp = Experiment(
                 name="test",
                 scenarios=[{"label": "test"}],
-                results_base_dir=base,
             )
             exp.ensure_results_dir()
             (exp.results_dir / "result1.json").write_text("{}")

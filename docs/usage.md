@@ -556,12 +556,13 @@ Argument | Description |
 
 Option | Abbrev | Type | Default | Description |
 |-------|--------|------|---------|-------------|
-`--output-dir` | `-o` | string | `./results` | Directory to save results |
 `--compare` | `-c` | flag | `False` | Generate comparative visualization of results |
 `--no-plot` | | flag | `False` | Disable individual plot generation |
 `--save-plot` | | flag | `False` | Save plots to files |
 `--zip` | | flag | `False` | Create a zip file with results for each scenario |
 `--verbose` | `-v` | flag | `False` | Show detailed information during execution |
+
+Results are always saved to `data/experiments/<experiment_name>/`.
 
 #### Scenario JSON File Format
 
@@ -633,9 +634,6 @@ spkmc batch
 # Run scenarios from a specific file
 python spkmc_cli.py batch experiments/test_scenarios.json
 
-# Run scenarios and save results to a specific directory
-python spkmc_cli.py batch --output-dir results/experiment1
-
 # Run scenarios and generate a comparison visualization
 python spkmc_cli.py batch --compare
 
@@ -646,18 +644,19 @@ python spkmc_cli.py batch --save-plot --no-plot
 python spkmc_cli.py batch --verbose
 
 # Run scenarios and generate simplified CSVs (global option)
-python spkmc_cli.py --simple batch --output-dir results/simple_csv
+python spkmc_cli.py --simple batch
 
 # Run scenarios and generate simplified CSVs (after the command)
-python spkmc_cli.py batch --output-dir results/simple_csv --simple
+python spkmc_cli.py batch --simple
 
 # Run scenarios and create zip files
-python spkmc_cli.py batch --output-dir results/zip_results --zip
+python spkmc_cli.py batch --zip
 
 # Run scenarios, generate simplified CSVs, and create zip files
-python spkmc_cli.py batch --output-dir results/complete --simple --zip
+python spkmc_cli.py batch --simple --zip
 
 # Both forms above generate simplified CSVs with time, infected, and error for each scenario
+# Results are automatically saved to data/experiments/<experiment_name>/
 ```
 
 #### Tips and Best Practices for `batch`

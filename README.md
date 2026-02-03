@@ -133,12 +133,12 @@ Results are saved to `data/<experiment_name>/` with one JSON file per scenario p
 |--------|-------------|
 | `-a, --all` | Run all experiments (no menu) |
 | `--override` | Clear results and re-run |
-| `-e, --experiments-dir` | Custom experiments directory (default: `experiments`) |
-| `-o, --output-dir` | Directory to save results (default: `data`) |
 | `--no-plot` | Disable plot generation |
-| `-e, --export` | Output format: `json`, `csv`, `excel`, `md`, `html` (default: `json`) |
+| `-x, --export` | Output format: `json`, `csv`, `excel`, `md`, `html` (default: `json`) |
 | `--debug` | Show detailed debug info |
 | `--clear-cache` | Clear Numba compilation cache |
+
+Results are always saved to `data/experiments/<experiment_name>/`.
 
 ### Running a Single Simulation
 
@@ -483,7 +483,6 @@ The generated `analysis.md` file follows an academic paper structure:
 | `-m, --model` | OpenAI model to use (default: `gpt-4o-mini`) |
 | `-f, --force` | Regenerate analysis even if it exists |
 | `-o, --output` | Custom output path (only for single path) |
-| `-d, --experiments-dir` | Experiments directory (default: `experiments`, used with `--all`) |
 
 **Global `--analyze` flag:**
 
@@ -526,10 +525,10 @@ This is useful if you're experiencing strange behavior after updating SPKMC.
 
 | Option | Description |
 |--------|-------------|
-| `-e, --experiments-dir` | Custom experiments directory (default: `experiments`) |
-| `-o, --output-dir` | Directory where results are stored (default: `data`) |
 | `-y, --yes` | Skip confirmation prompt |
 | `--numba-cache` | Also clear the Numba compilation cache |
+
+Results are always stored in `data/experiments/<experiment_name>/`.
 
 ---
 

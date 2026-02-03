@@ -94,7 +94,6 @@ class Experiment(BaseModel):
     )  # Alias for backward compat
     scenarios: List[Any] = Field(min_length=1)  # Accept raw dicts or Scenario objects
     path: Optional[Path] = None
-    results_base_dir: Optional[Path] = None  # Custom results base directory
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -117,7 +116,7 @@ class Experiment(BaseModel):
     @property
     def results_dir(self) -> Path:
         """Return the results directory path."""
-        base = self.results_base_dir or Path(Scenario.EXPERIMENTS_BASE)
+        base = Path(Scenario.EXPERIMENTS_BASE)
         return base / self.normalized_name
 
     # Supported result file extensions (class variable, not a Pydantic field)
@@ -208,7 +207,6 @@ class Experiment(BaseModel):
         cls,
         scenario: Scenario,
         name: Optional[str] = None,
-        results_base_dir: Optional[Path] = None,
     ) -> "Experiment":
         """
         Create an Experiment from a single Scenario (for unified run command).
@@ -216,7 +214,6 @@ class Experiment(BaseModel):
         Args:
             scenario: The single scenario to run
             name: Optional experiment name (defaults to "single_run")
-            results_base_dir: Custom base directory for results
 
         Returns:
             Experiment with single scenario
@@ -224,5 +221,4 @@ class Experiment(BaseModel):
         return cls(
             name=name or "single_run",
             scenarios=[scenario],
-            results_base_dir=results_base_dir,
         )

@@ -74,7 +74,6 @@ DEFAULT_SCALE = 1.0
 DEFAULT_MU = 1.0
 DEFAULT_LAMBDA = 1.0
 DEFAULT_EXPONENT = 2.5
-DEFAULT_RESULTS_DIR = "data"
 
 
 class MissingParameterError(Exception):
@@ -279,18 +278,12 @@ def display_experiments_menu(experiments: List[Experiment]) -> Optional[int]:
         return None
 
 
-def create_experiment_interactive(
-    experiments_dir: str, results_base_dir: str
-) -> Optional[Experiment]:
+def create_experiment_interactive() -> Optional[Experiment]:
     """
     Interactively create a new experiment configuration.
 
     Prompts the user for experiment name, description, and all simulation parameters,
     then generates a data.json file in experiments/<name>/.
-
-    Args:
-        experiments_dir: Base directory for experiments
-        results_base_dir: Base directory for results (default: data)
 
     Returns:
         The created Experiment object, or None if creation was cancelled
@@ -320,7 +313,7 @@ def create_experiment_interactive(
         return None
 
     # Check if experiment already exists
-    exp_path = Path(experiments_dir) / name
+    exp_path = Path("experiments") / name
     if exp_path.exists():
         log_error(f"Experiment '{name}' already exists at {exp_path}")
         return None
@@ -578,9 +571,8 @@ def create_experiment_interactive(
 
     if run_now:
         # Load and return the experiment
-        exp_manager = ExperimentManager(experiments_dir)
+        exp_manager = ExperimentManager("experiments")
         experiment = exp_manager.load_experiment(name)
-        experiment.results_base_dir = Path(results_base_dir)
         return experiment
 
     return None
@@ -1742,11 +1734,25 @@ def plot(
                     result = DataManager.load(str(result_file))
 
                     # Check required data
-                    if all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
-                        results_data.append(result)
-                        file_labels.append(result_file.stem)
-                    else:
+                    if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
                         log_warning(f"Incomplete data in {result_file.name}, skipping...")
+                        continue
+
+                    # Check internal consistency - all arrays must have same length
+                    time_len = len(result["time"])
+                    s_len = len(result["S_val"])
+                    i_len = len(result["I_val"])
+                    r_len = len(result["R_val"])
+
+                    if not (time_len == s_len == i_len == r_len):
+                        log_warning(
+                            f"Inconsistent array lengths in {result_file.name} "
+                            f"(time={time_len}, S={s_len}, I={i_len}, R={r_len}), skipping..."
+                        )
+                        continue
+
+                    results_data.append(result)
+                    file_labels.append(result_file.stem)
 
                 except Exception as e:
                     log_error(f"Error loading {result_file.name}: {e}")
@@ -1755,6 +1761,38 @@ def plot(
             if not results_data:
                 log_error("No valid file found to plot.")
                 ctx.exit(1)
+
+            # Filter out files with incompatible step counts
+            # Use the step count of the first file as reference
+            reference_steps = len(results_data[0]["time"])
+            compatible_results = []
+            compatible_labels = []
+            skipped_count = 0
+
+            for result, label in zip(results_data, file_labels):
+                steps = len(result["time"])
+                if steps == reference_steps:
+                    compatible_results.append(result)
+                    compatible_labels.append(label)
+                else:
+                    log_warning(
+                        f"Skipping '{label}': incompatible step count "
+                        f"({steps} vs {reference_steps} expected)"
+                    )
+                    skipped_count += 1
+
+            if skipped_count > 0:
+                log_info(
+                    f"Skipped {skipped_count} file(s) with incompatible step counts. "
+                    f"Use --separate to plot all files individually."
+                )
+
+            if not compatible_results:
+                log_error("No compatible files found to plot.")
+                ctx.exit(1)
+
+            results_data = compatible_results
+            file_labels = compatible_labels
 
             # Use custom labels if provided, otherwise use file names
             if labels:
@@ -1974,14 +2012,6 @@ def info(
     type=str,
     help="Custom output path for analysis file (only for single path)",
 )
-@click.option(
-    "--experiments-dir",
-    "-d",
-    type=str,
-    default="experiments",
-    show_default=True,
-    help="Base directory for experiments (used with --all)",
-)
 @click.pass_context
 def analyze(
     ctx: click.Context,
@@ -1990,7 +2020,6 @@ def analyze(
     model: str,
     force: bool,
     output: Optional[str],
-    experiments_dir: str,
 ) -> None:
     """
     Generate AI-powered analysis for simulation results.
@@ -2029,7 +2058,7 @@ def analyze(
     # Determine which mode we're in
     if analyze_all:
         # Analyze all experiments
-        _analyze_all_experiments(ctx, analyzer, experiments_dir, force)
+        _analyze_all_experiments(ctx, analyzer, force)
     elif paths:
         # Warn if --output is used with multiple paths
         if output and len(paths) > 1:
@@ -2142,17 +2171,16 @@ def _analyze_path(
 def _analyze_all_experiments(
     ctx: click.Context,
     analyzer: "AIAnalyzer",
-    experiments_dir: str,
     force: bool,
 ) -> None:
     """Analyze all experiments."""
     from spkmc.io.experiments import ExperimentManager
 
-    exp_manager = ExperimentManager(experiments_dir)
+    exp_manager = ExperimentManager("experiments")
     experiments = exp_manager.list_experiments()
 
     if not experiments:
-        log_error(f"No experiments found in '{experiments_dir}'")
+        log_error("No experiments found in 'experiments/'")
         ctx.exit(1)
 
     # Filter to experiments with results
@@ -2241,21 +2269,6 @@ def _analyze_all_experiments(
     default=False,
     help="Clear existing results and force a full re-run",
 )
-@click.option(
-    "--experiments-dir",
-    "-d",
-    type=str,
-    default="experiments",
-    show_default=True,
-    help="Parent directory containing experiment folders (each with data.json)",
-)
-@click.option(
-    "--output-dir",
-    "-o",
-    type=str,
-    default=DEFAULT_RESULTS_DIR,
-    help=f"Directory to save results (default: {DEFAULT_RESULTS_DIR})",
-)
 @click.option("--no-plot", is_flag=True, default=False, help="Disable individual plot generation")
 @click.option(
     "--export",
@@ -2278,8 +2291,6 @@ def experiment(
     scenarios_file: Optional[str],
     run_all: bool,
     override: bool,
-    experiments_dir: str,
-    output_dir: str,
     no_plot: bool,
     export: str,
     debug: bool,
@@ -2289,8 +2300,8 @@ def experiment(
     Run or create experiments from the experiments directory.
 
     If no file is specified, show an interactive menu with experiments available in
-    the 'experiments/' directory (or the directory specified with --experiments-dir).
-    The menu includes an option to create a new experiment interactively.
+    the 'experiments/' directory. The menu includes an option to create a new
+    experiment interactively.
 
     The JSON file must contain a list of objects, each representing a scenario with
     parameters for the simulation. Each scenario will run sequentially and results
@@ -2308,9 +2319,6 @@ def experiment(
     verbose = cli_context.verbose
     analyze = cli_context.analyze
 
-    # Expand ~ to absolute path in output_dir
-    output_dir = os.path.expanduser(output_dir)
-
     # Configure debug mode
     if debug:
         os.environ["SPKMC_DEBUG"] = "1"
@@ -2327,25 +2335,27 @@ def experiment(
     # ============================================================
     if scenarios_file is None:
         # Create experiment manager
-        exp_manager = ExperimentManager(experiments_dir)
+        exp_manager = ExperimentManager("experiments")
         experiments = exp_manager.list_experiments()
-        # Set custom output directory on all experiments
-        for exp in experiments:
-            exp.results_base_dir = Path(output_dir)
 
         # Determine which experiments to run
         if run_all:
             if not experiments:
-                log_error(f"No experiments found in '{experiments_dir}'.")
-                log_info(
-                    "Note: -d should point to the parent directory containing experiment folders.\n"
-                    "       Example: 'spkmc experiments -d experiments' not '-d experiments/my_exp'"
-                )
+                log_error("No experiments found in 'experiments/'.")
                 ctx.exit(1)
             # Run all experiments in order
             experiments_to_run = experiments
             log_info(f"Running all {len(experiments)} experiments in order...")
         else:
+            # Check for TTY before showing interactive menu
+            import sys
+
+            if not sys.stdin.isatty():
+                log_error(
+                    "Interactive mode requires a terminal. Use --all flag to run all experiments."
+                )
+                ctx.exit(1)
+
             # Show experiment menu (includes option to create new experiment)
             selected = display_experiments_menu(experiments)
 
@@ -2355,9 +2365,7 @@ def experiment(
 
             if selected == CREATE_EXPERIMENT_SENTINEL:
                 # Create a new experiment interactively
-                created_exp = create_experiment_interactive(
-                    experiments_dir, results_base_dir=output_dir
-                )
+                created_exp = create_experiment_interactive()
                 if created_exp is None:
                     log_info("Experiment creation cancelled.")
                     return
@@ -2535,7 +2543,6 @@ def experiment(
                 name=experiment_name,
                 path=experiment_dir,
                 scenarios=scenarios,
-                results_base_dir=Path(output_dir),
             )
         elif isinstance(data, dict) and "scenarios" in data:
             # Experiment format with parameters - use ExperimentConfig for proper merging
@@ -2543,7 +2550,6 @@ def experiment(
 
             config = ExperimentConfig.from_dict(data)
             experiment = Experiment.from_config(config, path=experiment_dir)
-            experiment.results_base_dir = Path(output_dir)
 
             log_info(f"Experiment: {experiment.name}")
             log_success(f"Loaded {len(experiment.scenarios)} scenarios for execution.")
@@ -2589,21 +2595,6 @@ def experiment(
 
 @cli.command(help="Clean results from experiments")
 @click.argument("experiment_name", type=str, default=None, required=False)
-@click.option(
-    "--experiments-dir",
-    "-e",
-    type=str,
-    default="experiments",
-    show_default=True,
-    help="Base directory for experiments",
-)
-@click.option(
-    "--output-dir",
-    "-o",
-    type=str,
-    default=DEFAULT_RESULTS_DIR,
-    help=f"Directory where results are stored (default: {DEFAULT_RESULTS_DIR})",
-)
 @click.option("--yes", "-y", is_flag=True, default=False, help="Auto-confirm without prompting")
 @click.option(
     "--numba-cache",
@@ -2615,8 +2606,6 @@ def experiment(
 def clean(
     ctx: click.Context,
     experiment_name: Optional[str],
-    experiments_dir: str,
-    output_dir: str,
     yes: bool,
     numba_cache: bool,
 ) -> None:
@@ -2638,7 +2627,7 @@ def clean(
     from pathlib import Path
 
     # Create experiment manager
-    exp_manager = ExperimentManager(experiments_dir)
+    exp_manager = ExperimentManager("experiments")
 
     # ============================================================
     # SINGLE EXPERIMENT MODE: Clean specific experiment
@@ -2646,7 +2635,6 @@ def clean(
     if experiment_name:
         try:
             exp = exp_manager.load_experiment(experiment_name)
-            exp.results_base_dir = Path(output_dir)
         except FileNotFoundError:
             log_error(f"Experiment '{experiment_name}' not found.")
             ctx.exit(1)
@@ -2687,8 +2675,6 @@ def clean(
     # ALL EXPERIMENTS MODE: Clean all experiments
     # ============================================================
     experiments = exp_manager.list_experiments()
-    for exp in experiments:
-        exp.results_base_dir = Path(output_dir)
 
     # Check for root results/ directory too
     root_results = Path("results")

@@ -180,17 +180,15 @@ spkmc compare <file1> <file2> ... [-o output]
 ### `batch` - Run multiple scenarios
 ```bash
 spkmc batch                                    # Interactive experiment menu
-spkmc batch scenarios.json --output-dir out/   # File mode
+spkmc batch scenarios.json                     # File mode
 ```
 
 ## Result Storage
 
-Results are stored in hierarchical JSON format:
+Results are stored in standard locations:
 ```
-data/spkmc/
-  <distribution>/
-    <network_type>/
-      results_<nodes>_<samples>_<params>.json
+data/experiments/<experiment_name>/            # Experiment results
+data/runs/                                     # Individual run results
 ```
 
 ## Important Files
