@@ -6,11 +6,14 @@ and multi-scenario experiment execution with unified progress tracking,
 hardware detection, and parallelization.
 """
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 
@@ -58,6 +61,7 @@ class ExecutionEngine:
         self.verbose = verbose
         self._hardware: Optional["HardwareInfo"] = None
         self._strategy: Optional["ParallelizationStrategy"] = None
+        self._failed_scenarios: List[Tuple[str, str]] = []
 
     @property
     def hardware(self) -> "HardwareInfo":
@@ -93,6 +97,15 @@ class ExecutionEngine:
         assert self._strategy is not None
         return self._strategy
 
+    def get_failed_scenarios(self) -> List[Tuple[str, str]]:
+        """
+        Get the list of failed scenarios from the last execution.
+
+        Returns:
+            List of (label, error_message) tuples for each failed scenario
+        """
+        return list(self._failed_scenarios)
+
     def execute(self, context: ExecutionContext) -> List[SimulationResult]:
         """
         Execute all scenarios in the context.
@@ -103,6 +116,9 @@ class ExecutionEngine:
         Returns:
             List of SimulationResult objects
         """
+        # Clear failed scenarios from previous execution
+        self._failed_scenarios = []
+
         # Configure parallelization
         num_scenarios = len(context.scenarios)
         strategy = self.configure_parallelization(num_scenarios)
@@ -239,6 +255,15 @@ class ExecutionEngine:
                             context.on_scenario_complete(index, scenario.label, result)
 
                     except Exception as e:
+                        # Track and log the failure
+                        error_msg = str(e)
+                        self._failed_scenarios.append((scenario.label, error_msg))
+                        logger.warning(
+                            "Scenario '%s' failed with error: %s",
+                            scenario.label,
+                            error_msg,
+                        )
+
                         # Create error result
                         error_result = SimulationResult(
                             S_val=np.array([]),
@@ -246,7 +271,7 @@ class ExecutionEngine:
                             R_val=np.array([]),
                             time=np.array([]),
                             scenario_label=scenario.label,
-                            metadata={"error": str(e)},
+                            metadata={"error": error_msg},
                         )
                         results[index] = error_result
 

@@ -955,6 +955,15 @@ def _run_experiment_with_engine(
     # Display aggregate statistics for all results
     display_aggregate_statistics(all_results)
 
+    # Display any failed scenarios
+    failed_scenarios = engine.get_failed_scenarios()
+    if failed_scenarios:
+        console.print()
+        log_warning(f"{len(failed_scenarios)} scenario(s) failed during execution:")
+        for label, error in failed_scenarios:
+            console.print(f"  [red]✗[/red] {label}: {error}")
+        console.print()
+
     # Generate comparison plot with custom configuration
     if len(all_result_dicts) > 1 and not no_plot:
         compare_path = str(results_dir / "comparison.png")
