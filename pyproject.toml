@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Shortest Path Kinetic Monte Carlo (SPKMC) for simulating epidemic spread on networks"
 readme = "README.md"
 authors = [
-    {name = "SPKMC Team", email = "example@example.com"}
+    {name = "mcaxtr", email = "mcaxtr@gmail.com"}
 ]
 license = {text = "MIT"}
 classifiers = [
