@@ -282,8 +282,6 @@ def test_plot_directory_with_export(runner, temp_results_dir, monkeypatch):
 
 def test_visualizer_states_filter():
     """Directly test Visualizer functions with state filters."""
-    import matplotlib.pyplot as plt
-
     # Test data
     s_vals = np.array([0.99, 0.95, 0.90, 0.85, 0.80])
     i_vals = np.array([0.01, 0.04, 0.05, 0.05, 0.04])
@@ -300,25 +298,22 @@ def test_visualizer_states_filter():
         r_vals,
         time,
         "Test",
-        save_path="test_all.png",
+        save_path="test_all.html",
         states_to_plot={"S", "I", "R"},
     )
-    plt.close()
 
     # Only infected
     Visualizer.plot_result(
-        s_vals, i_vals, r_vals, time, "Test", save_path="test_i.png", states_to_plot={"I"}
+        s_vals, i_vals, r_vals, time, "Test", save_path="test_i.html", states_to_plot={"I"}
     )
-    plt.close()
 
     # Infected and recovered
     Visualizer.plot_result(
-        s_vals, i_vals, r_vals, time, "Test", save_path="test_ir.png", states_to_plot={"I", "R"}
+        s_vals, i_vals, r_vals, time, "Test", save_path="test_ir.html", states_to_plot={"I", "R"}
     )
-    plt.close()
 
     # Remove test files if created
-    for file in ["test_all.png", "test_i.png", "test_ir.png"]:
+    for file in ["test_all.html", "test_i.html", "test_ir.html"]:
         if os.path.exists(file):
             os.remove(file)
 

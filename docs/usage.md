@@ -11,7 +11,7 @@ This document provides detailed information on how to use the SPKMC package for 
   - NumPy: Efficient numerical operations
   - SciPy: Scientific and mathematical algorithms
   - NetworkX: Creation and manipulation of networks
-  - Matplotlib: Result visualization
+  - Plotly: Interactive result visualization
   - Numba: Python code acceleration
   - tqdm: Progress bars
   - Click: Command-line interface
@@ -402,21 +402,20 @@ if has_error:
 #### Basic Visualization
 
 ```python
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
-plt.figure(figsize=(10, 6))
-plt.plot(time_steps, S, 'b-', label='Susceptible')
-plt.plot(time_steps, I, 'r-', label='Infected')
-plt.plot(time_steps, R, 'g-', label='Recovered')
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=time_steps, y=S, mode='lines', name='Susceptible'))
+fig.add_trace(go.Scatter(x=time_steps, y=I, mode='lines', name='Infected'))
+fig.add_trace(go.Scatter(x=time_steps, y=R, mode='lines', name='Recovered'))
 
-plt.xlabel('Time')
-plt.ylabel('Proportion of Individuals')
-plt.title('SIR Model Dynamics Over Time')
-plt.legend()
-plt.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+fig.update_layout(
+    title='SIR Model Dynamics Over Time',
+    xaxis_title='Time',
+    yaxis_title='Proportion of Individuals',
+    template='plotly_white',
+)
+fig.show()
 ```
 
 #### Visualization with Error Bars
