@@ -350,3 +350,110 @@ class TestUpdateScenarioInExperiment:
 
         assert not result_file.exists(), "Result file was NOT deleted after param change!"
         assert not analysis_file.exists(), "Analysis file was NOT deleted after param change!"
+
+
+# ── delete_experiment ────────────────────────────────────────────────────────
+
+
+class TestDeleteExperiment:
+    """Tests for delete_experiment()."""
+
+    def test_deletes_experiment_directory_and_contents(self, tmp_path):
+        """delete_experiment removes the entire experiment directory tree."""
+        exp = _make_modern_experiment(tmp_path)
+        exp_path = exp.path
+        assert exp_path is not None
+        assert exp_path.is_dir()
+
+        from spkmc.web.pages.experiment_detail import delete_experiment
+
+        delete_experiment(exp)
+
+        assert not exp_path.exists(), "Experiment directory was not deleted!"
+
+    def test_deletes_result_and_analysis_files(self, tmp_path):
+        """delete_experiment removes result, analysis, and experiment-level analysis files."""
+        exp = _make_modern_experiment(tmp_path)
+        exp_path = exp.path
+        assert exp_path is not None
+
+        # Create scenario result files
+        baseline_result = exp_path / "baseline.json"
+        baseline_analysis = exp_path / "baseline_analysis.md"
+        high_lambda_result = exp_path / "high_lambda.json"
+        high_lambda_analysis = exp_path / "high_lambda_analysis.md"
+        exp_analysis = exp_path / "analysis.md"
+
+        baseline_result.write_text('{"S_val": [1]}')
+        baseline_analysis.write_text("# Baseline Analysis")
+        high_lambda_result.write_text('{"S_val": [2]}')
+        high_lambda_analysis.write_text("# High Lambda Analysis")
+        exp_analysis.write_text("# Experiment Analysis")
+
+        from spkmc.web.pages.experiment_detail import delete_experiment
+
+        delete_experiment(exp)
+
+        assert not exp_path.exists(), "Experiment directory was not deleted!"
+        assert not baseline_result.exists()
+        assert not baseline_analysis.exists()
+        assert not high_lambda_result.exists()
+        assert not high_lambda_analysis.exists()
+        assert not exp_analysis.exists()
+
+    def test_raises_on_none_path(self):
+        """delete_experiment raises ValueError when experiment has no path."""
+        exp = Experiment(
+            name="No Path",
+            scenarios=[
+                Scenario(
+                    label="X",
+                    network="er",
+                    distribution="gamma",
+                    nodes=100,
+                    k_avg=5.0,
+                    shape=2.0,
+                    scale=1.0,
+                    samples=10,
+                    initial_perc=0.01,
+                    t_max=5.0,
+                    steps=50,
+                    **{"lambda": 0.5},
+                )
+            ],
+            path=None,
+        )
+
+        from spkmc.web.pages.experiment_detail import delete_experiment
+
+        with pytest.raises(ValueError, match="has no path"):
+            delete_experiment(exp)
+
+    def test_raises_on_nonexistent_directory(self, tmp_path):
+        """delete_experiment raises ValueError when directory does not exist."""
+        ghost_path = tmp_path / "experiments" / "nonexistent_exp"
+        exp = Experiment(
+            name="Ghost",
+            scenarios=[
+                Scenario(
+                    label="X",
+                    network="er",
+                    distribution="gamma",
+                    nodes=100,
+                    k_avg=5.0,
+                    shape=2.0,
+                    scale=1.0,
+                    samples=10,
+                    initial_perc=0.01,
+                    t_max=5.0,
+                    steps=50,
+                    **{"lambda": 0.5},
+                )
+            ],
+            path=ghost_path,
+        )
+
+        from spkmc.web.pages.experiment_detail import delete_experiment
+
+        with pytest.raises(ValueError, match="does not exist"):
+            delete_experiment(exp)

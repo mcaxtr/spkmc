@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import html as _html
 import json
+import shutil
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1524,6 +1525,54 @@ def delete_scenario_from_experiment(experiment: Experiment, scenario: Scenario) 
     analysis_file = exp_path / f"{scenario.normalized_label}_analysis.md"
     if analysis_file.exists():
         analysis_file.unlink()
+
+
+def delete_experiment(experiment: Experiment) -> None:
+    """Delete an experiment directory and all its contents.
+
+    Args:
+        experiment: The experiment to delete
+
+    Raises:
+        ValueError: If the experiment has no path or the directory doesn't exist
+    """
+    exp_path = experiment.path
+    if exp_path is None:
+        raise ValueError("Experiment has no path")
+    if not exp_path.is_dir():
+        raise ValueError(f"Experiment directory does not exist: {exp_path}")
+    shutil.rmtree(exp_path)
+
+
+@st.dialog("Delete Experiment")
+def show_delete_experiment_dialog(experiment: Experiment) -> None:
+    """Show confirmation dialog before deleting an experiment."""
+    exp_path = experiment.path
+    assert exp_path is not None
+
+    st.markdown(
+        f"Are you sure you want to delete **{experiment.name}**?",
+    )
+    st.warning(
+        "This will permanently delete the experiment directory, "
+        "all scenario results, and all analysis files. This action cannot be undone."
+    )
+
+    col_cancel, col_delete = st.columns(2)
+    with col_cancel:
+        if st.button("Cancel", key="del_exp_cancel", width="stretch"):
+            st.rerun()
+    with col_delete:
+        if st.button(
+            "Delete",
+            key="del_exp_confirm",
+            type="primary",
+            width="stretch",
+            icon=":material/delete:",
+        ):
+            delete_experiment(experiment)
+            SessionState.set_selected_experiment(None)
+            st.rerun()
 
 
 @st.dialog("Edit Scenario", width="large")
