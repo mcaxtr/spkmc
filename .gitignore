@@ -148,3 +148,8 @@ CLAUDE.md
 # Temporary files
 tmp_*.html
 tmp_*.json
+
+# Personal/temporary artifacts
+*.pdf
+*.zip
+pdf_parts/
