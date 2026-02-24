@@ -855,35 +855,39 @@ p {{
     height: 100% !important;
 }}
 
-/* AI analysis button (in title row) */
-.stMainBlockContainer .st-key-action_ai .stButton button {{
-    background: var(--teal-50) !important;
-    border: 1px solid var(--teal-300) !important;
-    color: var(--teal-600) !important;
+/* Experiment header action buttons — shared base */
+.stMainBlockContainer .st-key-action_ai .stButton button,
+.stMainBlockContainer .st-key-action_edit .stButton button,
+.stMainBlockContainer .st-key-action_delete .stButton button {{
     padding: 0.5rem 0.75rem !important;
     font-weight: 600 !important;
     font-size: 0.813rem !important;
     box-shadow: none !important;
     margin-top: 0.5rem !important;
+    white-space: nowrap !important;
 }}
-.stMainBlockContainer .st-key-action_ai button p,
-.stMainBlockContainer .st-key-action_ai button span {{
+
+/* Analyze icon — green */
+.stMainBlockContainer .st-key-action_ai button span[data-testid="stIconMaterial"] {{
     color: var(--teal-600) !important;
 }}
-.stMainBlockContainer .st-key-action_ai .stButton button:hover {{
-    background: var(--teal-100) !important;
-    border-color: var(--teal-400) !important;
-    box-shadow: none !important;
+
+/* Edit icon — orange */
+.stMainBlockContainer .st-key-action_edit button span[data-testid="stIconMaterial"] {{
+    color: {COLORS['warning']} !important;
 }}
+
+/* Delete icon — red */
+.stMainBlockContainer .st-key-action_delete button span[data-testid="stIconMaterial"] {{
+    color: var(--error) !important;
+}}
+
+/* Analyze disabled state */
 .stMainBlockContainer .st-key-action_ai .stButton button:disabled {{
-    background: var(--gray-100) !important;
-    border: none !important;
-    color: var(--gray-400) !important;
     opacity: 0.6 !important;
     box-shadow: none !important;
 }}
-.stMainBlockContainer .st-key-action_ai button:disabled p,
-.stMainBlockContainer .st-key-action_ai button:disabled span {{
+.stMainBlockContainer .st-key-action_ai button:disabled span[data-testid="stIconMaterial"] {{
     color: var(--gray-400) !important;
 }}
 

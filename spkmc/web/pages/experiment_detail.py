@@ -22,7 +22,12 @@ from spkmc.io.data_manager import DataManager
 from spkmc.io.experiments import ExperimentManager
 from spkmc.models import Experiment, Scenario
 from spkmc.web.analysis_runner import AnalysisRunner, poll_running_analyses
-from spkmc.web.components import result_metric_cards
+from spkmc.web.components import (
+    distribution_config_form,
+    network_config_form,
+    result_metric_cards,
+    simulation_params_form,
+)
 from spkmc.web.config import WebConfig
 from spkmc.web.plotting import create_comparison_figure, create_sir_figure
 from spkmc.web.runner import SimulationRunner, poll_running_simulations
@@ -195,7 +200,7 @@ def render() -> None:
         ai_disabled = not api_key
         ai_help = "Generate AI analysis" if api_key else "Set OpenAI API key in Preferences"
 
-    col_title, col_ai = st.columns([8, 2])
+    col_title, col_actions = st.columns([6, 4])
     with col_title:
         st.markdown(
             _dedent(f"""
@@ -207,18 +212,38 @@ color:{COLORS['gray_900']};margin:0;letter-spacing:-0.02em;">
 """),
             unsafe_allow_html=True,
         )
-    with col_ai:
-        with st.container(key="action_ai"):
-            if st.button(
-                ai_label,
-                key="btn_ai",
-                disabled=ai_disabled,
-                help=ai_help,
-                icon=ai_icon,
-                width="stretch",
-            ):
-                if api_key:
-                    run_ai_analysis(experiment)
+    with col_actions:
+        col_ai, col_edit, col_delete = st.columns([2, 1, 1])
+        with col_ai:
+            with st.container(key="action_ai"):
+                if st.button(
+                    ai_label,
+                    key="btn_ai",
+                    disabled=ai_disabled,
+                    help=ai_help,
+                    icon=ai_icon,
+                    width="stretch",
+                ):
+                    if api_key:
+                        run_ai_analysis(experiment)
+        with col_edit:
+            with st.container(key="action_edit"):
+                if st.button(
+                    "Edit",
+                    key="btn_edit_exp",
+                    icon=":material/edit:",
+                    width="stretch",
+                ):
+                    show_edit_experiment_modal(experiment)
+        with col_delete:
+            with st.container(key="action_delete"):
+                if st.button(
+                    "Delete",
+                    key="btn_delete_exp",
+                    icon=":material/delete:",
+                    width="stretch",
+                ):
+                    show_delete_experiment_dialog(experiment)
 
     if experiment.description:
         st.caption(experiment.description)
@@ -2159,6 +2184,470 @@ def update_experiment(
 
 
 # ── Edit Experiment Modal ────────────────────────────────────────────────────
+
+
+def _init_edit_experiment_state(experiment: Experiment) -> None:
+    """Pre-seed session state with experiment's current values for the edit form.
+
+    Uses the experiment path as part of the guard key so that stale state
+    from a previous dialog session (e.g. closed via the X button without
+    Save/Cancel) does not bleed into a new session.
+    """
+    exp_path = experiment.path
+    assert exp_path is not None
+    guard_key = f"edit_exp_initialized_{exp_path}"
+
+    if guard_key in st.session_state:
+        return
+
+    # If a stale session exists from a different experiment, clean it first
+    stale_guards = [
+        k for k in st.session_state if k.startswith("edit_exp_initialized_") and k != guard_key
+    ]
+    if stale_guards:
+        _cleanup_edit_experiment_state()
+
+    params = experiment.parameters
+
+    # Network
+    st.session_state["edit_exp_net_type"] = params.get("network", "er")
+    st.session_state["edit_exp_net_nodes"] = int(params.get("nodes", 1000))
+    if params.get("network") in ("er", "sf", "rrn"):
+        st.session_state["edit_exp_net_k_avg"] = float(params.get("k_avg", 10.0))
+    if params.get("network") == "sf" and "exponent" in params:
+        st.session_state["edit_exp_net_exponent"] = float(params["exponent"])
+
+    # Distribution
+    st.session_state["edit_exp_dist_type"] = params.get("distribution", "gamma")
+    st.session_state["edit_exp_dist_lambda"] = float(params.get("lambda", 1.0))
+    if params.get("distribution") == "gamma":
+        st.session_state["edit_exp_dist_shape"] = float(params.get("shape", 2.0))
+        st.session_state["edit_exp_dist_scale"] = float(params.get("scale", 1.0))
+    elif params.get("distribution") == "exponential":
+        st.session_state["edit_exp_dist_mu"] = float(params.get("mu", 1.0))
+
+    # Simulation (initial_perc stored as percentage in widget)
+    st.session_state["edit_exp_sim_samples"] = int(params.get("samples", 50))
+    st.session_state["edit_exp_sim_num_runs"] = int(params.get("num_runs", 2))
+    st.session_state["edit_exp_sim_initial_perc"] = float(params.get("initial_perc", 0.01)) * 100
+    st.session_state["edit_exp_sim_t_max"] = float(params.get("t_max", 10.0))
+    st.session_state["edit_exp_sim_steps"] = int(params.get("steps", 100))
+
+    # Scenarios — read raw entries from data.json to get override-only dicts
+    exp_path = experiment.path
+    assert exp_path is not None
+    data_file = exp_path / "data.json"
+    with open(data_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    raw_scenarios = data.get("scenarios", [])
+    net_keys = {"network", "nodes", "k_avg", "exponent"}
+    dist_keys = {"distribution", "lambda", "shape", "scale", "mu"}
+    sim_keys = {"samples", "num_runs", "t_max", "steps", "initial_perc"}
+    meta_keys = {"label", "status"}
+
+    edit_scenarios: List[Dict[str, Any]] = []
+    for i, sc_raw in enumerate(raw_scenarios):
+        sc_id = f"edit_exp_sc_{i}"
+        edit_scenarios.append({"id": sc_id, "label": sc_raw.get("label", "")})
+
+        # Pre-seed label widget
+        st.session_state[f"{sc_id}_label"] = sc_raw.get("label", "")
+
+        # Determine overrides (keys that aren't label/status)
+        overrides = {k: v for k, v in sc_raw.items() if k not in meta_keys}
+        has_net = bool(net_keys & set(overrides))
+        has_dist = bool(dist_keys & set(overrides))
+        has_sim = bool(sim_keys & set(overrides))
+
+        st.session_state[f"{sc_id}_override_net"] = has_net
+        st.session_state[f"{sc_id}_override_dist"] = has_dist
+        st.session_state[f"{sc_id}_override_sim"] = has_sim
+
+        if has_net:
+            for k in net_keys & set(overrides):
+                widget_key_map = {
+                    "network": f"{sc_id}_net_type",
+                    "nodes": f"{sc_id}_net_nodes",
+                    "k_avg": f"{sc_id}_net_k_avg",
+                    "exponent": f"{sc_id}_net_exponent",
+                }
+                val = overrides[k]
+                wk = widget_key_map.get(k)
+                if wk:
+                    if k == "nodes":
+                        st.session_state[wk] = int(val)
+                    elif k != "network" and isinstance(val, (int, float)):
+                        st.session_state[wk] = float(val)
+                    else:
+                        st.session_state[wk] = val
+
+        if has_dist:
+            for k in dist_keys & set(overrides):
+                widget_key_map = {
+                    "distribution": f"{sc_id}_dist_type",
+                    "lambda": f"{sc_id}_dist_lambda",
+                    "shape": f"{sc_id}_dist_shape",
+                    "scale": f"{sc_id}_dist_scale",
+                    "mu": f"{sc_id}_dist_mu",
+                }
+                val = overrides[k]
+                wk = widget_key_map.get(k)
+                if wk:
+                    if k != "distribution" and isinstance(val, (int, float)):
+                        st.session_state[wk] = float(val)
+                    else:
+                        st.session_state[wk] = val
+
+        if has_sim:
+            for k in sim_keys & set(overrides):
+                widget_key_map = {
+                    "samples": f"{sc_id}_sim_samples",
+                    "num_runs": f"{sc_id}_sim_num_runs",
+                    "initial_perc": f"{sc_id}_sim_initial_perc",
+                    "t_max": f"{sc_id}_sim_t_max",
+                    "steps": f"{sc_id}_sim_steps",
+                }
+                val = overrides[k]
+                wk = widget_key_map.get(k)
+                if wk:
+                    if k == "initial_perc":
+                        st.session_state[wk] = float(val) * 100
+                    elif k in ("samples", "num_runs", "steps"):
+                        st.session_state[wk] = int(val)
+                    else:
+                        st.session_state[wk] = float(val)
+
+    st.session_state["edit_exp_scenarios"] = edit_scenarios
+    st.session_state["edit_exp_sc_counter"] = len(raw_scenarios)
+    st.session_state[guard_key] = True
+
+
+def _add_edit_scenario() -> None:
+    """Append a new scenario to the edit scenario list."""
+    counter = st.session_state.edit_exp_sc_counter
+    sc_id = f"edit_exp_sc_{counter}"
+    st.session_state.edit_exp_scenarios.append({"id": sc_id, "label": ""})
+    st.session_state.edit_exp_sc_counter = counter + 1
+    st.session_state.edit_exp_last_added = sc_id
+
+
+def _remove_edit_scenario(sc_id: str) -> None:
+    """Remove a scenario from the edit scenario list by its ID."""
+    st.session_state.edit_exp_scenarios = [
+        s for s in st.session_state.edit_exp_scenarios if s["id"] != sc_id
+    ]
+
+
+def _render_edit_scenario(
+    sc_id: str,
+    default_label: str,
+    index: int,
+    can_remove: bool,
+) -> None:
+    """Render a single scenario expander in the edit experiment modal.
+
+    Mirrors the creation modal's ``_render_scenario`` from dashboard.py.
+    """
+    label_key = f"{sc_id}_label"
+    current_label = st.session_state.get(label_key, default_label)
+    display_label = current_label if current_label else "Untitled"
+    header = f"Scenario {index}: {display_label}"
+
+    last_added = st.session_state.get("edit_exp_last_added")
+    with st.expander(header, expanded=(sc_id == last_added)):
+        st.text_input(
+            "Label *",
+            value=default_label,
+            key=label_key,
+            placeholder="e.g., High Infection Rate",
+            help="Required. Name for this scenario",
+        )
+
+        col_net, col_dist, col_sim = st.columns(3)
+        with col_net:
+            override_net = st.checkbox(
+                "Override Network",
+                key=f"{sc_id}_override_net",
+            )
+        with col_dist:
+            override_dist = st.checkbox(
+                "Override Distribution",
+                key=f"{sc_id}_override_dist",
+            )
+        with col_sim:
+            override_sim = st.checkbox(
+                "Override Simulation",
+                key=f"{sc_id}_override_sim",
+            )
+
+        if override_net:
+            st.markdown("---")
+            st.caption("Network Overrides")
+            network_config_form(key_prefix=f"{sc_id}_net")
+
+        if override_dist:
+            st.markdown("---")
+            st.caption("Distribution Overrides")
+            distribution_config_form(key_prefix=f"{sc_id}_dist")
+
+        if override_sim:
+            st.markdown("---")
+            st.caption("Simulation Overrides")
+            simulation_params_form(key_prefix=f"{sc_id}_sim")
+
+        if not (override_net or override_dist or override_sim):
+            st.caption("Using all global defaults")
+
+        if can_remove:
+            st.button(
+                "Remove",
+                key=f"{sc_id}_remove",
+                on_click=_remove_edit_scenario,
+                args=(sc_id,),
+            )
+
+
+def _read_edit_form_values_network(key_prefix: str) -> Dict[str, Any]:
+    """Read network form widget values from session state."""
+    result: Dict[str, Any] = {}
+    network_type = st.session_state.get(f"{key_prefix}_type")
+    if network_type is not None:
+        result["network"] = network_type
+    nodes = st.session_state.get(f"{key_prefix}_nodes")
+    if nodes is not None:
+        result["nodes"] = nodes
+    if network_type in ("er", "sf", "rrn"):
+        k_avg = st.session_state.get(f"{key_prefix}_k_avg")
+        if k_avg is not None:
+            result["k_avg"] = k_avg
+    if network_type == "sf":
+        exponent = st.session_state.get(f"{key_prefix}_exponent")
+        if exponent is not None:
+            result["exponent"] = exponent
+    return result
+
+
+def _read_edit_form_values_distribution(key_prefix: str) -> Dict[str, Any]:
+    """Read distribution form widget values from session state."""
+    result: Dict[str, Any] = {}
+    dist_type = st.session_state.get(f"{key_prefix}_type")
+    if dist_type is not None:
+        result["distribution"] = dist_type
+    lambda_val = st.session_state.get(f"{key_prefix}_lambda")
+    if lambda_val is not None:
+        result["lambda"] = lambda_val
+    if dist_type == "gamma":
+        shape = st.session_state.get(f"{key_prefix}_shape")
+        if shape is not None:
+            result["shape"] = shape
+        scale = st.session_state.get(f"{key_prefix}_scale")
+        if scale is not None:
+            result["scale"] = scale
+    elif dist_type == "exponential":
+        mu = st.session_state.get(f"{key_prefix}_mu")
+        if mu is not None:
+            result["mu"] = mu
+    return result
+
+
+def _read_edit_form_values_simulation(key_prefix: str) -> Dict[str, Any]:
+    """Read simulation form widget values from session state."""
+    result: Dict[str, Any] = {}
+    samples = st.session_state.get(f"{key_prefix}_samples")
+    if samples is not None:
+        result["samples"] = samples
+    num_runs = st.session_state.get(f"{key_prefix}_num_runs")
+    if num_runs is not None:
+        result["num_runs"] = num_runs
+    initial_perc = st.session_state.get(f"{key_prefix}_initial_perc")
+    if initial_perc is not None:
+        result["initial_perc"] = initial_perc / 100.0
+    t_max = st.session_state.get(f"{key_prefix}_t_max")
+    if t_max is not None:
+        result["t_max"] = t_max
+    steps = st.session_state.get(f"{key_prefix}_steps")
+    if steps is not None:
+        result["steps"] = steps
+    return result
+
+
+def _collect_edit_scenario_overrides(
+    sc_id: str,
+    global_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Collect override dict for one scenario by diffing against global params."""
+    result: Dict[str, Any] = {
+        "label": st.session_state.get(f"{sc_id}_label", "Untitled"),
+    }
+
+    if st.session_state.get(f"{sc_id}_override_net", False):
+        net_params = _read_edit_form_values_network(f"{sc_id}_net")
+        for key, value in net_params.items():
+            if not _values_equal(global_params.get(key), value):
+                result[key] = value
+
+    if st.session_state.get(f"{sc_id}_override_dist", False):
+        dist_params = _read_edit_form_values_distribution(f"{sc_id}_dist")
+        for key, value in dist_params.items():
+            if not _values_equal(global_params.get(key), value):
+                result[key] = value
+
+    if st.session_state.get(f"{sc_id}_override_sim", False):
+        sim_params = _read_edit_form_values_simulation(f"{sc_id}_sim")
+        for key, value in sim_params.items():
+            if not _values_equal(global_params.get(key), value):
+                result[key] = value
+
+    return result
+
+
+def _cleanup_edit_experiment_state() -> None:
+    """Remove all edit_exp_* keys from session state after dialog closes."""
+    keys_to_remove = [k for k in st.session_state if k.startswith("edit_exp")]
+    for key in keys_to_remove:
+        del st.session_state[key]
+
+
+@st.dialog("Edit Experiment", width="large")
+def show_edit_experiment_modal(experiment: Experiment) -> None:
+    """Show modal to edit an experiment's name, description, global params, and scenarios."""
+    _init_edit_experiment_state(experiment)
+
+    st.markdown("### Experiment Configuration")
+
+    # -- Basic info --
+    st.subheader("Basic Information")
+    name = st.text_input(
+        "Experiment Name",
+        value=experiment.name,
+        key="edit_exp_name",
+        help="Descriptive name for your experiment",
+    )
+    description = st.text_area(
+        "Description",
+        value=experiment.description or "",
+        key="edit_exp_description",
+        help="Brief description of the experiment's purpose",
+    )
+
+    # -- Global parameters --
+    st.subheader("Global Parameters")
+    st.caption("These parameters are inherited by all scenarios (can be overridden)")
+
+    with st.expander("Network Configuration", expanded=False):
+        network_params = network_config_form(key_prefix="edit_exp_net")
+
+    with st.expander("Distribution Configuration", expanded=False):
+        dist_params = distribution_config_form(key_prefix="edit_exp_dist")
+
+    with st.expander("Simulation Parameters", expanded=False):
+        sim_params = simulation_params_form(key_prefix="edit_exp_sim")
+
+    # -- Scenarios --
+    st.subheader("Scenarios")
+    st.caption(
+        "Each scenario inherits the global parameters above. "
+        "Override specific values to create different conditions."
+    )
+
+    scenario_list: List[Dict[str, Any]] = st.session_state.edit_exp_scenarios
+    can_remove = len(scenario_list) > 1
+
+    for idx, sc in enumerate(scenario_list):
+        _render_edit_scenario(
+            sc_id=sc["id"],
+            default_label=sc["label"],
+            index=idx + 1,
+            can_remove=can_remove,
+        )
+
+    btn_col1, btn_col2 = st.columns([3, 1])
+    with btn_col2:
+        st.button(
+            "+ Add Scenario",
+            on_click=_add_edit_scenario,
+            width="stretch",
+        )
+
+    # -- Action buttons --
+    st.divider()
+    spacer, col_cancel, col_save = st.columns([6, 2, 2])
+
+    with col_cancel:
+        if st.button("Cancel", width="stretch", key="edit_exp_cancel"):
+            _cleanup_edit_experiment_state()
+            st.rerun()
+
+    with col_save:
+        if st.button(
+            "Save Changes",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+            key="edit_exp_save",
+        ):
+            if not name:
+                st.error("Please provide an experiment name")
+                return
+
+            # Validate scenario labels
+            from spkmc.models.scenario import Scenario as ScenarioModel
+
+            for sc in scenario_list:
+                sc_label = st.session_state.get(f"{sc['id']}_label", "").strip()
+                if not sc_label:
+                    st.error("All scenarios must have a label.")
+                    return
+
+            seen_normalized: Dict[str, str] = {}
+            for sc in scenario_list:
+                sc_label = st.session_state.get(f"{sc['id']}_label", "").strip()
+                norm = ScenarioModel.normalize_label(sc_label)
+                if not norm:
+                    st.error(
+                        f"Scenario label '{sc_label}' normalizes to an empty filename. "
+                        "Use a label with at least one alphanumeric character."
+                    )
+                    return
+                if norm in seen_normalized:
+                    st.error(
+                        f"Scenario labels '{seen_normalized[norm]}' and '{sc_label}' "
+                        f"conflict (both normalize to '{norm}'). Use distinct names."
+                    )
+                    return
+                seen_normalized[norm] = sc_label
+
+            global_params = {**network_params, **dist_params, **sim_params}
+
+            # Collect scenario overrides
+            scenarios = [
+                _collect_edit_scenario_overrides(sc["id"], global_params) for sc in scenario_list
+            ]
+
+            if not scenarios:
+                st.error("An experiment must have at least one scenario.")
+                return
+
+            try:
+                new_path = update_experiment(
+                    experiment,
+                    new_name=name,
+                    new_description=description,
+                    new_parameters=global_params,
+                    new_scenarios=scenarios,
+                )
+
+                _cleanup_edit_experiment_state()
+
+                # If directory was renamed, update the selected experiment
+                if new_path is not None:
+                    SessionState.set_selected_experiment(new_path.name)
+
+                st.success(f"Experiment '{name}' updated successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to update experiment: {str(e)}")
 
 
 def run_ai_analysis(experiment: Experiment) -> None:
