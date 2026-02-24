@@ -130,6 +130,7 @@ results/
 
 # Experiments (user-created, not tracked in git)
 experiments/
+!tests/e2e/fixtures/experiments/
 
 # AI-generated analysis files
 cross_experiment_analysis.md

@@ -1,0 +1,22 @@
+{
+  "name": "E2E Smoke Test Experiment",
+  "description": "Pre-seeded experiment for E2E testing",
+  "parameters": {
+    "network": "er",
+    "nodes": 100,
+    "k_avg": 5.0,
+    "distribution": "gamma",
+    "lambda": 1.0,
+    "shape": 2.0,
+    "scale": 1.0,
+    "samples": 10,
+    "num_runs": 1,
+    "initial_perc": 0.01,
+    "t_max": 5.0,
+    "steps": 50
+  },
+  "scenarios": [
+    {"label": "Baseline"},
+    {"label": "High Lambda", "lambda": 2.0}
+  ]
+}
