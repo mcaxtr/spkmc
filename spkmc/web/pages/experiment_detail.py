@@ -79,6 +79,42 @@ def _values_equal(a: Any, b: Any) -> bool:
     return bool(a == b)
 
 
+def _params_equal(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    """Compare two parameter dicts with numeric type normalization."""
+    if set(a.keys()) != set(b.keys()):
+        return False
+    return all(_values_equal(a[k], b[k]) for k in a)
+
+
+_SCENARIO_META_KEYS = {"label", "status"}
+
+
+def _scenarios_equal(
+    old: List[Dict[str, Any]],
+    new: List[Dict[str, Any]],
+    global_params: Dict[str, Any],
+) -> bool:
+    """Compare two scenario lists with numeric type normalization.
+
+    Strips metadata keys (label, status) and compares *effective*
+    parameters (globals + overrides) — so a stale ``"status": "edited"``
+    or a redundant override that equals a global value does not cause a
+    false-positive diff.
+    """
+    if len(old) != len(new):
+        return False
+    for a, b in zip(old, new):
+        if a.get("label") != b.get("label"):
+            return False
+        a_overrides = {k: v for k, v in a.items() if k not in _SCENARIO_META_KEYS}
+        b_overrides = {k: v for k, v in b.items() if k not in _SCENARIO_META_KEYS}
+        effective_a = {**global_params, **a_overrides}
+        effective_b = {**global_params, **b_overrides}
+        if not _params_equal(effective_a, effective_b):
+            return False
+    return True
+
+
 def _download_anchor(data: bytes, filename: str, mime: str, label: str = "Download") -> str:
     """
     Return an HTML anchor styled as a button using a base64 data URI.
