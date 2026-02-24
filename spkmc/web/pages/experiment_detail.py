@@ -1968,6 +1968,199 @@ def update_scenario_in_experiment(
         old_analysis.unlink()
 
 
+def _delete_scenario_files(exp_path: Path, normalized_label: str) -> None:
+    """Delete result and analysis files for a single scenario."""
+    result_file = exp_path / f"{normalized_label}.json"
+    if result_file.exists():
+        result_file.unlink()
+    analysis_file = exp_path / f"{normalized_label}_analysis.md"
+    if analysis_file.exists():
+        analysis_file.unlink()
+
+
+def _invalidate_all_results(exp_path: Path, old_scenarios: List[Dict[str, Any]]) -> None:
+    """Delete ALL scenario results and the experiment-level analysis."""
+    from spkmc.models.scenario import Scenario as ScenarioModel
+
+    for sc in old_scenarios:
+        label = sc.get("label", "")
+        norm = ScenarioModel.normalize_label(label)
+        if norm:
+            _delete_scenario_files(exp_path, norm)
+
+    # Delete experiment-level analysis
+    exp_analysis = exp_path / "analysis.md"
+    if exp_analysis.exists():
+        exp_analysis.unlink()
+
+
+def _invalidate_changed_scenarios(
+    exp_path: Path,
+    old_scenarios: List[Dict[str, Any]],
+    new_scenarios: List[Dict[str, Any]],
+    global_params: Dict[str, Any],
+) -> None:
+    """Delete result files for removed or modified scenarios only.
+
+    Compares *effective* parameters (globals + overrides) so that
+    redundant overrides (value equal to the global) don't trigger
+    false-positive invalidation.
+    """
+    from spkmc.models.scenario import Scenario as ScenarioModel
+
+    # Build lookup of new scenarios by normalized label
+    new_by_norm: Dict[str, Dict[str, Any]] = {}
+    for sc in new_scenarios:
+        label = sc.get("label", "")
+        norm = ScenarioModel.normalize_label(label)
+        if norm:
+            new_by_norm[norm] = sc
+
+    meta_keys = {"label", "status"}
+    for old_sc in old_scenarios:
+        old_label = old_sc.get("label", "")
+        old_norm = ScenarioModel.normalize_label(old_label)
+        if not old_norm:
+            continue
+
+        if old_norm not in new_by_norm:
+            # Scenario was removed
+            _delete_scenario_files(exp_path, old_norm)
+        else:
+            # Scenario still exists — compare effective parameters
+            new_sc = new_by_norm[old_norm]
+            old_overrides = {k: v for k, v in old_sc.items() if k not in meta_keys}
+            new_overrides = {k: v for k, v in new_sc.items() if k not in meta_keys}
+            effective_old = {**global_params, **old_overrides}
+            effective_new = {**global_params, **new_overrides}
+            if not _params_equal(effective_old, effective_new):
+                _delete_scenario_files(exp_path, old_norm)
+
+
+def update_experiment(
+    experiment: Experiment,
+    new_name: str,
+    new_description: str,
+    new_parameters: Dict[str, Any],
+    new_scenarios: List[Dict[str, Any]],
+) -> Optional[Path]:
+    """Update an experiment's configuration.
+
+    Detects what changed and invalidates results accordingly:
+    - Global params changed: invalidate ALL scenario results + experiment analysis
+    - Only scenarios changed: invalidate only removed/modified scenarios
+    - Only name/description changed: preserve all results
+
+    Args:
+        experiment: The experiment to update
+        new_name: New experiment name
+        new_description: New experiment description
+        new_parameters: New global parameter dictionary
+        new_scenarios: New scenario list (each a dict with "label" and overrides)
+
+    Returns:
+        New experiment path if the directory was renamed, or None otherwise
+        (including no-op edits).
+
+    Raises:
+        ValueError: On empty name, empty scenarios, duplicate labels, or name collision
+    """
+    from spkmc.models.scenario import Scenario as ScenarioModel
+
+    exp_path = experiment.path
+    assert exp_path is not None
+
+    # -- Validate inputs --
+    new_dir_name = ScenarioModel.normalize_label(new_name)
+    if not new_dir_name:
+        raise ValueError(
+            f"Experiment name '{new_name}' normalizes to an empty directory name. "
+            "Use a name with at least one alphanumeric character."
+        )
+
+    if not new_scenarios:
+        raise ValueError("An experiment must have at least one scenario.")
+
+    # Check for duplicate scenario labels
+    seen_norms: Dict[str, str] = {}
+    for sc in new_scenarios:
+        label = sc.get("label", "")
+        norm = ScenarioModel.normalize_label(label)
+        if not norm:
+            raise ValueError(
+                f"Scenario label '{label}' normalizes to an empty filename. "
+                "Use a label with at least one alphanumeric character."
+            )
+        if norm in seen_norms:
+            raise ValueError(
+                f"Scenario labels '{seen_norms[norm]}' and '{label}' conflict "
+                f"(both normalize to '{norm}'). Use distinct names."
+            )
+        seen_norms[norm] = label
+
+    # -- Pre-check directory rename collision --
+    old_dir_name = exp_path.name
+    rename_needed = new_dir_name != old_dir_name
+    new_path: Optional[Path] = None
+    if rename_needed:
+        new_path = exp_path.parent / new_dir_name
+        if new_path.exists():
+            raise ValueError(
+                f"Cannot rename experiment: directory '{new_dir_name}' already exists."
+            )
+
+    # -- Load current data.json and detect changes --
+    data_file = exp_path / "data.json"
+    with open(data_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    old_name = data.get("name", "")
+    old_description = data.get("description", "") or ""
+    old_parameters = data.get("parameters", {})
+    old_scenarios = data.get("scenarios", [])
+
+    name_changed = new_name != old_name
+    description_changed = new_description != old_description
+    params_changed = not _params_equal(old_parameters, new_parameters)
+    scenarios_changed = not _scenarios_equal(old_scenarios, new_scenarios, old_parameters)
+
+    nothing_changed = (
+        not name_changed
+        and not description_changed
+        and not params_changed
+        and not scenarios_changed
+    )
+    if nothing_changed:
+        return None  # No-op: nothing changed
+
+    # -- Invalidate stale results --
+    if params_changed:
+        _invalidate_all_results(exp_path, old_scenarios)
+    elif scenarios_changed:
+        _invalidate_changed_scenarios(exp_path, old_scenarios, new_scenarios, old_parameters)
+    # name/description only → preserve all results
+
+    # -- Write updated data.json --
+    data["name"] = new_name
+    data["description"] = new_description
+    data["parameters"] = new_parameters
+    data["scenarios"] = new_scenarios
+
+    from spkmc.web import atomic_json_write
+
+    atomic_json_write(data_file, data)
+
+    # -- Rename directory if name changed --
+    if rename_needed and new_path is not None:
+        exp_path.rename(new_path)
+        return new_path
+
+    return None
+
+
+# ── Edit Experiment Modal ────────────────────────────────────────────────────
+
+
 def run_ai_analysis(experiment: Experiment) -> None:
     """
     Launch subprocess-based AI analysis on an experiment.
