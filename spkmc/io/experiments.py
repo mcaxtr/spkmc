@@ -9,8 +9,11 @@ This module re-exports them for backward compatibility.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Re-export models for backward compatibility
 from spkmc.models import (
@@ -64,19 +67,39 @@ class ExperimentManager:
         experiments: List[Experiment] = []
 
         if not self.experiments_dir.exists():
+            logger.debug("Experiments dir does not exist: %s", self.experiments_dir)
             return experiments
 
+        dirs_scanned = 0
+        data_found = 0
         for exp_dir in sorted(self.experiments_dir.iterdir()):
             if exp_dir.is_dir():
+                dirs_scanned += 1
                 data_file = exp_dir / self.DATA_FILE_NAME
                 if data_file.exists():
+                    data_found += 1
                     try:
                         experiment = self.load_experiment(exp_dir.name)
                         experiments.append(experiment)
-                    except (json.JSONDecodeError, KeyError, ValueError):
-                        # Skip invalid experiments
+                    except Exception as e:
+                        # Log instead of silently skipping, so --verbose
+                        # reveals why an experiment was ignored (e.g. Pydantic
+                        # validation errors).
+                        logger.warning(
+                            "Skipping %s: %s: %s",
+                            exp_dir.name,
+                            type(e).__name__,
+                            e,
+                        )
                         continue
 
+        logger.debug(
+            "Scanned %d dirs, %d have %s, %d loaded OK",
+            dirs_scanned,
+            data_found,
+            self.DATA_FILE_NAME,
+            len(experiments),
+        )
         return experiments
 
     def load_experiment(self, experiment_name: str) -> Experiment:

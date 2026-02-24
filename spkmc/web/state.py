@@ -255,16 +255,20 @@ class SessionState:
         return "pending"
 
     @staticmethod
-    def restore_running_analyses() -> None:
+    def restore_running_analyses() -> int:
         """Restore running analyses from status files on disk.
 
         Scans .spkmc_web/status/ for analysis status files, verifies the PID
         is still alive, and adds them back to session state. Called once on
         session init to survive page refresh.
+
+        Returns:
+            Number of analyses restored.
         """
+        restored = 0
         status_dir = Path(".spkmc_web") / "status"
         if not status_dir.exists():
-            return
+            return 0
 
         for status_file in sorted(
             list(status_dir.glob("exp_analysis--*.json"))
@@ -345,18 +349,25 @@ class SessionState:
                 "pid": pid,
             }
             SessionState.add_running_analysis(analysis_id, info)
+            restored += 1
+
+        return restored
 
     @staticmethod
-    def restore_running_simulations() -> None:
+    def restore_running_simulations() -> int:
         """Restore running simulations from status files on disk.
 
         Scans .spkmc_web/status/ for status files with running processes,
         verifies the PID is still alive, and adds them back to session state.
         Called once on session init to survive page refresh.
+
+        Returns:
+            Number of simulations restored.
         """
+        restored = 0
         status_dir = Path(".spkmc_web") / "status"
         if not status_dir.exists():
-            return
+            return 0
 
         for status_file in status_dir.glob("sim--*.json"):
             try:
@@ -420,7 +431,11 @@ class SessionState:
             if total > 0:
                 SessionState.set_simulation_progress(scenario_id, progress, total)
 
+            restored += 1
+
+        return restored
+
 
 def _is_pid_alive(pid: int) -> bool:
     """Check if a process with the given PID is still running."""
-    return psutil.pid_exists(pid)
+    return bool(psutil.pid_exists(pid))

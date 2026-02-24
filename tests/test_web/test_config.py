@@ -175,7 +175,20 @@ def test_get_experiments_path_returns_path_instance(tmp_path):
 def test_get_experiments_path_reflects_configured_value(tmp_path):
     cfg = _make_config(tmp_path)
     cfg.set("experiments_directory", "my_experiments")
-    assert cfg.get_experiments_path() == Path("my_experiments")
+    result = cfg.get_experiments_path()
+    # Relative paths are now resolved to absolute
+    assert result.is_absolute()
+    assert result.name == "my_experiments"
+
+
+def test_get_experiments_path_prefers_env_var(tmp_path, monkeypatch):
+    """SPKMC_EXPERIMENTS_DIR env var overrides config file."""
+    cfg = _make_config(tmp_path)
+    cfg.set("experiments_directory", "should_be_ignored")
+    env_path = str(tmp_path / "from_env")
+    monkeypatch.setenv("SPKMC_EXPERIMENTS_DIR", env_path)
+    result = cfg.get_experiments_path()
+    assert result == Path(env_path)
 
 
 # ── OpenAI secrets ────────────────────────────────────────────────────────────

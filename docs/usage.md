@@ -78,6 +78,8 @@ The SPKMC CLI provides the following main commands:
 - `plot`: Visualize results from previous simulations
 - `info`: Show information about saved simulations
 - `compare`: Compare results from multiple simulations
+- `batch`: Run multiple simulation scenarios from a JSON file
+- `web`: Launch the interactive web interface
 
 ### `run` Command
 
@@ -248,6 +250,79 @@ python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/sp
 # Save the comparison plot
 python spkmc_cli.py compare data/spkmc/gamma/ER/results_1000_50_2.0.json data/spkmc/exponential/ER/results_1000_50_.json -o plots/comparison.png
 ```
+
+## Web Interface
+
+SPKMC includes an interactive web interface built with Streamlit that provides a browser-based alternative to the CLI. It supports experiment management, real-time simulation execution, interactive charting, and optional AI-powered analysis.
+
+### Launching the Web Interface
+
+```bash
+# Start with default settings (opens browser automatically)
+spkmc web
+
+# Specify a custom port
+spkmc web --port 8502
+
+# Bind to a specific host (useful for remote servers)
+spkmc web --host 0.0.0.0
+
+# Start without opening a browser window
+spkmc web --no-browser
+
+# Enable verbose debug logging
+spkmc web --verbose
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--port` | int | `8501` | Port number for the Streamlit server |
+| `--host` | string | `localhost` | Host address to bind the server to |
+| `--no-browser` | flag | `False` | Do not open a browser window on startup |
+| `--verbose` | flag | `False` | Enable structured debug logging to the terminal |
+
+### Dashboard
+
+The dashboard is the landing page of the web interface. It provides an overview of all experiments and quick access to create new ones.
+
+- **Experiment cards**: Each experiment discovered in the `experiments/` folder is shown as a card with its name, number of scenarios, and summary statistics (node counts, network types used).
+- **Summary statistics**: Aggregate counts of total experiments, scenarios, and completed runs are displayed at the top of the page.
+- **Create experiment**: A modal dialog allows creating a new experiment by specifying a name and adding one or more scenario configurations. The experiment is saved as a `data.json` file in the `experiments/` directory.
+- **Live polling**: The dashboard periodically checks the filesystem for new or updated experiments, so results from CLI batch runs appear automatically.
+
+### Experiment Detail
+
+Selecting an experiment from the dashboard opens the detail view, which provides full control over that experiment's scenarios and results.
+
+- **Scenario management**: View all scenarios in the experiment as individual cards showing their network type, distribution, node count, and other parameters. New scenarios can be added directly from this page.
+- **SIR charts**: Each completed scenario displays an interactive Plotly chart with Susceptible, Infected, and Recovered curves. Charts support zoom, pan, and hover inspection.
+- **Comparison**: A dedicated comparison view overlays SIR curves from multiple scenarios on the same chart, making it straightforward to evaluate the effect of parameter changes.
+- **Export**: Simulation results can be exported from the detail page in standard formats for further analysis.
+
+### Settings
+
+The settings page provides configuration options that persist across sessions.
+
+- **Preferences**: Default values for simulation parameters (node count, samples, time steps) and display options. These defaults are applied when creating new scenarios in the web interface.
+- **AI configuration**: API key and model selection for optional AI-powered analysis of simulation results. Sensitive values are stored via Streamlit secrets.
+- **Defaults**: Reset all preferences to their factory values.
+
+### Experiment Auto-Discovery
+
+The web interface automatically discovers experiments from the `experiments/` folder in the project root. Any directory containing a `data.json` configuration file is recognized as an experiment. This means experiments created via the CLI `batch` command or by manually placing files in the directory are immediately visible in the dashboard without any import step.
+
+### Verbose Mode
+
+When launched with `--verbose`, the web interface outputs structured debug logs to the terminal. This is useful for diagnosing issues with simulation subprocess execution, AI analysis calls, or Streamlit state management. Log entries include timestamps, module names, and severity levels.
+
+```bash
+# Example: debugging a simulation that fails to start
+spkmc web --verbose --no-browser --port 8502
+```
+
+The verbose output appears in the terminal where the `spkmc web` command was launched, not in the browser.
 
 ## Programmatic Usage
 
