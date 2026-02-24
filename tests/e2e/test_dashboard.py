@@ -105,10 +105,18 @@ def test_experiment_card_shows_scenario_count(app_page):
 
 def test_experiment_card_clickable(app_page):
     """Clicking an experiment card navigates to the detail view."""
-    # Find and click the pre-seeded experiment card by text
-    card_btn = app_page.get_by_text("E2E Smoke Test Experiment").first
-    expect(card_btn).to_be_visible(timeout=8000)
-    card_btn.click()
+    # Find the card container that has the pre-seeded experiment, then click its button.
+    # Card indices can shift when other tests create experiments, so we search by text.
+    cards = app_page.locator("[class*='st-key-exp_card_']")
+    card_count = cards.count()
+    clicked = False
+    for i in range(card_count):
+        card = cards.nth(i)
+        if "E2E Smoke Test Experiment" in (card.text_content() or ""):
+            card.locator("button").click()
+            clicked = True
+            break
+    assert clicked, "Pre-seeded experiment card not found"
     # Wait for the detail-specific back button to confirm navigation succeeded
     back_btn = app_page.locator(".st-key-detail_back_btn button")
     expect(back_btn).to_be_visible(timeout=15000)
