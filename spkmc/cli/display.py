@@ -129,12 +129,21 @@ def display_result_statistics(result: "SimulationResult") -> None:
     Args:
         result: SimulationResult to display statistics for
     """
+    from spkmc.cli.formatting import log_warning
+
     console.print(format_title("Simulation Statistics"))
     stats = result.get_statistics()
     max_inf_str = f"{stats['peak_infected']:.4f} (at t={stats['peak_time']:.2f})"
     final_recovered_str = f"{stats['final_recovered']:.4f}"
     console.print(f"  {format_param('Peak infected', max_inf_str)}")
     console.print(f"  {format_param('Final recovered', final_recovered_str)}")
+
+    if not result.is_equilibrated:
+        log_warning(
+            "R(t) is still changing at the end of the simulation. "
+            "Results may not reflect equilibrium. Consider increasing --t-max."
+        )
+
     console.print()
 
 

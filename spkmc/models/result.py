@@ -69,6 +69,20 @@ class SimulationResult:
         return float(self.R_val[-1])
 
     @property
+    def is_equilibrated(self) -> bool:
+        """Check if the simulation reached equilibrium.
+
+        Compares the R(t) curve over its final 10% of time steps.
+        Returns False when R is still changing significantly,
+        which usually means t_max is too short for the chosen parameters.
+        """
+        if self.is_empty or len(self.R_val) < 10:
+            return True
+        n = max(2, len(self.R_val) // 10)
+        delta = abs(float(self.R_val[-1]) - float(self.R_val[-n]))
+        return delta < 0.01
+
+    @property
     def final_susceptible(self) -> float:
         """Get final susceptible proportion. Returns 0.0 for empty results."""
         if self.is_empty:
