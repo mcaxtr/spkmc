@@ -695,7 +695,7 @@ def _execute_single_scenario(
     if network_type == "sf":
         simulation_params["exponent"] = exponent
 
-    # Disable inner progress bars during batch execution
+    # Disable inner progress bars during experiment execution
     simulation_params["show_progress"] = False
 
     # Execute simulation with progress callback for per-sample updates
@@ -2565,10 +2565,10 @@ def experiment(
     # FILE MODE: Traditional execution with a scenarios file
     # ============================================================
 
-    # Record batch execution start
+    # Record experiment execution start
     start_time = time.time()
     log_debug(
-        f"Starting batch execution at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Starting experiment execution at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         verbose_only=False,
     )
 
@@ -2794,3 +2794,73 @@ def clean(
 
     console.print()
     log_success(f"Cleanup completed. {cleaned_count} location(s) cleaned.")
+
+
+@cli.command(help="Launch the web interface")
+@click.option("--port", "-p", default=8501, type=int, help="Port to run the server on")
+@click.option("--host", default="localhost", type=str, help="Host to bind to")
+@click.option("--no-browser", is_flag=True, help="Do not open browser automatically")
+def web(port: int, host: str, no_browser: bool) -> None:
+    """Launch the Streamlit web interface."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    log_info("Starting SPKMC web interface...")
+
+    # Find the app.py file
+    web_app = Path(__file__).parent.parent / "web" / "app.py"
+
+    if not web_app.exists():
+        log_error(f"Web app not found at {web_app}")
+        log_error("Web interface files are missing. Reinstall SPKMC: pip install --upgrade spkmc")
+        sys.exit(1)
+
+    # Build streamlit command with all config as CLI flags
+    # (avoids requiring a .streamlit/config.toml file on disk)
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(web_app),
+        "--server.port",
+        str(port),
+        "--server.address",
+        host,
+        "--server.headless",
+        "true" if no_browser else "false",
+        "--server.fileWatcherType",
+        "none",
+        "--browser.gatherUsageStats",
+        "false",
+        "--client.toolbarMode",
+        "minimal",
+        "--runner.magicEnabled",
+        "false",
+        "--theme.base",
+        "light",
+        "--theme.primaryColor",
+        "#2D7A6E",
+        "--theme.backgroundColor",
+        "#F7F8FA",
+        "--theme.secondaryBackgroundColor",
+        "#FFFFFF",
+        "--theme.textColor",
+        "#111827",
+        "--theme.font",
+        "sans serif",
+    ]
+
+    log_info(f"Launching at http://{host}:{port}")
+
+    try:
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            log_error(f"Web interface exited with code {result.returncode}")
+            sys.exit(result.returncode)
+    except KeyboardInterrupt:
+        log_info("Web interface stopped")
+    except Exception as e:
+        log_error(f"Failed to start web interface: {e}")
+        sys.exit(1)
