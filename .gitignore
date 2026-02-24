@@ -135,3 +135,15 @@ experiments/
 cross_experiment_analysis.md
 
 **/.DS_Store
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Web interface runtime
+.spkmc_web/
+.streamlit/
+
+# Temporary files
+tmp_*.html
+tmp_*.json
