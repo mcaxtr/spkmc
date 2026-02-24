@@ -4,170 +4,89 @@ Result visualization for the SPKMC algorithm.
 This module contains functions to visualize SPKMC simulation results,
 including time-evolution plots of SIR states and comparisons between simulations.
 
-Uses seaborn and matplotlib with publication-quality styling suitable for
-academic papers and presentations.
+Uses Plotly for interactive visualizations that work in both CLI (opens browser)
+and web interface (embedded in Streamlit).
 """
 
-import contextlib
 import os
-import sys
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
-import seaborn as sns
+import plotly.graph_objects as go
+import plotly.io as pio
 
-# Publication-quality color palettes (colorblind-friendly)
-# Based on Paul Tol's colorblind-safe palette
-COLORBLIND_PALETTE = [
-    "#4477AA",  # blue
-    "#EE6677",  # red/pink
-    "#228833",  # green
-    "#CCBB44",  # yellow
-    "#66CCEE",  # cyan
-    "#AA3377",  # purple
-    "#BBBBBB",  # grey
-]
-
-# SIR-specific colors (semantically meaningful and colorblind-friendly)
-SIR_COLORS = {
-    "S": "#4477AA",  # blue for susceptible
-    "I": "#EE6677",  # red/pink for infected
-    "R": "#228833",  # green for recovered
-}
-
-# Line styles for distinguishing curves
-LINE_STYLES = {
-    "S": "-",  # solid for susceptible
-    "I": "-",  # solid for infected
-    "R": "--",  # dashed for recovered
-}
+# Import from web plotting module to reuse code
+from spkmc.web.plotting import (
+    COLOR_I,
+    COLOR_R,
+    COLOR_S,
+    STATE_COLORS,
+    create_comparison_figure,
+    create_sir_figure,
+)
 
 # Default DPI for saved figures (single source of truth)
 DEFAULT_PLOT_DPI = 300
 
-
-def _setup_publication_style() -> None:
-    """Configure matplotlib and seaborn for publication-quality figures."""
-    # Use seaborn's whitegrid style as base
-    sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
-    sns.set_palette(COLORBLIND_PALETTE)
-
-    # Additional matplotlib customizations
-    plt.rcParams.update(
-        {
-            # Figure
-            "figure.facecolor": "white",
-            "figure.edgecolor": "white",
-            "figure.dpi": 150,
-            # Font
-            "font.family": "sans-serif",
-            "font.sans-serif": ["Arial", "DejaVu Sans", "Helvetica", "sans-serif"],
-            "font.size": 11,
-            # Axes
-            "axes.linewidth": 1.2,
-            "axes.labelsize": 12,
-            "axes.titlesize": 14,
-            "axes.titleweight": "bold",
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "axes.grid": True,
-            "axes.axisbelow": True,
-            # Grid
-            "grid.alpha": 0.4,
-            "grid.linestyle": "-",
-            "grid.linewidth": 0.8,
-            # Legend
-            "legend.frameon": True,
-            "legend.framealpha": 0.9,
-            "legend.edgecolor": "0.8",
-            "legend.fontsize": 10,
-            "legend.title_fontsize": 11,
-            # Ticks
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "xtick.major.width": 1.2,
-            "ytick.major.width": 1.2,
-            # Lines
-            "lines.linewidth": 2.0,
-            "lines.markersize": 6,
-            # Saving
-            "savefig.dpi": 300,
-            "savefig.bbox": "tight",
-            "savefig.facecolor": "white",
-            "savefig.edgecolor": "white",
-        }
-    )
+# Configure Plotly defaults for publication quality
+pio.templates.default = "plotly_white"
 
 
-def _get_scenario_colors(n_scenarios: int) -> List[str]:
-    """Get a list of colorblind-friendly colors for scenarios."""
-    if n_scenarios <= len(COLORBLIND_PALETTE):
-        return COLORBLIND_PALETTE[:n_scenarios]
-
-    # If we need more colors, cycle through the palette
-    colors = []
-    for i in range(n_scenarios):
-        colors.append(COLORBLIND_PALETTE[i % len(COLORBLIND_PALETTE)])
-    return colors
-
-
-@contextlib.contextmanager
-def _suppress_macos_warning() -> Generator[None, None, None]:
+def _save_or_show(
+    fig: go.Figure,
+    save_path: Optional[str] = None,
+    format: str = "png",
+    dpi: int = DEFAULT_PLOT_DPI,
+    width: int = 800,
+    height: int = 500,
+) -> None:
     """
-    Context manager to suppress macOS ApplePersistenceIgnoreState warning.
-
-    This warning is printed by macOS Cocoa layer, not Python, so we redirect
-    the file descriptor directly rather than using Python's sys.stderr.
-    """
-    if sys.platform != "darwin":
-        yield
-        return
-
-    # On macOS, redirect stderr at the file descriptor level
-    # to suppress Cocoa framework warnings
-    stderr_fd = sys.stderr.fileno()
-    try:
-        # Save the original stderr
-        saved_stderr = os.dup(stderr_fd)
-        # Open /dev/null
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        # Replace stderr with /dev/null
-        os.dup2(devnull, stderr_fd)
-        os.close(devnull)
-        yield
-    finally:
-        # Restore original stderr
-        os.dup2(saved_stderr, stderr_fd)
-        os.close(saved_stderr)
-
-
-def _show_plot() -> None:
-    """Show plot with suppressed macOS warnings."""
-    with _suppress_macos_warning():
-        plt.show()
-
-
-def _create_figure(
-    figsize: Tuple[float, float] = (8, 5), **kwargs: Any
-) -> Tuple[plt.Figure, plt.Axes]:
-    """
-    Create a publication-quality figure with proper styling.
+    Save figure to file or open in browser.
 
     Args:
-        figsize: Figure size in inches (width, height)
-        **kwargs: Additional arguments passed to plt.subplots
-
-    Returns:
-        Tuple of (figure, axes)
+        fig: Plotly figure
+        save_path: Path to save the figure (if None, opens in browser)
+        format: Output format ('png', 'jpg', 'svg', 'pdf', 'html')
+        dpi: Resolution for raster formats
+        width: Width in pixels
+        height: Height in pixels
     """
-    _setup_publication_style()
+    if save_path:
+        # Determine format from extension if not specified
+        if save_path.endswith(".html"):
+            format = "html"
+        elif save_path.endswith(".svg"):
+            format = "svg"
+        elif save_path.endswith(".pdf"):
+            format = "pdf"
+        elif save_path.endswith(".jpg") or save_path.endswith(".jpeg"):
+            format = "jpg"
+        else:
+            format = "png"
 
-    with _suppress_macos_warning():
-        fig, ax = plt.subplots(figsize=figsize, **kwargs)
-
-    return fig, ax
+        if format == "html":
+            # Save as standalone HTML
+            fig.write_html(save_path, include_plotlyjs="cdn")
+        else:
+            # Save as static image (requires kaleido)
+            try:
+                scale = dpi / 96  # Convert DPI to scale factor (96 is default)
+                fig.write_image(
+                    save_path,
+                    format=format,
+                    width=width,
+                    height=height,
+                    scale=scale,
+                )
+            except (ValueError, ImportError) as e:
+                raise RuntimeError(
+                    f"Failed to save plot as {format}: {e}. "
+                    "Install kaleido for static image export: pip install kaleido"
+                ) from e
+    else:
+        # Open in browser
+        fig.show()
 
 
 if TYPE_CHECKING:
@@ -175,7 +94,7 @@ if TYPE_CHECKING:
 
 
 class Visualizer:
-    """Class for visualizing simulation results with publication-quality plots."""
+    """Class for visualizing simulation results with interactive Plotly plots."""
 
     @staticmethod
     def plot_result_with_error(
@@ -188,11 +107,11 @@ class Visualizer:
         time: np.ndarray,
         title: Optional[str] = None,
         save_path: Optional[str] = None,
-        states_to_plot: Optional[set] = None,
+        states_to_plot: Optional[Set[str]] = None,
         dpi: int = DEFAULT_PLOT_DPI,
     ) -> None:
         """
-        Plot results with shaded error bands (publication-quality).
+        Plot results with shaded error bands (interactive Plotly).
 
         Args:
             S: Proportion of susceptible
@@ -203,86 +122,37 @@ class Visualizer:
             R_err: Standard error for recovered
             time: Time steps
             title: Plot title (optional)
-            save_path: Path to save the plot (optional)
+            save_path: Path to save the plot (optional, opens in browser if None)
             states_to_plot: Set of states to plot ('S', 'I', 'R')
             dpi: Resolution in dots per inch for saved figures (default: 300)
         """
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
 
-        fig, ax = _create_figure(figsize=(8, 5))
+        # Convert to list for Plotly
+        states_list = list(states_to_plot)
 
-        # Plot with shaded error bands (more elegant than error bars)
-        if "S" in states_to_plot:
-            ax.plot(
-                time,
-                S,
-                color=SIR_COLORS["S"],
-                linestyle=LINE_STYLES["S"],
-                linewidth=2.0,
-                label="Susceptible",
-            )
-            ax.fill_between(
-                time,
-                S - S_err,
-                S + S_err,
-                color=SIR_COLORS["S"],
-                alpha=0.2,
-            )
+        # Build result dict
+        result_dict = {
+            "time": time.tolist() if isinstance(time, np.ndarray) else time,
+            "S_val": S.tolist() if isinstance(S, np.ndarray) else S,
+            "I_val": I.tolist() if isinstance(I, np.ndarray) else I,
+            "R_val": R.tolist() if isinstance(R, np.ndarray) else R,
+            "S_err": S_err.tolist() if isinstance(S_err, np.ndarray) else S_err,
+            "I_err": I_err.tolist() if isinstance(I_err, np.ndarray) else I_err,
+            "R_err": R_err.tolist() if isinstance(R_err, np.ndarray) else R_err,
+        }
 
-        if "I" in states_to_plot:
-            ax.plot(
-                time,
-                I,
-                color=SIR_COLORS["I"],
-                linestyle=LINE_STYLES["I"],
-                linewidth=2.0,
-                label="Infected",
-            )
-            ax.fill_between(
-                time,
-                I - I_err,
-                I + I_err,
-                color=SIR_COLORS["I"],
-                alpha=0.2,
-            )
+        # Create figure using web plotting module
+        fig = create_sir_figure(
+            result_dict,
+            title=title or "SIR Dynamics with Confidence Bands",
+            states=states_list,
+            show_error_bands=True,
+            height=500,
+        )
 
-        if "R" in states_to_plot:
-            ax.plot(
-                time,
-                R,
-                color=SIR_COLORS["R"],
-                linestyle=LINE_STYLES["R"],
-                linewidth=2.0,
-                label="Recovered",
-            )
-            ax.fill_between(
-                time,
-                R - R_err,
-                R + R_err,
-                color=SIR_COLORS["R"],
-                alpha=0.2,
-            )
-
-        ax.set_xlabel("Time", fontweight="medium")
-        ax.set_ylabel("Proportion of Population", fontweight="medium")
-        ax.set_ylim(0, 1.05)
-        ax.set_xlim(time[0], time[-1])
-
-        if title:
-            ax.set_title(title, pad=15)
-        else:
-            ax.set_title("SIR Dynamics with Confidence Bands", pad=15)
-
-        ax.legend(loc="best", framealpha=0.9)
-
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
-        else:
-            _show_plot()
+        _save_or_show(fig, save_path, dpi=dpi)
 
     @staticmethod
     def plot_result(
@@ -292,11 +162,11 @@ class Visualizer:
         time: np.ndarray,
         title: Optional[str] = None,
         save_path: Optional[str] = None,
-        states_to_plot: Optional[set] = None,
+        states_to_plot: Optional[Set[str]] = None,
         dpi: int = DEFAULT_PLOT_DPI,
     ) -> None:
         """
-        Plot results without error bands (publication-quality).
+        Plot results without error bands (interactive Plotly).
 
         Args:
             S: Proportion of susceptible
@@ -304,64 +174,34 @@ class Visualizer:
             R: Proportion of recovered
             time: Time steps
             title: Plot title (optional)
-            save_path: Path to save the plot (optional)
+            save_path: Path to save the plot (optional, opens in browser if None)
             states_to_plot: Set of states to plot ('S', 'I', 'R')
             dpi: Resolution in dots per inch for saved figures (default: 300)
         """
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
 
-        fig, ax = _create_figure(figsize=(8, 5))
+        # Convert to list for Plotly
+        states_list = list(states_to_plot)
 
-        if "S" in states_to_plot:
-            ax.plot(
-                time,
-                S,
-                color=SIR_COLORS["S"],
-                linestyle=LINE_STYLES["S"],
-                linewidth=2.0,
-                label="Susceptible",
-            )
+        # Build result dict
+        result_dict = {
+            "time": time.tolist() if isinstance(time, np.ndarray) else time,
+            "S_val": S.tolist() if isinstance(S, np.ndarray) else S,
+            "I_val": I.tolist() if isinstance(I, np.ndarray) else I,
+            "R_val": R.tolist() if isinstance(R, np.ndarray) else R,
+        }
 
-        if "I" in states_to_plot:
-            ax.plot(
-                time,
-                I,
-                color=SIR_COLORS["I"],
-                linestyle=LINE_STYLES["I"],
-                linewidth=2.0,
-                label="Infected",
-            )
+        # Create figure using web plotting module
+        fig = create_sir_figure(
+            result_dict,
+            title=title or "SIR Model Dynamics",
+            states=states_list,
+            show_error_bands=False,
+            height=500,
+        )
 
-        if "R" in states_to_plot:
-            ax.plot(
-                time,
-                R,
-                color=SIR_COLORS["R"],
-                linestyle=LINE_STYLES["R"],
-                linewidth=2.0,
-                label="Recovered",
-            )
-
-        ax.set_xlabel("Time", fontweight="medium")
-        ax.set_ylabel("Proportion of Population", fontweight="medium")
-        ax.set_ylim(0, 1.05)
-        ax.set_xlim(time[0], time[-1])
-
-        if title:
-            ax.set_title(title, pad=15)
-        else:
-            ax.set_title("SIR Model Dynamics", pad=15)
-
-        ax.legend(loc="best", framealpha=0.9)
-
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
-        else:
-            _show_plot()
+        _save_or_show(fig, save_path, dpi=dpi)
 
     @staticmethod
     def compare_results(
@@ -369,20 +209,17 @@ class Visualizer:
         labels: List[str],
         title: Optional[str] = None,
         save_path: Optional[str] = None,
-        states_to_plot: Optional[set] = None,
+        states_to_plot: Optional[Set[str]] = None,
         dpi: int = DEFAULT_PLOT_DPI,
     ) -> None:
         """
-        Compare results from multiple simulations (publication-quality).
-
-        Uses distinct colors for each scenario and different line styles
-        for each SIR state. Colors are colorblind-friendly.
+        Compare results from multiple simulations (interactive Plotly).
 
         Args:
             results: List of dictionaries with results
             labels: List of labels for each result
             title: Plot title (optional)
-            save_path: Path to save the plot (optional)
+            save_path: Path to save the plot (optional, opens in browser if None)
             states_to_plot: Set of states to plot ('S', 'I', 'R')
             dpi: Resolution in dots per inch for saved figures (default: 300)
         """
@@ -395,94 +232,19 @@ class Visualizer:
         if states_to_plot is None:
             states_to_plot = {"S", "I", "R"}
 
-        # Adjust figure size based on number of scenarios (need room for legend)
-        fig_width = 9 if len(results) <= 4 else 10
-        fig, ax = _create_figure(figsize=(fig_width, 5.5))
+        # Convert to list for Plotly
+        states_list = list(states_to_plot)
 
-        # Get colorblind-friendly colors for scenarios
-        scenario_colors = _get_scenario_colors(len(results))
+        # Create figure using web plotting module
+        fig = create_comparison_figure(
+            results,
+            labels,
+            title=title or "Epidemic Dynamics Comparison",
+            states=states_list,
+            height=600,
+        )
 
-        # Line styles for states (to distinguish S, I, R within same scenario)
-        state_styles = {"S": ":", "I": "-", "R": "--"}
-        state_widths = {"S": 1.8, "I": 2.2, "R": 1.8}
-
-        for idx, (result, label) in enumerate(zip(results, labels)):
-            if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
-                raise ValueError(f"Result {idx} does not contain all required data")
-
-            s_vals = np.array(result["S_val"])
-            i_vals = np.array(result["I_val"])
-            r_vals = np.array(result["R_val"])
-            time = np.array(result["time"])
-
-            color = scenario_colors[idx]
-
-            if "S" in states_to_plot:
-                ax.plot(
-                    time,
-                    s_vals,
-                    color=color,
-                    linestyle=state_styles["S"],
-                    linewidth=state_widths["S"],
-                    alpha=0.85,
-                    label=f"S — {label}",
-                )
-            if "I" in states_to_plot:
-                ax.plot(
-                    time,
-                    i_vals,
-                    color=color,
-                    linestyle=state_styles["I"],
-                    linewidth=state_widths["I"],
-                    alpha=0.95,
-                    label=f"I — {label}",
-                )
-            if "R" in states_to_plot:
-                ax.plot(
-                    time,
-                    r_vals,
-                    color=color,
-                    linestyle=state_styles["R"],
-                    linewidth=state_widths["R"],
-                    alpha=0.85,
-                    label=f"R — {label}",
-                )
-
-        ax.set_xlabel("Time", fontweight="medium")
-        ax.set_ylabel("Proportion of Population", fontweight="medium")
-        ax.set_ylim(0, 1.05)
-
-        if title:
-            ax.set_title(title, pad=15)
-        else:
-            ax.set_title("Epidemic Dynamics Comparison", pad=15)
-
-        # Position legend: outside for many scenarios, inside for few
-        if len(results) > 3:
-            ax.legend(
-                bbox_to_anchor=(1.02, 1),
-                loc="upper left",
-                fontsize=9,
-                framealpha=0.9,
-                title="State — Scenario",
-                title_fontsize=10,
-            )
-        else:
-            ax.legend(
-                loc="best",
-                fontsize=9,
-                framealpha=0.9,
-                title="State — Scenario",
-                title_fontsize=10,
-            )
-
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
-        else:
-            _show_plot()
+        _save_or_show(fig, save_path, dpi=dpi, height=600)
 
     @staticmethod
     def compare_results_with_config(
@@ -498,7 +260,7 @@ class Visualizer:
             results: List of dictionaries with results
             labels: List of labels for each result
             plot_config: Custom plot configuration
-            save_path: Path to save the plot (optional)
+            save_path: Path to save the plot (optional, opens in browser if None)
         """
         if not results:
             raise ValueError("The results list is empty")
@@ -508,111 +270,63 @@ class Visualizer:
 
         # Use config values
         states_to_plot = (
-            set(plot_config.states_to_plot) if plot_config.states_to_plot else {"S", "I", "R"}
+            plot_config.states_to_plot if plot_config.states_to_plot else ["S", "I", "R"]
         )
 
-        figsize_tuple: Tuple[float, float] = (plot_config.figsize[0], plot_config.figsize[1])
-        fig, ax = _create_figure(figsize=figsize_tuple)
+        # Create figure using web plotting module
+        fig = create_comparison_figure(
+            results,
+            labels,
+            title=plot_config.title or "Epidemic Dynamics Comparison",
+            states=states_to_plot,
+            height=int(plot_config.figsize[1] * 100),  # Convert to pixels
+        )
 
-        # Get colorblind-friendly colors for scenarios
-        scenario_colors = _get_scenario_colors(len(results))
-
-        # Line styles for states
-        state_styles = {"S": ":", "I": "-", "R": "--"}
-        state_widths = {"S": 1.8, "I": 2.2, "R": 1.8}
-
-        for idx, (result, label) in enumerate(zip(results, labels)):
-            if not all(key in result for key in ["S_val", "I_val", "R_val", "time"]):
-                raise ValueError(f"Result {idx} does not contain all required data")
-
-            s_vals = np.array(result["S_val"])
-            i_vals = np.array(result["I_val"])
-            r_vals = np.array(result["R_val"])
-            time = np.array(result["time"])
-
-            color = scenario_colors[idx]
-
-            if "S" in states_to_plot:
-                ax.plot(
-                    time,
-                    s_vals,
-                    color=color,
-                    linestyle=state_styles["S"],
-                    linewidth=state_widths["S"],
-                    alpha=0.85,
-                    label=f"S — {label}",
-                )
-            if "I" in states_to_plot:
-                ax.plot(
-                    time,
-                    i_vals,
-                    color=color,
-                    linestyle=state_styles["I"],
-                    linewidth=state_widths["I"],
-                    alpha=0.95,
-                    label=f"I — {label}",
-                )
-            if "R" in states_to_plot:
-                ax.plot(
-                    time,
-                    r_vals,
-                    color=color,
-                    linestyle=state_styles["R"],
-                    linewidth=state_widths["R"],
-                    alpha=0.85,
-                    label=f"R — {label}",
-                )
-
-        ax.set_xlabel(plot_config.xlabel, fontweight="medium")
-        ax.set_ylabel(plot_config.ylabel, fontweight="medium")
-        ax.set_ylim(0, 1.05)
-
-        if plot_config.title:
-            ax.set_title(plot_config.title, pad=15)
-        else:
-            ax.set_title("Epidemic Dynamics Comparison", pad=15)
-
-        # Position legend based on number of scenarios
-        if len(results) > 4:
-            ax.legend(
-                bbox_to_anchor=(1.02, 1),
-                loc="upper left",
-                fontsize=9,
-                framealpha=0.9,
-                title="State — Scenario",
-                title_fontsize=10,
+        # Apply labels, grid, and legend from config
+        grid_color = f"rgba(0,0,0,{plot_config.grid_alpha})" if plot_config.grid else None
+        fig.update_layout(
+            xaxis_title=plot_config.xlabel,
+            yaxis_title=plot_config.ylabel,
+            xaxis_showgrid=plot_config.grid,
+            yaxis_showgrid=plot_config.grid,
+        )
+        if plot_config.grid and grid_color:
+            fig.update_layout(
+                xaxis_gridcolor=grid_color,
+                yaxis_gridcolor=grid_color,
             )
-        else:
-            ax.legend(
-                loc=plot_config.legend_position,
-                fontsize=9,
-                framealpha=0.9,
-            )
+        # Map matplotlib-style legend_position to Plotly
+        _LEGEND_MAP = {
+            "best": dict(x=1.02, y=1, orientation="v"),
+            "upper right": dict(x=1, y=1, xanchor="right"),
+            "upper left": dict(x=0, y=1, xanchor="left"),
+            "lower left": dict(x=0, y=0, xanchor="left", yanchor="bottom"),
+            "lower right": dict(x=1, y=0, xanchor="right", yanchor="bottom"),
+            "center": dict(x=0.5, y=0.5, xanchor="center", yanchor="middle"),
+        }
+        legend_kw = _LEGEND_MAP.get(plot_config.legend_position, {})
+        if legend_kw:
+            fig.update_layout(legend=legend_kw)
 
-        if plot_config.grid:
-            ax.grid(True, alpha=plot_config.grid_alpha, linestyle="-", linewidth=0.8)
-
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=plot_config.dpi, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
-        else:
-            _show_plot()
+        _save_or_show(
+            fig,
+            save_path,
+            dpi=plot_config.dpi,
+            width=int(plot_config.figsize[0] * 100),
+            height=int(plot_config.figsize[1] * 100),
+        )
 
     @staticmethod
-    def plot_network(
-        G: nx.DiGraph, title: Optional[str] = None, save_path: Optional[str] = None
-    ) -> None:
+    def plot_network(G: Any, title: Optional[str] = None, save_path: Optional[str] = None) -> None:
         """
-        Plot the network used in the simulation (publication-quality).
+        Plot the network used in the simulation (interactive Plotly).
 
         Args:
-            G: Network graph
+            G: Network graph (NetworkX)
             title: Plot title (optional)
-            save_path: Path to save the plot (optional)
+            save_path: Path to save the plot (optional, opens in browser if None)
         """
-        fig, ax = _create_figure(figsize=(8, 7))
+        import networkx as nx
 
         # Limit the number of nodes for visualization
         if G.number_of_nodes() > 100:
@@ -625,55 +339,73 @@ class Visualizer:
             )
             G = nx.DiGraph(G.subgraph(list(G.nodes())[:100]))
 
+        # Get layout
         pos = nx.spring_layout(G, seed=42, k=1.5 / np.sqrt(G.number_of_nodes()))
 
-        # Draw edges first (behind nodes)
-        nx.draw_networkx_edges(
-            G,
-            pos,
-            ax=ax,
-            edge_color="#CCCCCC",
-            arrows=True,
-            arrowsize=8,
-            alpha=0.6,
-            width=0.8,
-            connectionstyle="arc3,rad=0.1",
+        # Create edge trace
+        edge_x = []
+        edge_y = []
+        for edge in G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            line=dict(width=0.5, color="#888"),
+            hoverinfo="none",
+            mode="lines",
         )
 
-        # Draw nodes
-        nx.draw_networkx_nodes(
-            G,
-            pos,
-            ax=ax,
-            node_size=80,
-            node_color=COLORBLIND_PALETTE[0],
-            edgecolors="white",
-            linewidths=1.0,
-            alpha=0.9,
+        # Create node trace
+        node_x = []
+        node_y = []
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers",
+            hoverinfo="text",
+            marker=dict(
+                showscale=False,
+                colorscale="YlGnBu",
+                size=10,
+                color=COLOR_S,
+                line_width=2,
+            ),
         )
 
-        if title:
-            ax.set_title(title, pad=15)
-        else:
-            ax.set_title(
-                f"Network Structure ({G.number_of_nodes()} nodes, " f"{G.number_of_edges()} edges)",
-                pad=15,
-            )
+        # Create figure
+        fig = go.Figure(
+            data=[edge_trace, node_trace],
+            layout=go.Layout(
+                title=dict(
+                    text=title
+                    or f"Network Structure ({G.number_of_nodes()} nodes, {G.number_of_edges()} edges)",
+                    x=0.5,
+                    xanchor="center",
+                ),
+                showlegend=False,
+                hovermode="closest",
+                margin=dict(b=0, l=0, r=0, t=40),
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                height=700,
+            ),
+        )
 
-        ax.axis("off")
-
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=300, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
-        else:
-            _show_plot()
+        _save_or_show(fig, save_path, width=800, height=700)
 
     @staticmethod
     def create_summary_plot(result_path: str, output_dir: Optional[str] = None) -> str:
         """
-        Create a publication-quality summary plot from a results file.
+        Create an interactive summary plot from a results file.
 
         Args:
             result_path: Path to the results file
@@ -700,10 +432,10 @@ class Visualizer:
         # Create output directory if it doesn't exist
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
-            base_name = os.path.basename(result_path).replace(".json", ".png")
+            base_name = os.path.basename(result_path).replace(".json", ".html")
             save_path = os.path.join(output_dir, base_name)
         else:
-            save_path = result_path.replace(".json", ".png")
+            save_path = result_path.replace(".json", ".html")
 
         # Extract metadata for the title
         metadata = result.get("metadata", {})

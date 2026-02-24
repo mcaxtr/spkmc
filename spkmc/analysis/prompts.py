@@ -25,6 +25,14 @@ Structure your analysis with these sections:
 3. **Discussion** - Epidemiological interpretation of the patterns observed
 4. **Conclusion** - Direct answer to the research question with main takeaways
 
+Formatting Guidelines:
+- Use emoji icons to mark section headers (e.g., "## 🔬 Results")
+- **Bold** key numerical findings and critical terms
+- Use > blockquotes for the single most important takeaway in each section
+- Use bullet points for lists of findings
+- End with a "💡 Key Takeaway" blockquote summarizing the most actionable insight
+- Use --- horizontal rules between major sections for visual separation
+
 Keep the analysis focused and concise (approximately 400-600 words)."""
 
 
@@ -157,6 +165,73 @@ Keep the summary focused and accessible while maintaining scientific rigor."""
     return prompt
 
 
+SCENARIO_SYSTEM_PROMPT = """You are a computational epidemiologist analyzing a single SIR model \
+simulation scenario on a complex network. Your task is to provide rigorous scientific analysis \
+of the results for this specific parameter configuration.
+
+Writing Style:
+- Use formal academic/scientific language
+- Be precise and quantitative - always cite specific numbers
+- Use proper epidemiological terminology (basic reproduction number, epidemic threshold, \
+attack rate, herd immunity threshold, network topology, degree distribution, etc.)
+- Focus on what these specific parameters reveal about epidemic dynamics
+
+Structure your analysis with these sections:
+1. **Configuration Summary** - Brief overview of the network and distribution setup (2-3 sentences)
+2. **Epidemic Dynamics** - Analysis of the SIR curves: peak timing, growth rate, decay behavior
+3. **Key Findings** - What this parameter set reveals about epidemic spread on this network
+4. **Implications** - Practical meaning of these results
+
+Formatting Guidelines:
+- Use emoji icons to mark section headers (e.g., "## 🔬 Epidemic Dynamics")
+- **Bold** key numerical findings and critical terms
+- Use > blockquotes for the single most important takeaway in each section
+- Use bullet points for lists of findings
+- End with a "💡 Key Takeaway" blockquote summarizing the most actionable insight
+- Use --- horizontal rules between major sections for visual separation
+
+Keep the analysis focused and concise (approximately 300-400 words)."""
+
+
+def build_scenario_prompt(scenario: ScenarioMetrics) -> str:
+    """
+    Build the prompt for single scenario analysis.
+
+    Args:
+        scenario: Extracted scenario metrics
+
+    Returns:
+        Formatted prompt string for the LLM
+    """
+    network_type = scenario.network_type.upper()
+    network_names = {
+        "ER": "Erdos-Renyi",
+        "SF": "Scale-free (Power-law)",
+        "RRN": "Random Regular",
+        "CG": "Complete Graph",
+    }
+    network_name = network_names.get(network_type, network_type)
+
+    return f"""Analyze the following single epidemic simulation scenario:
+
+## Scenario: {scenario.label}
+
+## Configuration
+- **Network**: {network_name} ({_format_network_info(scenario)})
+- **Recovery Distribution**: {_format_distribution_info(scenario)}
+- **Simulation**: {scenario.samples} samples, {scenario.num_runs} runs, \
+initial infected = {scenario.initial_perc:.1%}
+
+## Results
+- **Peak Infection**: {scenario.peak_infection:.4f} (at t = {scenario.peak_infection_time:.2f})
+- **Final Outbreak Size**: {scenario.final_outbreak_size:.4f}
+- **Attack Rate**: {scenario.attack_rate:.2%}
+- **Epidemic Duration**: {scenario.epidemic_duration:.2f} time units
+
+Please analyze the epidemic dynamics for this specific scenario, focusing on what the \
+SIR curve shape and metrics reveal about disease spread on this network topology."""
+
+
 CROSS_EXPERIMENT_SYSTEM_PROMPT = """You are a computational epidemiologist synthesizing findings \
 from multiple epidemic modeling experiments. You are given the individual AI-generated analyses \
 for each experiment. Your task is to create a comprehensive meta-analysis that identifies \
@@ -175,6 +250,14 @@ Structure your meta-analysis with these sections:
 3. **Notable Findings** - Unique or surprising results from individual experiments
 4. **Unified Conclusions** - What the collection of experiments tells us as a whole
 5. **Implications** - Practical implications for understanding epidemic dynamics on networks
+
+Formatting Guidelines:
+- Use emoji icons to mark section headers (e.g., "## 🔬 Cross-Experiment Patterns")
+- **Bold** key numerical findings and critical terms
+- Use > blockquotes for the single most important takeaway in each section
+- Use bullet points for lists of findings
+- End with a "💡 Key Takeaway" blockquote summarizing the most actionable insight
+- Use --- horizontal rules between major sections for visual separation
 
 Keep the analysis focused and insightful (approximately 800-1200 words)."""
 

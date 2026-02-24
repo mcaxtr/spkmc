@@ -9,7 +9,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, cast
 
 import numpy as np
 
@@ -242,28 +242,24 @@ class DataManager:
             df_stats.to_excel(writer, sheet_name="Statistics", index=False)
 
     @classmethod
-    def _save_markdown(cls, result: Dict[str, Any], path: str, include_plot: bool = True) -> None:
-        """Save result as Markdown report."""
-        # Extract metadata
+    def _build_markdown_content(cls, result: Dict[str, Any]) -> str:
+        """Build Markdown report content string (without plot reference)."""
         metadata = result.get("metadata", {})
         network_type = metadata.get("network", "").upper()
         dist_type = metadata.get("distribution", "").capitalize()
         N = metadata.get("N", "")
 
-        # Extract data
         time_steps = np.array(result.get("time", []))
         s_vals = np.array(result.get("S_val", []))
         i_vals = np.array(result.get("I_val", []))
         r_vals = np.array(result.get("R_val", []))
 
-        # Calculate statistics
         max_infected = np.max(i_vals) if len(i_vals) > 0 else 0
         max_infected_time = (
             time_steps[np.argmax(i_vals)] if len(i_vals) > 0 and len(time_steps) > 0 else 0
         )
         final_recovered = r_vals[-1] if len(r_vals) > 0 else 0
 
-        # Build Markdown content
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         md_content = f"""# SPKMC Simulation Report
@@ -278,13 +274,10 @@ Generated at: {timestamp}
 | Distribution | {dist_type} |
 | Number of Nodes (N) | {N} |
 """
-
-        # Add specific parameters
         for key, value in metadata.items():
             if key not in ["network", "distribution", "N"]:
                 md_content += f"| {key} | {value} |\n"
 
-        # Add statistics
         md_content += f"""
 ## Statistics
 
@@ -294,55 +287,39 @@ Generated at: {timestamp}
 | Time to Infection Peak | {max_infected_time:.4f} |
 | Final Recovered | {final_recovered:.4f} |
 
-"""
-
-        # Add plot reference if requested
-        if include_plot:
-            plot_path = path.replace(".md", ".png")
-            cls._generate_plot(result, plot_path)
-            md_content += f"""
-## Visualization
-
-![Simulation Plot]({os.path.basename(plot_path)})
-
-"""
-
-        # Add data tables (first and last 5 points)
-        md_content += """
 ## Simulation Data
 
-### First 5 points
-
 | Time | Susceptible | Infected | Recovered |
 |-------|-------------|------------|-------------|
 """
-
-        for idx in range(min(5, len(time_steps))):
+        for idx in range(len(time_steps)):
             md_content += (
                 f"| {time_steps[idx]:.4f} | {s_vals[idx]:.4f} "
                 f"| {i_vals[idx]:.4f} | {r_vals[idx]:.4f} |\n"
             )
 
-        md_content += """
-### Last 5 points
+        return md_content
 
-| Time | Susceptible | Infected | Recovered |
-|-------|-------------|------------|-------------|
-"""
+    @classmethod
+    def _save_markdown(cls, result: Dict[str, Any], path: str, include_plot: bool = True) -> None:
+        """Save result as Markdown report."""
+        md_content = cls._build_markdown_content(result)
 
-        for idx in range(max(0, len(time_steps) - 5), len(time_steps)):
-            md_content += (
-                f"| {time_steps[idx]:.4f} | {s_vals[idx]:.4f} "
-                f"| {i_vals[idx]:.4f} | {r_vals[idx]:.4f} |\n"
-            )
+        if include_plot:
+            plot_path = path.replace(".md", ".png")
+            try:
+                cls._generate_plot(result, plot_path)
+                actual_plot = os.path.basename(plot_path)
+                md_content += f"\n## Visualization\n\n![Simulation Plot]({actual_plot})\n\n"
+            except RuntimeError:
+                pass  # Plot generation failed (e.g. kaleido missing); skip image
 
-        # Save Markdown file
         with open(path, "w") as f:
             f.write(md_content)
 
     @classmethod
-    def _save_html(cls, result: Dict[str, Any], path: str, include_plot: bool = True) -> None:
-        """Save result as HTML report."""
+    def _build_html_content(cls, result: Dict[str, Any]) -> str:
+        """Build HTML report content string."""
         try:
             import pandas as pd
         except ImportError:
@@ -350,20 +327,11 @@ Generated at: {timestamp}
                 "Pandas is required for HTML export. Install with: pip install pandas"
             )
 
-        # First export to Markdown
-        md_path = path.replace(".html", "_temp.md")
-        cls._save_markdown(result, md_path, include_plot)
-
-        # Read markdown content
-        with open(md_path, "r") as f:
-            md_content = f.read()
-
-        # Convert to simple HTML table
+        md_content = cls._build_markdown_content(result)
         df = pd.DataFrame({"markdown": [md_content]})
         html = df.to_html(escape=False, index=False, header=False)
 
-        # Add CSS styles
-        html_content = f"""<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -408,12 +376,71 @@ Generated at: {timestamp}
 </html>
 """
 
-        # Save HTML file
+    @classmethod
+    def _save_html(cls, result: Dict[str, Any], path: str, include_plot: bool = True) -> None:
+        """Save result as HTML report."""
+        # Build HTML (without embedded plot for simplicity)
+        html_content = cls._build_html_content(result)
+
+        if include_plot:
+            # Generate plot alongside the HTML file
+            plot_path = path.replace(".html", ".png")
+            try:
+                cls._generate_plot(result, plot_path)
+            except RuntimeError:
+                pass  # Plot generation failed (e.g. kaleido missing); skip image
+
         with open(path, "w") as f:
             f.write(html_content)
 
-        # Remove temporary Markdown file
-        os.remove(md_path)
+    @classmethod
+    def to_bytes(cls, result: Dict[str, Any], fmt: str) -> Tuple[bytes, str, str]:
+        """
+        Serialize a result dict to bytes for in-memory download.
+
+        Args:
+            result: Result dictionary with SIR data and metadata.
+            fmt: One of "json", "csv", "excel", "md", "html".
+
+        Returns:
+            Tuple of (data_bytes, mime_type, file_extension).
+        """
+        import io as _io
+
+        if fmt == "csv":
+            csv_buf = _io.StringIO()
+            cls._result_to_dataframe(result).to_csv(csv_buf, index=False)
+            return csv_buf.getvalue().encode("utf-8"), "text/csv", ".csv"
+
+        if fmt == "excel":
+            try:
+                import openpyxl  # noqa: F401
+                import pandas as pd
+            except ImportError as exc:
+                raise ImportError(
+                    "Excel export requires pandas and openpyxl: pip install pandas openpyxl"
+                ) from exc
+            excel_buf = _io.BytesIO()
+            df_data = cls._result_to_dataframe(result)
+            metadata = result.get("metadata", {})
+            df_meta = pd.DataFrame([{"Parameter": k, "Value": v} for k, v in metadata.items()])
+            with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
+                df_data.to_excel(writer, sheet_name="Data", index=False)
+                df_meta.to_excel(writer, sheet_name="Metadata", index=False)
+            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            return excel_buf.getvalue(), mime, ".xlsx"
+
+        if fmt == "md":
+            content = cls._build_markdown_content(result)
+            return content.encode("utf-8"), "text/markdown", ".md"
+
+        if fmt == "html":
+            content = cls._build_html_content(result)
+            return content.encode("utf-8"), "text/html", ".html"
+
+        # Default: JSON
+        content = json.dumps(result, indent=2, cls=NumpyJSONEncoder)
+        return content.encode("utf-8"), "application/json", ".json"
 
     @classmethod
     def _generate_plot(cls, result: Dict[str, Any], output_path: str) -> None:

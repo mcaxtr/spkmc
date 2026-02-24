@@ -26,6 +26,116 @@ The simulation tracks how the proportions of S, I, and R change over time as the
 - **High performance**: Uses Numba JIT compilation for speed, with optional GPU acceleration
 - **Publication-quality plots**: Generate professional visualizations of epidemic dynamics
 - **Multiple export formats**: Save results as JSON, CSV, Excel, Markdown, or HTML
+- **Web interface**: Interactive Streamlit dashboard for managing experiments, viewing results, and running AI analysis in the browser
+
+## Web Interface
+
+SPKMC includes a full-featured web dashboard built with Streamlit for managing experiments, viewing results, and running AI analysis directly in the browser.
+
+### Quick Start
+
+```bash
+# Launch the web interface (opens browser at http://localhost:8501)
+spkmc web
+
+# Custom port
+spkmc web --port 8080
+
+# Headless mode (no browser auto-open)
+spkmc web --no-browser
+
+# Bind to all interfaces (for remote access)
+spkmc web --host 0.0.0.0
+```
+
+### Features
+
+- **Experiment Dashboard** -- Browse all experiments with summary stats (total experiments, scenarios, completion rates). Create new experiments through a guided modal with network, distribution, and simulation parameter configuration. Click any experiment card to drill into details.
+
+- **Scenario Management** -- View scenario cards with live status badges (Pending / Running / Completed / Failed). Add new scenarios with parameter overrides, edit existing ones, or run simulations directly from the browser. Parameters that differ from global defaults are visually highlighted.
+
+- **Interactive Charts** -- Plotly-based SIR curve visualization with toggleable S/I/R traces, chart type switching (Line / Area / Scatter), error bands for multi-run results, and multi-scenario comparison overlays. All charts support zoom, pan, and image export.
+
+- **AI Analysis** -- Generate academic-style analysis reports for experiments and individual scenarios using OpenAI models. Reports include epidemic dynamics interpretation, key findings, and actionable insights. Requires an OpenAI API key configured in Preferences.
+
+- **Export** -- Download scenario results in JSON, CSV, Excel, Markdown, or HTML format directly from the scenario detail modal.
+
+- **Preferences** -- Configure chart colors, height, and template; set default simulation parameters; manage directory paths; select AI model; and store API keys. All settings auto-save on change.
+
+### Architecture
+
+```
+spkmc/web/
+├── app.py                    # Streamlit entry point, sidebar navigation, CSS injection
+├── config.py                 # Configuration management (JSON prefs + Streamlit secrets)
+├── state.py                  # Typed session state accessors (prevents st.session_state spaghetti)
+├── plotting.py               # Core Plotly figure builders (SIR curves, comparisons)
+├── components.py             # Reusable UI components (forms, metric cards, badges)
+├── styles.py                 # Design system (CSS, card renderers, color tokens)
+├── runner.py                 # Subprocess-based simulation runner
+├── analysis_runner.py        # AI analysis subprocess runner
+└── pages/
+    ├── dashboard.py          # Experiments list, stats cards, create modal
+    ├── experiment_detail.py  # Single experiment view, scenario cards, detail modal
+    └── settings.py           # Preferences page (AI, chart, simulation, storage)
+```
+
+### Design Decisions
+
+**Everything is an experiment.** Even a single simulation run is treated as an experiment with one scenario. This unified model simplifies the codebase and provides consistent storage patterns.
+
+**Subprocess execution.** Simulations run in background subprocesses that survive browser refresh, page navigation, and UI interactions. Progress is tracked via filesystem-based IPC (`.spkmc_web/status/*.json`), not in-memory state.
+
+**Filesystem-first storage.** No database required. Experiments are stored as `experiments/<name>/data.json`, results as `experiments/<name>/<scenario>.json`, and status as `.spkmc_web/status/<run_id>.json`. All files are portable JSON.
+
+**Parameter inheritance.** Global parameters are defined at the experiment level. Each scenario only specifies what differs from the defaults, keeping configurations DRY and making overrides instantly visible in the UI.
+
+### Configuration
+
+**User preferences** are stored at `~/.spkmc/web_config.json`:
+- Directory paths (data, experiments)
+- Default simulation parameters
+- Chart styling (height, colors, template)
+- Export format preference
+
+Override the config file location with an environment variable:
+
+```bash
+SPKMC_WEB_CONFIG_FILE=/path/to/config.json spkmc web
+```
+
+**API keys** are stored in `.streamlit/secrets.toml` (managed through the Preferences page):
+
+```toml
+OPENAI_API_KEY = "sk-your-key-here"
+```
+
+### Workflow
+
+1. Open the Dashboard and create a new experiment with global parameters
+2. Add scenarios -- each can override any parameter from the global defaults
+3. Run individual scenarios or all at once from the experiment detail page
+4. View interactive Plotly charts with toggleable S/I/R traces
+5. Compare multiple scenarios with overlaid charts
+6. Generate AI analysis reports (optional, requires API key)
+7. Export results in your preferred format
+
+### Troubleshooting
+
+**Simulations not starting** -- Check `.spkmc_web/status/*.json` files for error messages. Common issues include Numba compilation errors, missing parameters, or invalid network/distribution combinations.
+
+**Browser doesn't open** -- Use `spkmc web --no-browser` and navigate to the URL shown in terminal output.
+
+**Charts not displaying** -- Ensure `plotly>=5.18.0` is installed: `pip install --upgrade plotly`.
+
+### Extending the Web Interface
+
+To add a new page:
+
+1. Create `spkmc/web/pages/my_page.py` with a `render()` function
+2. Register the page in `spkmc/web/pages/__init__.py`
+3. Add sidebar navigation in `spkmc/web/app.py`
+4. Add routing logic in the `main()` function
 
 ## Installation
 
@@ -174,7 +284,7 @@ The timing of infection and recovery events follows probability distributions:
 
 ### Parameter Reference
 
-The following parameters apply to both `spkmc run` and batch experiment scenarios.
+The following parameters apply to both `spkmc run` and experiment scenarios.
 
 #### Network Parameters
 
@@ -243,7 +353,7 @@ spkmc run -n er -d gamma -o my_results.json
 # Save results as CSV instead of JSON
 spkmc run -n er -d gamma -o my_results --export csv
 
-# Run without displaying the plot (useful for batch processing or servers)
+# Run without displaying the plot (useful for automated processing or servers)
 spkmc run -n er -d gamma -o results.json --no-plot
 ```
 
@@ -742,6 +852,106 @@ The `_err` fields contain standard errors and are only present when `num_runs > 
 
 ---
 
+## Project Structure
+
+```
+spkmc/
+├── analysis/                 # AI-powered analysis
+│   ├── ai_analyzer.py        # OpenAI integration for experiment and scenario analysis
+│   ├── metrics.py            # Metric extraction from simulation results
+│   └── prompts.py            # LLM prompt templates
+├── cli/                      # Command-line interface (Click-based)
+│   ├── commands.py           # CLI commands: run, plot, info, compare, experiments, web
+│   ├── validators.py         # Parameter validation callbacks
+│   └── formatting.py         # Rich terminal output formatting
+├── core/                     # Core algorithm implementation
+│   ├── simulation.py         # SPKMC class - main simulation algorithm
+│   ├── distributions.py      # Gamma & Exponential distribution classes
+│   └── networks.py           # NetworkFactory for graph creation
+├── io/                       # Input/output operations
+│   ├── export.py             # Multi-format export (CSV, JSON, Excel, MD, HTML)
+│   ├── data_manager.py       # Result persistence, loading, and report generation
+│   └── results.py            # Result file discovery and metadata
+├── models/                   # Data models
+│   ├── experiment.py         # Experiment and Scenario Pydantic models
+│   └── scenario.py           # Scenario configuration model
+├── visualization/            # Plotting (Plotly-based)
+│   └── plots.py              # SIR curve visualization for CLI and programmatic use
+├── web/                      # Streamlit web interface
+│   ├── app.py                # Entry point, sidebar navigation, CSS injection
+│   ├── config.py             # Configuration management (JSON prefs + secrets)
+│   ├── state.py              # Typed session state accessors
+│   ├── plotting.py           # Core Plotly figure builders
+│   ├── components.py         # Reusable UI components (forms, badges, cards)
+│   ├── styles.py             # Design system (CSS, card renderers, color tokens)
+│   ├── runner.py             # Subprocess-based simulation runner
+│   ├── analysis_runner.py    # AI analysis subprocess runner
+│   └── pages/
+│       ├── dashboard.py      # Experiments list, stats cards, create modal
+│       ├── experiment_detail.py  # Experiment view, scenario cards, detail modal
+│       └── settings.py       # Preferences page
+└── utils/                    # Utilities
+    └── numba_utils.py        # Numba JIT-optimized functions
+
+tests/
+├── test_web/                 # Unit tests for web modules
+│   ├── test_state.py         # Session state management tests
+│   ├── test_config.py        # Configuration management tests
+│   ├── test_runner.py        # Simulation runner tests
+│   ├── test_analysis_runner.py  # Analysis runner tests
+│   ├── test_plotting.py      # Plotly figure builder tests
+│   └── test_experiment_detail.py  # Experiment detail logic tests
+└── e2e/                      # Playwright end-to-end tests
+    ├── conftest.py           # Server lifecycle, page helpers, fixture seeding
+    ├── fixtures/             # Pre-seeded experiment data
+    ├── test_navigation.py    # Sidebar nav, page routing, title
+    ├── test_dashboard.py     # Stats cards, create modal, experiment cards
+    ├── test_experiment_detail.py  # Params, scenario cards, modal, charts
+    └── test_settings.py      # Preference sections, inputs, reset
+```
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all unit tests with coverage
+pytest
+
+# Run web module tests only
+pytest tests/test_web/ -v
+
+# Run E2E tests (requires playwright browsers installed)
+pip install -e ".[e2e]"
+playwright install chromium
+pytest tests/e2e/ -v --browser chromium
+```
+
+### Dependencies
+
+**Core:**
+- `numpy`, `scipy`, `networkx` -- Numerical computation and graph algorithms
+- `numba` -- JIT compilation for performance-critical loops
+- `plotly` -- Interactive visualization (CLI and web)
+- `streamlit` -- Web interface framework
+- `pydantic` -- Data validation and models
+
+**CLI:**
+- `click` -- CLI framework
+- `rich` -- Terminal formatting
+- `tqdm` -- Progress bars
+
+**Data:**
+- `pandas`, `openpyxl` -- DataFrame operations and Excel export
+- `joblib` -- Parallel experiment execution
+- `humanize` -- Human-readable formatting
+- `psutil` -- Process management
+- `openai` -- AI analysis integration
+
+---
+
 ## Performance Tips
 
 ### Choosing Sample Sizes
@@ -846,6 +1056,7 @@ And optionally, this software implementation:
 ```bibtex
 @software{spkmc,
   title = {SPKMC: Shortest Path Kinetic Monte Carlo for Epidemic Simulation},
+  author = {Castro, Marcus},
   url = {https://github.com/mcaxtr/spkmc}
 }
 ```
