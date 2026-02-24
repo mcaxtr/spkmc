@@ -315,6 +315,15 @@ def result_metric_cards(result_dict: Dict[str, Any]) -> None:
             help="Proportion of population that was infected",
         )
 
+    # Warn if simulation may not have reached equilibrium
+    if len(R_val) >= 10:
+        n = max(2, len(R_val) // 10)
+        if abs(float(R_val[-1]) - float(R_val[-n])) >= 0.01:
+            st.warning(
+                "⚠️ R(t) is still changing at the end of the simulation. "
+                "Results may not reflect equilibrium. Consider increasing t_max."
+            )
+
 
 def experiment_status_badge(experiment: Any) -> str:
     """
