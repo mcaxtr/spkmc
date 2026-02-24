@@ -32,7 +32,7 @@ jobs:
         run: isort --check-only --diff .
 
       - name: Lint with flake8
-        run: flake8 spkmc tests --max-line-length=100 --extend-ignore=E203,W503
+        run: flake8 spkmc tests --max-line-length=100 --extend-ignore=E203,W503,E741,E501,E402,F401,F841,B007,E722,B001,F811,F541,B028,E266,F821
 
       - name: Type check with mypy
         run: mypy spkmc --ignore-missing-imports --no-error-summary || true

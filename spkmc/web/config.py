@@ -124,7 +124,6 @@ class WebConfig:
         Returns:
             API key if found, None otherwise
         """
-        global _api_key_override  # noqa: PLW0602
         if _api_key_override is not None:
             return _api_key_override
         try:
