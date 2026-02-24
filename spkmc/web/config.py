@@ -68,6 +68,8 @@ class WebConfig:
 
     def load(self) -> None:
         """Load configuration from JSON file, creating with defaults if not found."""
+        from spkmc.web.logging import debug
+
         if self.CONFIG_FILE.exists():
             try:
                 with open(self.CONFIG_FILE, "r") as f:
@@ -83,14 +85,22 @@ class WebConfig:
                             elif isinstance(default_val, int) and isinstance(merged[key], float):
                                 merged[key] = int(merged[key])
                     self.config = merged
+                debug("config", f"Loaded config from {self.CONFIG_FILE}")
+                n_from_disk = len(loaded)
+                n_defaults = len(self.config) - n_from_disk
+                debug(
+                    "config", f"{len(self.config)} config keys loaded, {n_defaults} from defaults"
+                )
             except (json.JSONDecodeError, IOError):
                 # If file is corrupted, start with defaults
                 self.config = self.DEFAULTS.copy()
+                debug("config", "Config file corrupted, using defaults")
         else:
             # Create config directory if it doesn't exist
             self.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             self.config = self.DEFAULTS.copy()
             self.save()
+            debug("config", f"Created new config at {self.CONFIG_FILE}")
 
     def save(self) -> None:
         """Save current configuration to JSON file."""
@@ -178,5 +188,27 @@ class WebConfig:
         return Path(self.get("data_directory", "data"))
 
     def get_experiments_path(self) -> Path:
-        """Get the experiments directory path."""
-        return Path(self.get("experiments_directory", "experiments"))
+        """
+        Get the experiments directory path.
+
+        Resolution order:
+        1. ``SPKMC_EXPERIMENTS_DIR`` environment variable (set by CLI launcher)
+        2. ``experiments_directory`` key in the config file
+        3. Default ``"experiments"``
+
+        The path is always resolved to an absolute path so it works
+        regardless of Streamlit's working directory.
+        """
+        from spkmc.web.logging import debug
+
+        env_val = os.environ.get("SPKMC_EXPERIMENTS_DIR")
+        if env_val:
+            path = Path(env_val)
+            debug("config", f"Experiments path: {path} (from env)")
+        else:
+            raw = self.get("experiments_directory", "experiments")
+            path = Path(raw)
+            if not path.is_absolute():
+                path = path.resolve()
+            debug("config", f"Experiments path: {path} (from config)")
+        return path

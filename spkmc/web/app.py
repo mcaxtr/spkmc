@@ -79,27 +79,33 @@ def render_sidebar() -> None:
 
 def main() -> None:
     """Main application entry point."""
+    from spkmc.web.logging import debug
+
     # Apply global styles
     st.markdown(get_global_styles(), unsafe_allow_html=True)
 
     # Initialize session state
     SessionState.init()
+    debug("app", "Session initialized")
 
     # Load configuration
     if "config" not in st.session_state:
         st.session_state.config = WebConfig()
+        debug("app", f"Config loaded from {WebConfig.CONFIG_FILE}")
 
     # Restore running simulations and analyses from disk (survives refresh)
     if not st.session_state.get("_sims_restored"):
-        SessionState.restore_running_simulations()
-        SessionState.restore_running_analyses()
+        n_sims = SessionState.restore_running_simulations()
+        n_analyses = SessionState.restore_running_analyses()
         st.session_state._sims_restored = True
+        debug("app", f"Restored {n_sims} running simulations, {n_analyses} running analyses")
 
     # Render sidebar
     render_sidebar()
 
     # Page routing
     current_page = SessionState.get_current_page()
+    debug("app", f"Routing to page: {current_page}")
 
     if current_page == "dashboard":
         from spkmc.web.pages import dashboard

@@ -34,6 +34,8 @@ from spkmc.web.styles import (
 
 def render() -> None:
     """Render the dashboard page."""
+    from spkmc.web.logging import debug
+
     # Page header
     st.markdown(
         page_header("Experiments", subtitle="Manage and run SPKMC epidemic simulation experiments"),
@@ -42,8 +44,23 @@ def render() -> None:
 
     # Load experiments
     config = st.session_state.config
-    exp_manager = ExperimentManager(str(config.get_experiments_path()))
+    exp_path = config.get_experiments_path()
+    debug("dashboard", f"Scanning experiments dir: {exp_path}")
+    exp_manager = ExperimentManager(str(exp_path))
     experiments = exp_manager.list_experiments()
+
+    total_scenarios = sum(len(exp.scenarios) for exp in experiments)
+    completed = sum(
+        1
+        for exp in experiments
+        if exp.path is not None
+        for sc in exp.scenarios
+        if (exp.path / f"{sc.normalized_label}.json").exists()
+    )
+    debug(
+        "dashboard",
+        f"Found {len(experiments)} experiments ({total_scenarios} scenarios, {completed} completed)",
+    )
 
     # Summary stats row with beautiful cards
     render_summary_stats(experiments)

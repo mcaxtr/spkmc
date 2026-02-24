@@ -2260,6 +2260,129 @@ def _analyze_all_experiments(
     console.print(f"  {format_param('Failed', failed)}")
 
 
+# ── Legacy key mapping used by --doctor and ExperimentConfig.from_dict ──
+LEGACY_KEY_MAPPING: Dict[str, str] = {
+    "network_type": "network",
+    "network_size": "nodes",
+    "N": "nodes",
+    "time_max": "t_max",
+    "time_points": "steps",
+}
+
+
+def _find_legacy_issues(d: Dict[str, Any]) -> List[str]:
+    """Return descriptions of legacy keys/values found in *d*."""
+    from spkmc.models.experiment import NETWORK_VALUE_MAPPING
+
+    found: List[str] = []
+    for old_key, new_key in LEGACY_KEY_MAPPING.items():
+        if old_key in d:
+            found.append(f"{old_key} -> {new_key}")
+    net_val = d.get("network_type") or d.get("network")
+    if isinstance(net_val, str) and net_val.lower() in NETWORK_VALUE_MAPPING:
+        found.append(f"{net_val} -> {NETWORK_VALUE_MAPPING[net_val.lower()]}")
+    return found
+
+
+def _apply_legacy_fixes(d: Dict[str, Any]) -> None:
+    """Apply key renames and value normalization to *d* in-place."""
+    from spkmc.models.experiment import NETWORK_VALUE_MAPPING
+
+    for old_key, new_key in LEGACY_KEY_MAPPING.items():
+        if old_key in d:
+            d[new_key] = d.pop(old_key)
+    if "network" in d and isinstance(d["network"], str):
+        normalized = NETWORK_VALUE_MAPPING.get(d["network"].lower())
+        if normalized:
+            d["network"] = normalized
+
+
+def _run_doctor(experiments_dir: str = "experiments") -> None:
+    """
+    Scan and fix legacy key names and values in experiment data.json files.
+
+    Rewrites data.json in-place when legacy keys or values are found, after
+    validating that the fixed data loads successfully.
+    """
+    from spkmc.models.experiment import Experiment, ExperimentConfig
+
+    exp_path = Path(experiments_dir)
+    if not exp_path.exists():
+        log_error(f"Experiments directory not found: {exp_path.resolve()}")
+        return
+
+    log_info(f"Scanning experiments directory: {exp_path.resolve()}")
+    console.print()
+
+    scanned = 0
+    fixed = 0
+    already_ok = 0
+    failed = 0
+
+    for data_file in sorted(exp_path.glob("*/data.json")):
+        exp_name = data_file.parent.name
+        scanned += 1
+
+        try:
+            with open(data_file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            console.print(f"  {exp_name} ... [red]error[/red] ({exc})")
+            failed += 1
+            continue
+
+        # Collect issues (legacy keys and values)
+        issues: List[str] = _find_legacy_issues(raw.get("parameters", {}))
+
+        # Check each scenario
+        scenario_count = 0
+        for scenario in raw.get("scenarios", []):
+            if not scenario.get("_comment"):
+                scenario_count += 1
+                issues.extend(_find_legacy_issues(scenario))
+
+        if not issues:
+            console.print(f"  {exp_name} ... [green]OK[/green] (no issues)")
+            already_ok += 1
+            continue
+
+        # Apply fixes to parameters
+        _apply_legacy_fixes(raw.get("parameters", {}))
+
+        # Apply fixes to scenarios
+        for scenario in raw.get("scenarios", []):
+            _apply_legacy_fixes(scenario)
+
+        # Validate the fixed data actually loads
+        try:
+            config = ExperimentConfig.from_dict(raw)
+            Experiment.from_config(config)
+        except Exception as exc:
+            console.print(
+                f"  {exp_name} ... [red]failed[/red] " f"(validation error after fix: {exc})"
+            )
+            failed += 1
+            continue
+
+        # Write back
+        with open(data_file, "w", encoding="utf-8") as f:
+            json.dump(raw, f, indent=2)
+            f.write("\n")
+
+        unique_issues = sorted(set(issues))
+        console.print(
+            f"  {exp_name} ... [yellow]fixed[/yellow] "
+            f"({', '.join(unique_issues)}) [{scenario_count} scenarios]"
+        )
+        fixed += 1
+
+    console.print()
+    log_info(
+        f"Summary: {scanned} experiments scanned, "
+        f"{fixed} fixed, {already_ok} already OK" + (f", {failed} failed" if failed else "")
+    )
+
+
 @cli.command(name="experiments", help="Run or create experiments from the experiments directory")
 @click.argument("scenarios_file", type=str, default=None, required=False)
 @click.option(
@@ -2298,6 +2421,12 @@ def _analyze_all_experiments(
     default=False,
     help="Run AI analysis after execution (requires OPENAI_API_KEY)",
 )
+@click.option(
+    "--doctor",
+    is_flag=True,
+    default=False,
+    help="Scan and fix legacy key names in data.json files",
+)
 @click.pass_context
 def experiment(
     ctx: click.Context,
@@ -2309,6 +2438,7 @@ def experiment(
     debug: bool,
     clear_cache: bool,
     analyze: bool,
+    doctor: bool,
 ) -> None:
     """
     Run or create experiments from the experiments directory.
@@ -2321,6 +2451,11 @@ def experiment(
     parameters for the simulation. Each scenario will run sequentially and results
     will be saved to separate files in the specified directory.
     """
+    # --doctor: scan and fix legacy data.json files, then return early
+    if doctor:
+        _run_doctor()
+        return
+
     # Get CLI context for global options
     from spkmc.cli.display import display_execution_summary
     from spkmc.cli.utils import get_cli_context
@@ -2800,24 +2935,60 @@ def clean(
 @click.option("--port", "-p", default=8501, type=int, help="Port to run the server on")
 @click.option("--host", default="localhost", type=str, help="Host to bind to")
 @click.option("--no-browser", is_flag=True, help="Do not open browser automatically")
-def web(port: int, host: str, no_browser: bool) -> None:
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed debug logging in the terminal")
+def web(port: int, host: str, no_browser: bool, verbose: bool) -> None:
     """Launch the Streamlit web interface."""
+    import os
     import subprocess
     import sys
+    import threading
+    import webbrowser
     from pathlib import Path
 
     log_info("Starting SPKMC web interface...")
 
-    # Find the app.py file
+    # ── Verbose / debug setup ─────────────────────────
+    if verbose:
+        os.environ["SPKMC_VERBOSE"] = "1"
+
+    def _dbg(msg: str) -> None:
+        if verbose:
+            print(f"  [launcher] {msg}", file=sys.stderr)
+
+    _dbg(f"CWD: {Path.cwd()}")
+
+    # ── Resolve experiments directory ─────────────────
+    # Make the path absolute so Streamlit (which may change CWD) can find it.
+    experiments_dir = Path.cwd() / "experiments"
+    env_exp = os.environ.get("SPKMC_EXPERIMENTS_DIR")
+    if env_exp:
+        experiments_dir = Path(env_exp).resolve()
+    else:
+        experiments_dir = experiments_dir.resolve()
+    os.environ["SPKMC_EXPERIMENTS_DIR"] = str(experiments_dir)
+
+    if experiments_dir.is_dir():
+        n_exp = sum(1 for p in experiments_dir.iterdir() if p.is_dir())
+        _dbg(f"Experiments dir: {experiments_dir} (found, {n_exp} experiments)")
+    else:
+        _dbg(f"Experiments dir: {experiments_dir} (not found, will be created on demand)")
+
+    # ── Locate web app ────────────────────────────────
     web_app = Path(__file__).parent.parent / "web" / "app.py"
+    _dbg(f"Web app: {web_app}")
 
     if not web_app.exists():
         log_error(f"Web app not found at {web_app}")
         log_error("Web interface files are missing. Reinstall SPKMC: pip install --upgrade spkmc")
         sys.exit(1)
 
-    # Build streamlit command with all config as CLI flags
-    # (avoids requiring a .streamlit/config.toml file on disk)
+    # ── Config file status ────────────────────────────
+    config_file = Path.home() / ".spkmc" / "web_config.json"
+    _dbg(f"Config file: {config_file} ({'exists' if config_file.exists() else 'not found'})")
+
+    # ── Build streamlit command ───────────────────────
+    # Always headless=true to suppress the first-run email prompt.
+    # Browser auto-open is handled separately via webbrowser.open().
     cmd = [
         sys.executable,
         "-m",
@@ -2829,7 +3000,7 @@ def web(port: int, host: str, no_browser: bool) -> None:
         "--server.address",
         host,
         "--server.headless",
-        "true" if no_browser else "false",
+        "true",
         "--server.fileWatcherType",
         "none",
         "--browser.gatherUsageStats",
@@ -2852,7 +3023,26 @@ def web(port: int, host: str, no_browser: bool) -> None:
         "sans serif",
     ]
 
-    log_info(f"Launching at http://{host}:{port}")
+    _dbg(f"Streamlit command: {' '.join(cmd)}")
+    _dbg(f"Browser auto-open: {'no' if no_browser else 'yes'}")
+
+    url = f"http://{host}:{port}"
+    log_info(f"Launching at {url}")
+
+    # ── Auto-open browser in a background thread ──────
+    if not no_browser:
+
+        def _open_browser() -> None:
+            import time
+
+            time.sleep(2)  # give Streamlit time to bind the port
+            _dbg(f"Opening browser at {url}")
+            webbrowser.open(url)
+
+        t = threading.Thread(target=_open_browser, daemon=True)
+        t.start()
+
+    _dbg("Starting Streamlit server...")
 
     try:
         result = subprocess.run(cmd)

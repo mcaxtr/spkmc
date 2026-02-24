@@ -76,6 +76,18 @@ class SimulationRunner:
 
         # Launch subprocess
         try:
+            from spkmc.web.logging import debug
+
+            debug(
+                "runner",
+                f"Starting simulation: {experiment.path.name}/{scenario.label}",
+            )
+            debug(
+                "runner",
+                f"Parameters: nodes={scenario.nodes}, samples={scenario.total_samples()}, "
+                f"dist={scenario.distribution}",
+            )
+
             process = subprocess.Popen(
                 [sys.executable, str(script_file)],
                 stdout=subprocess.PIPE,
@@ -90,6 +102,8 @@ class SimulationRunner:
 
             with open(status_file, "w") as f:
                 json.dump(status_data, f)
+
+            debug("runner", f"PID: {process.pid}, status: {status_file}")
 
             if show_progress:
                 st.toast(f"Started: {scenario.label}")
