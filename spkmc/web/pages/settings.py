@@ -80,8 +80,7 @@ def _section_icon(
     """Create a section header with icon for the preferences page."""
     bg = icon_bg or COLORS["teal_100"]
     color = icon_color or COLORS["teal_500"]
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="display:flex;align-items:center;gap:0.625rem;margin:1.5rem 0 0.75rem 0;">
 <div style="width:32px;height:32px;background:{bg};border-radius:8px;display:flex;align-items:center;justify-content:center;color:{color};flex-shrink:0;">{icon_svg}</div>
 <div>
@@ -89,17 +88,14 @@ def _section_icon(
 <div style="font-family:{FONTS['body']};font-size:0.75rem;color:{COLORS['gray_500']};margin-top:0.063rem;">{subtitle}</div>
 </div>
 </div>
-"""
-    )
+""")
 
 
 def _sublabel(title: str) -> str:
     """Create a small uppercase subsection label inside a card."""
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div class="pref-sublabel">{title}</div>
-"""
-    )
+""")
 
 
 def _status_badge(configured: bool) -> str:
@@ -125,11 +121,9 @@ def _status_badge(configured: bool) -> str:
         )
         text = "Not configured"
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="display:inline-flex;align-items:center;gap:0.375rem;padding:0.188rem 0.625rem;border-radius:99px;background:{bg};color:{color};font-family:{FONTS['body']};font-size:0.688rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">{icon} {text}</div>
-"""
-    )
+""")
 
 
 # ── Main render ────────────────────────────────────────────
@@ -240,13 +234,11 @@ def render() -> None:
 
         with col_sep:
             st.markdown(
-                _dedent(
-                    """
+                _dedent("""
 <div style="height:100%;min-height:80px;display:flex;align-items:center;justify-content:center;padding-top:1.75rem;">
 <div style="width:1px;height:60px;background:var(--gray-200,#e5e7eb);"></div>
 </div>
-"""
-                ),
+"""),
                 unsafe_allow_html=True,
             )
 
@@ -466,13 +458,11 @@ def render() -> None:
 
         with col_text:
             st.markdown(
-                _dedent(
-                    f"""
+                _dedent(f"""
 <div style="font-family:{FONTS['body']};font-size:0.875rem;color:{COLORS['gray_600']};line-height:1.6;padding-top:0.25rem;">
 Reset all preferences to their default values. This action cannot be undone.
 </div>
-"""
-                ),
+"""),
                 unsafe_allow_html=True,
             )
 

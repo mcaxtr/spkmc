@@ -151,8 +151,7 @@ def get_global_styles() -> str:
     set_icon = _svg_data_uri(settings_icon_svg)
     set_icon_active = _svg_data_uri(settings_icon_active_svg)
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -1169,8 +1168,7 @@ p {{
     text-align: center;
 }}
 </style>
-"""
-    )
+""")
 
 
 def stat_card(label: str, value: str, icon_svg: str = "") -> str:
@@ -1184,8 +1182,7 @@ def stat_card(label: str, value: str, icon_svg: str = "") -> str:
             f"{icon_svg}</div>"
         )
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="background:{COLORS['white']};border-radius:12px;padding:1.25rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px -1px rgba(0,0,0,0.06);border:1px solid {COLORS['gray_200']};">
 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.875rem;">
 {icon_html}
@@ -1193,8 +1190,7 @@ def stat_card(label: str, value: str, icon_svg: str = "") -> str:
 </div>
 <div style="font-family:{FONTS['body']};font-size:1.75rem;font-weight:800;color:{COLORS['gray_900']};line-height:1;letter-spacing:-0.02em;">{value}</div>
 </div>
-"""
-    )
+""")
 
 
 def experiment_card(
@@ -1222,8 +1218,7 @@ def experiment_card(
 
     progress = (scenarios_complete / scenarios_total * 100) if scenarios_total > 0 else 0
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div class="exp-card" style="background:{COLORS['white']};border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:0.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid {COLORS['gray_200']};transition:all 0.2s ease;">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.625rem;">
 <div style="font-family:{FONTS['body']};font-size:1rem;font-weight:700;color:{COLORS['gray_900']};letter-spacing:-0.01em;">{name}</div>
@@ -1238,8 +1233,7 @@ def experiment_card(
 <div>{last_run}</div>
 </div>
 </div>
-"""
-    )
+""")
 
 
 def page_header(title: str, subtitle: str = "") -> str:
@@ -1252,20 +1246,17 @@ def page_header(title: str, subtitle: str = "") -> str:
             f'line-height:1.5;">{subtitle}</p>'
         )
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="margin-bottom:2rem;">
 <h1 style="font-family:{FONTS['body']};font-size:1.875rem;font-weight:800;color:{COLORS['gray_900']};margin:0;letter-spacing:-0.02em;">{title}</h1>
 {sub}
 </div>
-"""
-    )
+""")
 
 
 def empty_state(title: str, message: str) -> str:
     """Create a clean empty state with centered content."""
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4rem 2rem;background:{COLORS['white']};border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid {COLORS['gray_200']};">
 <div style="width:56px;height:56px;background:{COLORS['teal_100']};border-radius:14px;display:flex;align-items:center;justify-content:center;color:{COLORS['teal_500']};margin-bottom:1.5rem;">
 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M9 3v9l-5 9h16l-5-9V3"/></svg>
@@ -1273,8 +1264,7 @@ def empty_state(title: str, message: str) -> str:
 <h2 style="font-family:{FONTS['body']};font-size:1.25rem;font-weight:700;color:{COLORS['gray_900']};margin-bottom:0.5rem;">{title}</h2>
 <p style="font-family:{FONTS['body']};font-size:0.875rem;color:{COLORS['gray_500']};max-width:24rem;margin-bottom:0;line-height:1.6;">{message}</p>
 </div>
-"""
-    )
+""")
 
 
 def scenario_card(
@@ -1357,8 +1347,7 @@ def scenario_card(
         f'flex-shrink:0;">{label}</div>'
     )
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div class="scenario-card" style="background:{COLORS['white']};border-radius:12px;padding:1rem 1.25rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid {COLORS['gray_200']};transition:all 0.2s ease;margin-bottom:0.375rem;">
 <div style="display:flex;justify-content:space-between;align-items:center;">
 {title_html}
@@ -1367,8 +1356,7 @@ def scenario_card(
 </div>
 {override_html}
 </div>
-"""
-    )
+""")
 
 
 def params_card(title: str, icon_svg: str, rows: list) -> str:
@@ -1399,14 +1387,12 @@ def params_card(title: str, icon_svg: str, rows: list) -> str:
             f'align-items:center;">{icon_svg}</span>'
         )
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div class="params-card">
 <div class="params-card-title">{icon_html}{title}</div>
 {rows_html}
 </div>
-"""
-    )
+""")
 
 
 def circular_progress_html(progress: float, label: str = "Running simulation...") -> str:
@@ -1420,8 +1406,7 @@ def circular_progress_html(progress: float, label: str = "Running simulation..."
     deg = int(pct * 360)
     pct_text = f"{int(pct * 100)}%"
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="display:flex;flex-direction:column;align-items:center;
 justify-content:center;min-height:450px;padding:2rem 1rem;">
 <div style="width:360px;height:360px;border-radius:50%;
@@ -1435,8 +1420,7 @@ color:{COLORS['gray_800']};">{pct_text}</div>
 <p style="font-family:{FONTS['body']};font-size:0.938rem;
 color:{COLORS['gray_500']};margin-top:1.25rem;font-weight:500;">{label}</p>
 </div>
-"""
-    )
+""")
 
 
 def section_header(title: str, subtitle: str = "") -> str:
@@ -1448,11 +1432,9 @@ def section_header(title: str, subtitle: str = "") -> str:
             f'color:{COLORS["gray_500"]};margin-top:0.25rem;">{subtitle}</p>'
         )
 
-    return _dedent(
-        f"""
+    return _dedent(f"""
 <div style="margin:1.5rem 0 1rem 0;">
 <h2 style="font-family:{FONTS['body']};font-size:1.25rem;font-weight:700;color:{COLORS['gray_800']};margin:0;letter-spacing:-0.01em;">{title}</h2>
 {sub}
 </div>
-"""
-    )
+""")

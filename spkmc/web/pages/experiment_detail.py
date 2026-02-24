@@ -161,15 +161,13 @@ def render() -> None:
     col_title, col_ai = st.columns([8, 2])
     with col_title:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="margin-bottom:0.25rem;">
 <h1 style="font-family:{FONTS['body']};font-size:1.875rem;font-weight:800;
 color:{COLORS['gray_900']};margin:0;letter-spacing:-0.02em;">
 {experiment.name}</h1>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
     with col_ai:
@@ -209,8 +207,7 @@ color:{COLORS['gray_900']};margin:0;letter-spacing:-0.02em;">
                 st.error(f"Failed to load analysis: {str(e)}")
     elif analysis_running:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="display:flex;align-items:center;gap:0.75rem;padding:1.5rem;
 background:{COLORS['white']};border-radius:12px;
 border:1px solid {COLORS['gray_200']};box-shadow:0 1px 3px rgba(0,0,0,0.06);">
@@ -220,14 +217,12 @@ animation:pulse-dot 1.5s ease-in-out infinite;flex-shrink:0;"></div>
 color:{COLORS['gray_600']};font-weight:500;">
 Generating analysis... This may take a moment.</span>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="text-align:center;padding:2rem;background:{COLORS['white']};
 border-radius:12px;border:1px solid {COLORS['gray_200']};
 box-shadow:0 1px 3px rgba(0,0,0,0.06);">
@@ -235,8 +230,7 @@ box-shadow:0 1px 3px rgba(0,0,0,0.06);">
 color:{COLORS['gray_400']};margin:0;">
 No analysis generated yet. Click "Analyze experiment" above to generate one.</p>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
 
@@ -358,14 +352,12 @@ def render_scenario_cards(experiment: Experiment) -> None:
     """Render scenarios as clickable cards with run and delete buttons."""
     if not experiment.scenarios:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="text-align:center;padding:2rem;color:{COLORS['gray_500']};
 font-family:{FONTS['body']};font-size:0.875rem;">
 No scenarios defined yet. Add one above.
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
         return
@@ -685,8 +677,7 @@ def _modal_body_fragment(experiment: Experiment, scenario: Scenario) -> None:
         )
     else:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="display:flex;flex-direction:column;align-items:center;
 justify-content:center;text-align:center;padding:3rem 2rem;
 color:{COLORS['gray_500']};min-height:200px;">
@@ -697,8 +688,7 @@ No results available</p>
 color:{COLORS['gray_400']};margin:0;">
 Run this scenario to generate simulation results.</p>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
 
@@ -871,8 +861,7 @@ def _render_result_content(
             st.error(f"Failed to load analysis: {str(e)}")
     elif sc_analysis_running:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="display:flex;align-items:center;gap:0.75rem;padding:1.25rem;
 background:{COLORS['gray_50']};border-radius:8px;">
 <div style="width:8px;height:8px;border-radius:50%;background:{COLORS['info']};
@@ -881,22 +870,19 @@ animation:pulse-dot 1.5s ease-in-out infinite;flex-shrink:0;"></div>
 color:{COLORS['gray_600']};font-weight:500;">
 Generating analysis...</span>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            _dedent(
-                f"""
+            _dedent(f"""
 <div style="text-align:center;padding:1.5rem;background:{COLORS['gray_50']};
 border-radius:8px;">
 <p style="font-family:{FONTS['body']};font-size:0.813rem;
 color:{COLORS['gray_400']};margin:0;">
 No analysis generated yet. Click "Analyze scenario" above to generate one.</p>
 </div>
-"""
-            ),
+"""),
             unsafe_allow_html=True,
         )
 
