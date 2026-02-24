@@ -133,8 +133,8 @@ def test_modal_shows_scenario_name(detail_page):
     open_scenario_detail(detail_page, EXP_DIR, SC_BASELINE)
     dialog = detail_page.locator("[data-testid='stDialog']")
     expect(dialog).to_be_visible(timeout=8000)
-    # st.title renders inside a stTitle testid container
-    title = dialog.locator("[data-testid='stTitle']")
+    # st.title renders inside a stHeading container (Streamlit 1.54+)
+    title = dialog.locator("[data-testid='stHeading']").first
     expect(title).to_contain_text("Baseline", timeout=8000)
 
 

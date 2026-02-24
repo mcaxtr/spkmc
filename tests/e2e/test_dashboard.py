@@ -84,20 +84,31 @@ def test_experiment_card_renders(app_page):
 
 def test_experiment_card_shows_name(app_page):
     """The experiment card displays the experiment name."""
-    card = app_page.locator(".st-key-exp_card_0")
-    expect(card).to_contain_text("E2E Smoke Test Experiment")
+    # Use text-based lookup — card index can shift when other tests create experiments
+    expect(app_page.get_by_text("E2E Smoke Test Experiment").first).to_be_visible(timeout=8000)
 
 
 def test_experiment_card_shows_scenario_count(app_page):
     """The experiment card shows the correct number of scenarios."""
-    card = app_page.locator(".st-key-exp_card_0")
-    # The card should reference 2 scenarios (Baseline + High Lambda)
-    expect(card).to_contain_text("2")
+    # Find the card containing the pre-seeded experiment name, then check scenario count
+    cards = app_page.locator("[class*='st-key-exp_card_']")
+    card_count = cards.count()
+    found = False
+    for i in range(card_count):
+        card = cards.nth(i)
+        if "E2E Smoke Test Experiment" in (card.text_content() or ""):
+            expect(card).to_contain_text("2")
+            found = True
+            break
+    assert found, "Pre-seeded experiment card not found"
 
 
 def test_experiment_card_clickable(app_page):
     """Clicking an experiment card navigates to the detail view."""
-    open_experiment(app_page, idx=0)
+    # Find and click the pre-seeded experiment card by text
+    card_btn = app_page.get_by_text("E2E Smoke Test Experiment").first
+    expect(card_btn).to_be_visible(timeout=8000)
+    card_btn.click()
     # Wait for the detail-specific back button to confirm navigation succeeded
     back_btn = app_page.locator(".st-key-detail_back_btn button")
     expect(back_btn).to_be_visible(timeout=15000)
