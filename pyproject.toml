@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Shortest Path Kinetic Monte Carlo (SPKMC) for simulating epidemic spread on networks"
 readme = "README.md"
 authors = [
-    {name = "mcaxtr", email = "mcaxtr@gmail.com"}
+    {name = "Marcus Castro", email = "mcaxtr@gmail.com"}
 ]
 license = {text = "MIT"}
 classifiers = [
@@ -24,8 +24,6 @@ dependencies = [
     "numpy>=1.20.0",
     "scipy>=1.7.0",
     "networkx>=2.6.0",
-    "matplotlib>=3.4.0",
-    "seaborn>=0.12.0",
     "numba>=0.54.0",
     "tqdm>=4.60.0",
     "click>=8.0.0",
@@ -38,6 +36,10 @@ dependencies = [
     "psutil>=5.8.0",
     "openai>=1.0.0",
     "pydantic>=2.0.0",
+    "streamlit>=1.48.0",
+    "plotly>=5.18.0",
+    "kaleido>=0.2.1",
+    "humanize>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -56,12 +58,15 @@ gpu = [
     "cudf-cu12>=24.0.0",
     "cugraph-cu12>=24.0.0",
 ]
+e2e = [
+    "pytest-playwright>=0.5.0",
+]
 
 [project.scripts]
 spkmc = "spkmc.cli.commands:cli"
 
 [tool.setuptools]
-packages = ["spkmc", "spkmc.analysis", "spkmc.cli", "spkmc.core", "spkmc.io", "spkmc.utils", "spkmc.visualization"]
+packages = ["spkmc", "spkmc.analysis", "spkmc.cli", "spkmc.core", "spkmc.io", "spkmc.models", "spkmc.utils", "spkmc.visualization", "spkmc.web", "spkmc.web.pages"]
 
 [tool.setuptools_scm]
 write_to = "spkmc/_version.py"
@@ -86,3 +91,6 @@ disallow_incomplete_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+markers = [
+    "e2e: end-to-end tests requiring a running Streamlit server",
+]
