@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, cast
 
+import psutil
 import streamlit as st
 
 
@@ -517,26 +518,21 @@ def poll_running_analyses() -> bool:
             # Check if subprocess died without writing terminal status
             if file_status == "running":
                 pid = status.get("pid")
-                if pid is not None:
-                    try:
-                        os.kill(pid, 0)
-                    except ProcessLookupError:
-                        # Process no longer exists — check if output was written
-                        if runner.check_completion(exp_name, analysis_type, sc_normalized):
-                            SessionState.mark_analysis_completed(analysis_id)
-                            label = "experiment" if analysis_type == "experiment" else sc_normalized
-                            st.toast(f"Analysis complete: {label}")
-                        else:
-                            SessionState.mark_analysis_failed(
-                                analysis_id,
-                                "Analysis process exited unexpectedly",
-                            )
-                            st.toast("Analysis failed: process exited unexpectedly")
-                        runner.cleanup_status(run_id)
-                        changed = True
-                        continue
-                    except OSError:
-                        pass  # PermissionError etc — process may still exist
+                if pid is not None and not psutil.pid_exists(pid):
+                    # Process no longer exists -- check if output was written
+                    if runner.check_completion(exp_name, analysis_type, sc_normalized):
+                        SessionState.mark_analysis_completed(analysis_id)
+                        label = "experiment" if analysis_type == "experiment" else sc_normalized
+                        st.toast(f"Analysis complete: {label}")
+                    else:
+                        SessionState.mark_analysis_failed(
+                            analysis_id,
+                            "Analysis process exited unexpectedly",
+                        )
+                        st.toast("Analysis failed: process exited unexpectedly")
+                    runner.cleanup_status(run_id)
+                    changed = True
+                    continue
 
         # Fallback: check result file directly
         elif runner.check_completion(exp_name, analysis_type, sc_normalized):

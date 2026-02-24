@@ -8,11 +8,10 @@ session-level variables.
 from __future__ import annotations
 
 import json
-import os
-import signal
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, cast
 
+import psutil
 import streamlit as st
 
 
@@ -424,11 +423,4 @@ class SessionState:
 
 def _is_pid_alive(pid: int) -> bool:
     """Check if a process with the given PID is still running."""
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except OSError:
-        # PermissionError etc — process likely exists but owned by another user
-        return True
+    return psutil.pid_exists(pid)

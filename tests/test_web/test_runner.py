@@ -200,7 +200,7 @@ class TestGetProgress:
 class TestBuildExecutionScript:
     def test_script_references_experiment_path(self, runner, minimal_experiment, minimal_scenario):
         script = runner._build_execution_script(minimal_experiment, minimal_scenario, "test_run_id")
-        assert str(minimal_experiment.path) in script
+        assert repr(str(minimal_experiment.path)) in script
 
     def test_script_contains_scenario_normalized_label(
         self, runner, minimal_experiment, minimal_scenario

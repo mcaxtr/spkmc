@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+import psutil
 import streamlit as st
 
 from spkmc.models import Experiment, Scenario
@@ -417,26 +418,21 @@ def poll_running_simulations() -> None:
             # Check if subprocess died without writing terminal status
             if file_status == "running":
                 pid = status.get("pid")
-                if pid is not None:
-                    try:
-                        os.kill(pid, 0)
-                    except ProcessLookupError:
-                        # Process no longer exists — check if output was written
-                        completed = runner.check_completion(exp_name, scenario_label)
-                        if completed:
-                            SessionState.mark_simulation_completed(scenario_id)
-                            st.toast(f"Completed: {scenario_label}")
-                        else:
-                            SessionState.mark_simulation_failed(
-                                scenario_id, "Process exited unexpectedly"
-                            )
-                            st.toast(f"Failed: {scenario_label}")
-                        SessionState.clear_simulation_progress(scenario_id)
-                        _settle_scenario_backups(exp_name, scenario_label, succeeded=completed)
-                        runner.cleanup_status(run_id)
-                        continue
-                    except OSError:
-                        pass  # PermissionError etc — process may still exist
+                if pid is not None and not psutil.pid_exists(pid):
+                    # Process no longer exists -- check if output was written
+                    completed = runner.check_completion(exp_name, scenario_label)
+                    if completed:
+                        SessionState.mark_simulation_completed(scenario_id)
+                        st.toast(f"Completed: {scenario_label}")
+                    else:
+                        SessionState.mark_simulation_failed(
+                            scenario_id, "Process exited unexpectedly"
+                        )
+                        st.toast(f"Failed: {scenario_label}")
+                    SessionState.clear_simulation_progress(scenario_id)
+                    _settle_scenario_backups(exp_name, scenario_label, succeeded=completed)
+                    runner.cleanup_status(run_id)
+                    continue
 
         # Fallback: check result file directly
         elif runner.check_completion(exp_name, scenario_label):
