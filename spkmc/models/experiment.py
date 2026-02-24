@@ -92,6 +92,7 @@ class Experiment(BaseModel):
     plot_config: Optional[PlotConfig] = Field(
         default=None, exclude=True
     )  # Alias for backward compat
+    parameters: Dict[str, Any] = Field(default_factory=dict)  # Global default parameters
     scenarios: List[Any] = Field(min_length=1)  # Accept raw dicts or Scenario objects
     path: Optional[Path] = None
 
@@ -198,6 +199,7 @@ class Experiment(BaseModel):
             name=config.name,
             description=config.description,
             plot=config.plot,
+            parameters=config.parameters,
             scenarios=scenarios,
             path=path,
         )
