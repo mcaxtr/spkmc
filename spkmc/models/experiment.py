@@ -14,6 +14,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from spkmc.models.config import PlotConfig
 from spkmc.models.scenario import Scenario, ScenarioOverride
 
+# Mapping of legacy network type values (full names) to current short codes.
+# Keys are lowercase; lookup should lowercase the input first.
+NETWORK_VALUE_MAPPING: Dict[str, str] = {
+    "erdos_renyi": "er",
+    "erdos-renyi": "er",
+    "cn": "sf",
+    "complex_network": "sf",
+    "complex-network": "sf",
+    "scale_free": "sf",
+    "scale-free": "sf",
+    "complete_graph": "cg",
+    "complete": "cg",
+    "random_regular": "rrn",
+    "random-regular": "rrn",
+}
+
 
 class ExperimentConfig(BaseModel):
     """
@@ -42,17 +58,28 @@ class ExperimentConfig(BaseModel):
         Returns:
             ExperimentConfig instance
         """
-        # Key mapping for parameter normalization
+        # Key mapping for parameter normalization (includes legacy keys)
         key_mapping = {
+            "network_type": "network",
+            "network_size": "nodes",
+            "N": "nodes",
             "time_max": "t_max",
             "time_points": "steps",
         }
 
+        # Value mapping for fields whose values changed across versions
+        value_mapping: Dict[str, Dict[str, str]] = {
+            "network": NETWORK_VALUE_MAPPING,
+        }
+
         def normalize_params(params: Dict[str, Any]) -> Dict[str, Any]:
-            """Normalize parameter keys to internal format."""
+            """Normalize parameter keys and values to internal format."""
             normalized = {}
             for key, value in params.items():
                 normalized_key = key_mapping.get(key, key)
+                if normalized_key in value_mapping and isinstance(value, str):
+                    lowered = value.lower()
+                    value = value_mapping[normalized_key].get(lowered, lowered)
                 normalized[normalized_key] = value
             return normalized
 
