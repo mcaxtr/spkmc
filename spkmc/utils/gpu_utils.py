@@ -257,20 +257,20 @@ try:
         # Run SSSP from super-node
         result = cugraph.sssp(G, source=super_node)
 
-        # Extract distances properly by vertex ID
-        # cuGraph SSSP returns DataFrame with 'vertex' and 'distance' columns
-        # We need to map vertex IDs to their distances, excluding super-node
+        # Extract distances to CPU immediately
         vertices = result["vertex"].to_numpy()
         dist_values = result["distance"].to_numpy()
 
-        # Initialize distances to infinity (unreachable nodes)
-        distances = np.full(N, np.inf, dtype=np.float32)
+        # Free cuGraph/cuDF GPU objects
+        import gc
 
-        # Filter out super-node and use vectorized assignment
+        del result, G, df
+        gc.collect()
+
+        # Map vertex IDs to distance array
+        distances = np.full(N, np.inf, dtype=np.float32)
         valid_mask = vertices < N
-        valid_vertices = vertices[valid_mask]
-        valid_distances = dist_values[valid_mask]
-        distances[valid_vertices] = valid_distances
+        distances[vertices[valid_mask]] = dist_values[valid_mask]
 
         t_end = time_module.perf_counter()
         if debug:
@@ -402,7 +402,6 @@ try:
             self._graph_src: Optional[Any] = None
             self._graph_dst: Optional[Any] = None
             self._graph_weights: Optional[Any] = None  # Pre-allocated, updated each sample
-            self._graph_df: Optional[Any] = None
             self._super_node: int = 0
             self._sources_prepared = False
 
@@ -559,12 +558,6 @@ try:
             # Super-node weights are always 0
             self._graph_weights[self._num_edges :] = 0.0
 
-            # Pre-create DataFrame with structure (weight column updated each sample)
-            # This avoids DataFrame creation overhead in the loop
-            self._graph_df = cudf.DataFrame(
-                {"src": self._graph_src, "dst": self._graph_dst, "weight": self._graph_weights}
-            )
-
             self._super_node = super_node
             self._sources_prepared = True
 
@@ -574,11 +567,9 @@ try:
             """
             Run optimized SSSP for a single sample.
 
-            Optimizations:
-            - Reuses pre-allocated src/dst arrays (only updates weights)
-            - Reuses DataFrame structure, updates weight column in-place
-            - Uses float32 throughout
-            - Skips renumbering (vertices already in [0, N) range)
+            Creates a fresh cuDF DataFrame each call to avoid RMM memory
+            accumulation from cuDF column-update internals.  Explicitly
+            deletes cuGraph objects to release RMM buffers immediately.
 
             Args:
                 recovery_times: Recovery times for this sample (N,)
@@ -587,44 +578,45 @@ try:
             Returns:
                 NumPy array of shortest path distances from sources to all nodes
             """
-            # Compute infection weights (inf if edge_time >= recovery_time of source node)
-            # Update weights in-place in pre-allocated array
+            import gc
+
             assert self._graph_weights is not None, "_prepare_graph_structure must be called first"
-            assert self._graph_df is not None, "_prepare_graph_structure must be called first"
             u = self._edges_gpu[:, 0]
             self._graph_weights[: self._num_edges] = cp.where(
                 edge_times >= recovery_times[u], cp.float32(np.inf), edge_times
             )
 
-            # Update weight column in pre-existing DataFrame
-            # cuDF allows in-place column update via direct assignment
-            self._graph_df["weight"] = self._graph_weights
-
-            # Build cuGraph graph using pre-allocated DataFrame
-            G = cugraph.Graph(directed=True)
-            # renumber=False: vertices already in [0, N] range (including super-node)
-            G.from_cudf_edgelist(
-                self._graph_df, source="src", destination="dst", edge_attr="weight", renumber=False
+            # Build fresh DataFrame each call — cuDF column assignment
+            # leaks internal RMM buffers when reusing a DataFrame.
+            df = cudf.DataFrame(
+                {
+                    "src": self._graph_src,
+                    "dst": self._graph_dst,
+                    "weight": self._graph_weights,
+                }
             )
 
-            # Run SSSP from super-node
+            G = cugraph.Graph(directed=True)
+            G.from_cudf_edgelist(
+                df, source="src", destination="dst", edge_attr="weight", renumber=False
+            )
+
             result = cugraph.sssp(G, source=self._super_node)
 
-            # Extract distances by vertex ID
+            # Extract to CPU immediately
             vertices = result["vertex"].to_numpy()
             dist_values = result["distance"].to_numpy()
 
-            # Initialize distances to infinity (unreachable nodes)
+            # Explicitly free cuGraph/cuDF GPU objects before next iteration
+            del result, G, df
+            gc.collect()
+
+            # Map vertex IDs to distance array
             distances = np.full(self._N, np.inf, dtype=np.float32)
-
-            # Filter out super-node and assign distances
             valid_mask = vertices < self._N
-            valid_vertices = vertices[valid_mask]
-            valid_distances = dist_values[valid_mask]
-            distances[valid_vertices] = valid_distances
+            distances[vertices[valid_mask]] = dist_values[valid_mask]
 
-            distances_array: np.ndarray = np.asarray(distances)
-            return distances_array
+            return distances
 
         def _calculate_sir_batched(
             self, distances_all: List[np.ndarray], recovery_all: cp.ndarray
