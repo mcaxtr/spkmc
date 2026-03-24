@@ -155,6 +155,8 @@ def test_validate_distribution_type_valid(ctx, param):
     assert validate_distribution_type(ctx, param, "gamma") == "gamma"
     assert validate_distribution_type(ctx, param, "GAMMA") == "gamma"
     assert validate_distribution_type(ctx, param, "exponential") == "exponential"
+    assert validate_distribution_type(ctx, param, "weibull") == "weibull"
+    assert validate_distribution_type(ctx, param, "WEIBULL") == "weibull"
 
 
 def test_validate_distribution_type_invalid(ctx, param):

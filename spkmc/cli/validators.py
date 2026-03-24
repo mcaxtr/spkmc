@@ -108,7 +108,7 @@ def validate_distribution_type(ctx: click.Context, param: click.Parameter, value
     Raises:
         click.BadParameter: If the distribution type is not valid
     """
-    valid_types = ["gamma", "exponential"]
+    valid_types = ["gamma", "exponential", "weibull"]
     if value.lower() not in valid_types:
         raise click.BadParameter(
             f"Invalid distribution type. Choose from: {', '.join(valid_types)}"

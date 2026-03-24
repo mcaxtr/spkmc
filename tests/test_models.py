@@ -99,6 +99,53 @@ class TestScenarioCreation:
         with pytest.raises(ValueError, match="shape and scale required"):
             Scenario(**valid_gamma_scenario_data)
 
+    @pytest.fixture
+    def valid_weibull_scenario_data(self):
+        return {
+            "label": "test_weibull_scenario",
+            "network": "er",
+            "distribution": "weibull",
+            "nodes": 1000,
+            "samples": 50,
+            "k_avg": 10.0,
+            "shape": 2.0,
+            "scale": 1.0,
+            "lambda": 0.5,
+            "t_max": 10.0,
+            "steps": 100,
+            "initial_perc": 0.01,
+        }
+
+    def test_create_weibull_scenario(self, valid_weibull_scenario_data):
+        """Test creating a valid Weibull distribution scenario."""
+        scenario = Scenario(**valid_weibull_scenario_data)
+        assert scenario.label == "test_weibull_scenario"
+        assert scenario.network == "er"
+        assert scenario.distribution == "weibull"
+        assert scenario.shape == 2.0
+        assert scenario.scale == 1.0
+
+    def test_missing_shape_for_weibull(self, valid_weibull_scenario_data):
+        """Weibull distribution requires shape and scale."""
+        del valid_weibull_scenario_data["shape"]
+        with pytest.raises(ValueError, match="shape and scale required"):
+            Scenario(**valid_weibull_scenario_data)
+
+    def test_missing_scale_for_weibull(self, valid_weibull_scenario_data):
+        """Weibull distribution requires shape and scale."""
+        del valid_weibull_scenario_data["scale"]
+        with pytest.raises(ValueError, match="shape and scale required"):
+            Scenario(**valid_weibull_scenario_data)
+
+    def test_weibull_metadata(self, valid_weibull_scenario_data):
+        """Test that Weibull scenario produces correct metadata."""
+        scenario = Scenario(**valid_weibull_scenario_data)
+        metadata = scenario.to_metadata()
+        assert metadata["distribution"] == "weibull"
+        assert metadata["shape"] == 2.0
+        assert metadata["scale"] == 1.0
+        assert metadata["lambda"] == 0.5
+
     def test_total_samples_calculation(self, valid_gamma_scenario_data):
         """Test total_samples returns num_runs * samples."""
         valid_gamma_scenario_data["num_runs"] = 3

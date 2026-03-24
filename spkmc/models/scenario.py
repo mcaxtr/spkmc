@@ -22,7 +22,7 @@ class ScenarioOverride(BaseModel):
 
     label: str
     network: Optional[Literal["er", "sf", "cg", "rrn"]] = None
-    distribution: Optional[Literal["gamma", "exponential"]] = None
+    distribution: Optional[Literal["gamma", "exponential", "weibull"]] = None
     nodes: Optional[int] = Field(gt=0, default=None)
     samples: Optional[int] = Field(gt=0, default=None)
     k_avg: Optional[float] = Field(gt=0, default=None)
@@ -55,7 +55,7 @@ class Scenario(BaseModel):
 
     label: str
     network: Literal["er", "sf", "cg", "rrn"]
-    distribution: Literal["gamma", "exponential"]
+    distribution: Literal["gamma", "exponential", "weibull"]
     nodes: int = Field(gt=0)
     samples: int = Field(gt=0)
 
@@ -112,6 +112,9 @@ class Scenario(BaseModel):
         elif self.distribution == "exponential":
             if self.mu is None:
                 raise ValueError("mu required for exponential distribution")
+        elif self.distribution == "weibull":
+            if self.shape is None or self.scale is None:
+                raise ValueError("shape and scale required for weibull distribution")
         return self
 
     def total_samples(self) -> int:

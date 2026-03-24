@@ -19,6 +19,7 @@ from spkmc.utils.numba_utils import (
     compute_infection_times_exponential,
     gamma_sampling,
     get_weight_exponential,
+    weibull_sampling,
 )
 
 
@@ -277,6 +278,63 @@ class ExponentialDistribution(Distribution):
         return ExponentialExponentialTransmissibility(beta=self.lmbd, gamma=self.mu)
 
 
+class WeibullDistribution(Distribution):
+    """Weibull distribution implementation for SPKMC."""
+
+    def __init__(self, shape: float, scale: float, lmbd: float = 1.0):
+        """
+        Initialize the Weibull distribution.
+
+        Args:
+            shape: Shape parameter (k) of the Weibull distribution
+            scale: Scale parameter (lambda) of the Weibull distribution
+            lmbd: Lambda parameter for infection times (default: 1.0)
+        """
+        self.shape = shape
+        self.scale = scale
+        self.lmbd = lmbd
+
+    def get_recovery_weights(self, size: int) -> np.ndarray:
+        """Generate recovery weights using the Weibull distribution."""
+        result: np.ndarray = np.asarray(weibull_sampling(self.shape, self.scale, size))
+        return result
+
+    def get_infection_times(self, recovery_times: np.ndarray, edges: np.ndarray) -> np.ndarray:
+        """Calculate infection times using exponential infection waiting times."""
+        result: np.ndarray = np.asarray(
+            compute_infection_times_exponential(self.lmbd, recovery_times, edges)
+        )
+        return result
+
+    def get_distribution_name(self) -> str:
+        """Return the distribution name."""
+        return "weibull"
+
+    def get_params_string(self) -> str:
+        """Return a string with distribution parameters for filenames."""
+        shape_str = f"{self.shape:.4f}".rstrip("0").rstrip(".")
+        scale_str = f"{self.scale:.4f}".rstrip("0").rstrip(".")
+        lmbd_str = f"{self.lmbd:.4f}".rstrip("0").rstrip(".")
+        return f"sh{shape_str}_sc{scale_str}_l{lmbd_str}"
+
+    def get_params_dict(self) -> dict:
+        """Return a dictionary with distribution parameters."""
+        return {
+            "type": "weibull",
+            "shape": self.shape,
+            "scale": self.scale,
+            "lambda": self.lmbd,
+        }
+
+    def get_transmissibility_calculator(self) -> TransmissibilityCalculator:
+        """Return a transmissibility calculator for Weibull recovery + Exponential infection."""
+        from spkmc.core.transmissibility import WeibullExponentialTransmissibility
+
+        return WeibullExponentialTransmissibility(
+            shape=self.shape, scale=self.scale, beta=self.lmbd
+        )
+
+
 def create_distribution(dist_type: str, **kwargs: Any) -> Distribution:
     """
     Create a distribution instance based on the given type and parameters.
@@ -301,6 +359,12 @@ def create_distribution(dist_type: str, **kwargs: Any) -> Distribution:
         mu = kwargs.get("mu", 1.0)
         lmbd = kwargs.get("lambda", 1.0)
         return ExponentialDistribution(mu=mu, lmbd=lmbd)
+
+    elif dist_type.lower() == "weibull":
+        shape = kwargs.get("shape", 2.0)
+        scale = kwargs.get("scale", 1.0)
+        lmbd = kwargs.get("lambda", 1.0)
+        return WeibullDistribution(shape=shape, scale=scale, lmbd=lmbd)
 
     else:
         raise ValueError(f"Unknown distribution type: {dist_type}")

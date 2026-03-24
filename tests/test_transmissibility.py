@@ -11,11 +11,12 @@ import numpy as np
 import pytest
 from scipy.stats import gamma as gamma_dist
 
-from spkmc.core.distributions import ExponentialDistribution, GammaDistribution
+from spkmc.core.distributions import ExponentialDistribution, GammaDistribution, WeibullDistribution
 from spkmc.core.transmissibility import (
     ExponentialExponentialTransmissibility,
     GammaExponentialTransmissibility,
     NumericalTransmissibility,
+    WeibullExponentialTransmissibility,
     calculate_empirical_transmissibility,
     create_transmissibility_calculator,
     epidemic_threshold_er,
@@ -165,6 +166,91 @@ class TestGammaExponentialTransmissibility:
 
         assert 0 < T < 1
         assert calc.calculate_analytical_erlang() is None  # No analytical for non-integer
+
+
+class TestWeibullExponentialTransmissibility:
+    """Tests for Weibull recovery + Exponential infection transmissibility."""
+
+    def test_weibull_shape1_matches_exponential(self):
+        """Weibull(shape=1, scale=λ) = Exponential(rate=1/λ), results should match."""
+        beta = 0.5
+        scale = 2.0  # Weibull scale
+        gamma = 1.0 / scale  # Equivalent exponential rate
+
+        calc_weibull = WeibullExponentialTransmissibility(shape=1.0, scale=scale, beta=beta)
+        calc_exp = ExponentialExponentialTransmissibility(beta=beta, gamma=gamma)
+
+        T_weibull = calc_weibull.calculate()
+        T_exp = calc_exp.calculate()
+
+        assert abs(T_weibull - T_exp) < 1e-4
+
+    def test_result_between_zero_and_one(self):
+        """T-bar must be in (0, 1) for any valid parameters."""
+        calc = WeibullExponentialTransmissibility(shape=2.0, scale=1.0, beta=0.5)
+        T = calc.calculate()
+        assert 0 < T < 1
+
+    def test_higher_beta_increases_transmissibility(self):
+        """Higher infection rate should increase T-bar."""
+        shape, scale = 2.0, 1.0
+        T_low = WeibullExponentialTransmissibility(shape=shape, scale=scale, beta=0.1).calculate()
+        T_high = WeibullExponentialTransmissibility(shape=shape, scale=scale, beta=1.0).calculate()
+        assert T_low < T_high
+
+    def test_higher_shape_increases_transmissibility(self):
+        """Higher shape (more concentrated recovery) should increase T-bar at fixed mean."""
+        beta = 0.5
+        from scipy.special import gamma as gamma_fn
+
+        mean_recovery = 2.0
+        T_values = []
+        for shape in [1.0, 2.0, 4.0, 8.0]:
+            # For Weibull: mean = scale * Gamma(1 + 1/shape)
+            scale = mean_recovery / gamma_fn(1 + 1.0 / shape)
+            calc = WeibullExponentialTransmissibility(shape=shape, scale=scale, beta=beta)
+            T_values.append(calc.calculate())
+
+        for i in range(len(T_values) - 1):
+            assert T_values[i] < T_values[i + 1]
+
+    def test_caching(self):
+        """Test that results are cached after first calculation."""
+        calc = WeibullExponentialTransmissibility(shape=2.0, scale=1.0, beta=0.3)
+        T1 = calc.calculate()
+        T2 = calc.calculate()
+        assert T1 == T2
+        assert calc._cached_value is not None
+
+    def test_invalid_parameters(self):
+        """Test that invalid parameters raise errors."""
+        with pytest.raises(ValueError):
+            WeibullExponentialTransmissibility(shape=0, scale=1.0, beta=0.3)
+
+        with pytest.raises(ValueError):
+            WeibullExponentialTransmissibility(shape=2.0, scale=-1.0, beta=0.3)
+
+        with pytest.raises(ValueError):
+            WeibullExponentialTransmissibility(shape=2.0, scale=1.0, beta=0)
+
+    def test_numerical_matches_manual_integration(self):
+        """Cross-check against manual scipy integration."""
+        from scipy import integrate as sp_integrate
+        from scipy.stats import weibull_min
+
+        shape, scale, beta = 2.5, 1.5, 0.4
+
+        def integrand(tau):
+            if tau <= 0:
+                return 0.0
+            phi = weibull_min.pdf(tau, c=shape, scale=scale)
+            psi_cdf = 1 - np.exp(-beta * tau)
+            return float(phi * psi_cdf)
+
+        expected, _ = sp_integrate.quad(integrand, 0, np.inf)
+        calc = WeibullExponentialTransmissibility(shape=shape, scale=scale, beta=beta)
+
+        assert abs(calc.calculate() - expected) < 1e-6
 
 
 class TestCriticalThreshold:
@@ -358,11 +444,24 @@ class TestFactoryFunction:
                 gamma=0.1,
             )
 
+    def test_create_weibull_exponential(self):
+        """Test creating Weibull-Exp calculator."""
+        calc = create_transmissibility_calculator(
+            recovery_type="weibull",
+            infection_type="exponential",
+            shape=2.0,
+            scale=1.0,
+            beta=0.5,
+        )
+
+        assert isinstance(calc, WeibullExponentialTransmissibility)
+        assert 0 < calc.calculate() < 1
+
     def test_unsupported_recovery_type(self):
         """Test error for unsupported recovery type."""
         with pytest.raises(ValueError, match="not supported"):
             create_transmissibility_calculator(
-                recovery_type="weibull",
+                recovery_type="lognormal",
                 infection_type="exponential",
                 beta=0.5,
             )
@@ -463,6 +562,16 @@ class TestDistributionIntegration:
         assert isinstance(calc, ExponentialExponentialTransmissibility)
         assert calc.beta == 0.5
         assert calc.gamma == 0.2
+
+    def test_weibull_distribution_calculator(self):
+        """Test WeibullDistribution.get_transmissibility_calculator()."""
+        dist = WeibullDistribution(shape=2.0, scale=1.0, lmbd=0.5)
+        calc = dist.get_transmissibility_calculator()
+
+        assert isinstance(calc, WeibullExponentialTransmissibility)
+        assert calc.shape == 2.0
+        assert calc.scale == 1.0
+        assert calc.beta == 0.5
 
     def test_calculator_gives_correct_results(self):
         """Test that calculator from distribution gives correct T̄."""

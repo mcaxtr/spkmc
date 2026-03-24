@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from spkmc.core.distributions import ExponentialDistribution, GammaDistribution
+from spkmc.core.distributions import ExponentialDistribution, GammaDistribution, WeibullDistribution
 from spkmc.core.simulation import SPKMC
 
 
@@ -24,6 +24,12 @@ def gamma_distribution():
 def exponential_distribution():
     """Fixture for an Exponential distribution."""
     return ExponentialDistribution(mu=1.0, lmbd=1.0)
+
+
+@pytest.fixture
+def weibull_distribution():
+    """Fixture for a Weibull distribution."""
+    return WeibullDistribution(shape=2.0, scale=1.0, lmbd=1.0)
 
 
 @pytest.fixture
@@ -395,3 +401,77 @@ def test_run_simulation_invalid_network(gamma_distribution, time_steps):
         simulator.run_simulation(
             network_type="invalid", time_steps=time_steps, N=100, samples=10, initial_perc=0.01
         )
+
+
+def test_spkmc_initialization_weibull(weibull_distribution):
+    """Test SPKMC simulator initialization with Weibull distribution."""
+    simulator = SPKMC(weibull_distribution)
+    assert simulator.distribution == weibull_distribution
+
+
+def test_get_dist_sparse_weibull(weibull_distribution):
+    """Test shortest distance calculation with Weibull distribution."""
+    simulator = SPKMC(weibull_distribution)
+
+    N = 5
+    edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]])
+    sources = np.array([0])
+
+    dist, recovery_weights = simulator.get_dist_sparse(N, edges, sources)
+
+    assert isinstance(dist, np.ndarray)
+    assert isinstance(recovery_weights, np.ndarray)
+    assert dist.shape == (N,)
+    assert recovery_weights.shape == (N,)
+    assert dist[0] == 0
+    assert np.all(dist[1:] > 0)
+
+
+def test_run_single_simulation_weibull(weibull_distribution, small_network, time_steps):
+    """Test running a single simulation with Weibull distribution."""
+    simulator = SPKMC(weibull_distribution)
+
+    N = small_network.number_of_nodes()
+    edges = np.array(list(small_network.edges()))
+    sources = np.array([0])
+
+    S, I, R = simulator.run_single_simulation(N, edges, sources, time_steps)
+
+    assert isinstance(S, np.ndarray)
+    assert isinstance(I, np.ndarray)
+    assert isinstance(R, np.ndarray)
+    assert S.shape == time_steps.shape
+    assert I.shape == time_steps.shape
+    assert R.shape == time_steps.shape
+    assert np.isclose(S + I + R, 1.0).all()
+    assert S[0] < 1.0
+    assert I[0] > 0.0
+    assert R[0] == 0.0
+
+
+def test_simulate_erdos_renyi_weibull(weibull_distribution, time_steps):
+    """Test simulation on Erdos-Renyi networks with Weibull distribution."""
+    simulator = SPKMC(weibull_distribution)
+
+    N = 20
+    k_avg = 4
+    samples = 2
+    num_runs = 2
+    initial_perc = 0.1
+
+    S, I, R, S_err, I_err, R_err = simulator.simulate_erdos_renyi(
+        num_runs=num_runs,
+        time_steps=time_steps,
+        N=N,
+        k_avg=k_avg,
+        samples=samples,
+        initial_perc=initial_perc,
+    )
+
+    assert isinstance(S, np.ndarray)
+    assert isinstance(I, np.ndarray)
+    assert isinstance(R, np.ndarray)
+    assert S.shape == time_steps.shape
+    assert I.shape == time_steps.shape
+    assert R.shape == time_steps.shape
+    assert np.isclose(S + I + R, 1.0).all()

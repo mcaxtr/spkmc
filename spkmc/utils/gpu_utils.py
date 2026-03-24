@@ -224,6 +224,11 @@ try:
             recovery_times = cp.random.gamma(shape, scale, size=N)
             # Infection times use exponential even for gamma recovery (matches CPU impl)
             edge_times = cp.random.exponential(1.0 / lmbd, size=edges_gpu.shape[0])
+        elif distribution == "weibull":
+            shape = params.get("shape", 2.0)
+            scale = params.get("scale", 1.0)
+            recovery_times = cp.random.weibull(shape, size=N) * scale
+            edge_times = cp.random.exponential(1.0 / lmbd, size=edges_gpu.shape[0])
         else:
             mu = params.get("mu", 1.0)
             recovery_times = cp.random.exponential(1.0 / mu, size=N)
@@ -502,6 +507,11 @@ try:
                 shape = params.get("shape", 2.0)
                 scale = params.get("scale", 1.0)
                 return cp.random.gamma(shape, scale, size=(samples, self._N), dtype=cp.float32)
+            elif distribution == "weibull":
+                shape = params.get("shape", 2.0)
+                scale = params.get("scale", 1.0)
+                raw = cp.random.weibull(shape, size=(samples, self._N))
+                return (raw * scale).astype(cp.float32)
             else:
                 mu = params.get("mu", 1.0)
                 return cp.random.exponential(1.0 / mu, size=(samples, self._N), dtype=cp.float32)

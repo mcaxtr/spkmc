@@ -405,6 +405,79 @@ class GammaExponentialTransmissibility(TransmissibilityCalculator):
         }
 
 
+class WeibullExponentialTransmissibility(TransmissibilityCalculator):
+    """
+    Transmissibility for Weibull recovery with exponential infection.
+
+    Recovery: φ(τ) = (k/λ)(τ/λ)^(k-1) exp(-(τ/λ)^k)  (Weibull)
+    Infection: ψ(τ) = β·e^(-βτ)  (exponential)
+
+    Computed numerically via integration.
+    """
+
+    def __init__(self, shape: float, scale: float, beta: float):
+        """
+        Initialize Weibull-Exponential transmissibility calculator.
+
+        Args:
+            shape: Weibull shape parameter (k)
+            scale: Weibull scale parameter (λ)
+            beta: Infection rate
+
+        Raises:
+            ValueError: If parameters are invalid
+        """
+        if shape <= 0:
+            raise ValueError(f"Shape must be > 0, got {shape}")
+        if scale <= 0:
+            raise ValueError(f"Scale must be > 0, got {scale}")
+        if beta <= 0:
+            raise ValueError(f"Infection rate beta must be > 0, got {beta}")
+
+        self.shape = shape
+        self.scale = scale
+        self.beta = beta
+        self._cached_value: Optional[float] = None
+
+    def calculate(self) -> float:
+        """
+        Calculate T̄ via numerical integration.
+
+        T̄ = ∫₀^∞ φ(τ) Ψ(τ) dτ
+
+        Where:
+            φ(τ) = Weibull PDF with shape and scale
+            Ψ(τ) = 1 - e^(-βτ) = exponential CDF
+        """
+        if self._cached_value is not None:
+            return self._cached_value
+
+        from scipy.stats import weibull_min
+
+        def integrand(tau: float) -> float:
+            if tau <= 0:
+                return 0.0
+            phi = weibull_min.pdf(tau, c=self.shape, scale=self.scale)
+            psi_cdf = 1 - np.exp(-self.beta * tau)
+            return float(phi * psi_cdf)
+
+        result, _ = integrate.quad(integrand, 0, np.inf)
+        self._cached_value = float(result)
+        return float(result)
+
+    def get_params_dict(self) -> Dict[str, Any]:
+        from scipy.special import gamma as gamma_func
+
+        mean_recovery = self.scale * gamma_func(1 + 1 / self.shape)
+        return {
+            "type": "weibull-exponential",
+            "shape": self.shape,
+            "scale": self.scale,
+            "beta": self.beta,
+            "mean_recovery_time": mean_recovery,
+        }
+
+
 class NumericalTransmissibility(TransmissibilityCalculator):
     """
     General numerical transmissibility calculator for arbitrary distributions.
@@ -550,9 +623,17 @@ def create_transmissibility_calculator(
             raise ValueError("Parameters 'shape' and 'scale' are required for gamma recovery")
         return GammaExponentialTransmissibility(shape=shape, scale=scale, beta=beta)
 
+    elif recovery_type == "weibull":
+        shape = params.get("shape")
+        scale = params.get("scale")
+        if shape is None or scale is None:
+            raise ValueError("Parameters 'shape' and 'scale' are required for weibull recovery")
+        return WeibullExponentialTransmissibility(shape=shape, scale=scale, beta=beta)
+
     else:
         raise ValueError(
-            f"Recovery type '{recovery_type}' not supported. " "Use 'exponential' or 'gamma'."
+            f"Recovery type '{recovery_type}' not supported. "
+            "Use 'exponential', 'gamma', or 'weibull'."
         )
 
 

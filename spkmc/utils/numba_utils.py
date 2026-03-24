@@ -247,6 +247,13 @@ def get_weight_exponential(param: float, size: int) -> np.ndarray:
     return np.random.exponential(1.0 / param, size)  # type: ignore[return-value]
 
 
+@njit(cache=False)
+def weibull_sampling(shape: float, scale: float, size: int) -> np.ndarray:
+    """Sample an array from Weibull distribution with shape and scale parameters."""
+    raw = np.random.weibull(shape, size)  # type: ignore[return-value]
+    return raw * scale
+
+
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
