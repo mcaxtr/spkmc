@@ -410,7 +410,11 @@ try:
             self, samples: int, sources: np.ndarray, params: Dict[str, Any]
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             """
-            Run all samples with batched operations.
+            Run all samples with per-sample GPU operations.
+
+            Generates random numbers and runs SSSP one sample at a time to
+            minimize peak GPU memory.  SIR calculation is batched in chunks
+            after all SSSP distances are collected on CPU.
 
             Args:
                 samples: Number of Monte Carlo samples to run
@@ -425,32 +429,28 @@ try:
             """
             t_total_start = time_module.perf_counter()
 
-            # 1. Batch random generation for ALL samples at once
-            t_rng_start = time_module.perf_counter()
-            recovery_all = self._generate_recovery_times_batched(samples, params)
-            edge_times_all = self._generate_edge_times_batched(samples, params)
-            t_rng_end = time_module.perf_counter()
-
-            if self._debug:
-                print(
-                    f"[GPU TIMING] Batched RNG: {(t_rng_end - t_rng_start)*1000:.1f}ms "
-                    f"(samples={samples}, N={self._N}, edges={self._num_edges})",
-                    file=sys.stderr,
-                )
-
-            # 2. Prepare graph structure (once, reused across samples)
+            # Prepare graph structure once (reused across samples)
             sources_gpu = cp.asarray(sources, dtype=cp.int32)
             self._prepare_graph_structure(sources_gpu)
 
-            # 3. Run SSSP for each sample (can't batch due to cuGraph limitation)
+            # Run SSSP per-sample: generate RNG on GPU, run SSSP, store
+            # distances on CPU.  Only one sample's worth of RNG + graph
+            # data lives on GPU at a time.
             t_sssp_start = time_module.perf_counter()
-            distances_all = []
+            distances_all: List[np.ndarray] = []
+            recovery_all_cpu: List[np.ndarray] = []
 
             for s in range(samples):
-                dist = self._run_sssp_optimized(recovery_all[s], edge_times_all[s])
-                distances_all.append(dist)
+                recovery = self._generate_recovery_times_single(params)
+                edge_times = self._generate_edge_times_single(params)
 
-                # Call progress callback after each sample
+                dist = self._run_sssp_optimized(recovery, edge_times)
+                distances_all.append(dist)
+                recovery_all_cpu.append(recovery.get())
+
+                # Eagerly free per-sample GPU arrays
+                del recovery, edge_times
+
                 if self._progress_callback is not None:
                     self._progress_callback(1)
 
@@ -459,17 +459,20 @@ try:
             if self._debug:
                 print(
                     f"[GPU TIMING] SSSP loop: {(t_sssp_end - t_sssp_start)*1000:.1f}ms "
-                    f"({samples} samples, {(t_sssp_end - t_sssp_start)*1000/samples:.1f}ms/sample)",
+                    f"({samples} samples, "
+                    f"{(t_sssp_end - t_sssp_start)*1000/samples:.1f}ms/sample)",
                     file=sys.stderr,
                 )
 
-            # Free edge times - no longer needed after SSSP
-            del edge_times_all
+            # Free graph structure before SIR phase
             cp.get_default_memory_pool().free_all_blocks()
 
-            # 3. Batch SIR calculation for ALL samples at once
+            # Batch SIR calculation in memory-safe chunks
             t_sir_start = time_module.perf_counter()
-            S_all, I_all, R_all = self._calculate_sir_batched(distances_all, recovery_all)
+            recovery_all_gpu = cp.asarray(np.stack(recovery_all_cpu), dtype=cp.float32)
+            del recovery_all_cpu
+
+            S_all, I_all, R_all = self._calculate_sir_batched(distances_all, recovery_all_gpu)
             t_sir_end = time_module.perf_counter()
 
             if self._debug:
@@ -478,7 +481,7 @@ try:
                     file=sys.stderr,
                 )
 
-            # 4. Compute means across samples
+            # Compute means across samples
             S_mean = np.mean(S_all, axis=0)
             I_mean = np.mean(I_all, axis=0)
             R_mean = np.mean(R_all, axis=0)
@@ -486,55 +489,43 @@ try:
             t_total_end = time_module.perf_counter()
             if self._debug:
                 print(
-                    f"[GPU TIMING] Total batched: {(t_total_end - t_total_start)*1000:.1f}ms",
+                    f"[GPU TIMING] Total: {(t_total_end - t_total_start)*1000:.1f}ms",
                     file=sys.stderr,
                 )
 
             return S_mean, I_mean, R_mean
 
-        def _generate_recovery_times_batched(
-            self, samples: int, params: Dict[str, Any]
-        ) -> cp.ndarray:
+        def _generate_recovery_times_single(self, params: Dict[str, Any]) -> cp.ndarray:
             """
-            Generate recovery times for all samples at once.
-
-            Args:
-                samples: Number of samples
-                params: Distribution parameters
+            Generate recovery times for a single sample.
 
             Returns:
-                CuPy array of shape (samples, N) with recovery times
+                CuPy array of shape (N,) with recovery times
             """
             distribution = params.get("distribution", "exponential").lower()
 
             if distribution == "gamma":
                 shape = params.get("shape", 2.0)
                 scale = params.get("scale", 1.0)
-                return cp.random.gamma(shape, scale, size=(samples, self._N), dtype=cp.float32)
+                return cp.random.gamma(shape, scale, size=self._N, dtype=cp.float32)
             elif distribution == "weibull":
                 shape = params.get("shape", 2.0)
                 scale = params.get("scale", 1.0)
-                raw = cp.random.weibull(shape, size=(samples, self._N))
+                raw = cp.random.weibull(shape, size=self._N)
                 return (raw * scale).astype(cp.float32)
             else:
                 mu = params.get("mu", 1.0)
-                return cp.random.exponential(1.0 / mu, size=(samples, self._N), dtype=cp.float32)
+                return cp.random.exponential(1.0 / mu, size=self._N, dtype=cp.float32)
 
-        def _generate_edge_times_batched(self, samples: int, params: Dict[str, Any]) -> cp.ndarray:
+        def _generate_edge_times_single(self, params: Dict[str, Any]) -> cp.ndarray:
             """
-            Generate edge infection times for all samples at once.
-
-            Args:
-                samples: Number of samples
-                params: Distribution parameters
+            Generate edge infection times for a single sample.
 
             Returns:
-                CuPy array of shape (samples, num_edges) with infection times
+                CuPy array of shape (num_edges,) with infection times
             """
             lmbd = params.get("lambda_val", 1.0)
-            return cp.random.exponential(
-                1.0 / lmbd, size=(samples, self._num_edges), dtype=cp.float32
-            )
+            return cp.random.exponential(1.0 / lmbd, size=self._num_edges, dtype=cp.float32)
 
         def _prepare_graph_structure(self, sources_gpu: cp.ndarray) -> None:
             """
