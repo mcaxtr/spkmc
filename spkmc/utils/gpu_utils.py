@@ -463,6 +463,10 @@ try:
                     file=sys.stderr,
                 )
 
+            # Free edge times - no longer needed after SSSP
+            del edge_times_all
+            cp.get_default_memory_pool().free_all_blocks()
+
             # 3. Batch SIR calculation for ALL samples at once
             t_sir_start = time_module.perf_counter()
             S_all, I_all, R_all = self._calculate_sir_batched(distances_all, recovery_all)
@@ -651,10 +655,14 @@ try:
             steps = len(self._time_steps_gpu)
 
             # Calculate chunk size to stay within GPU memory limits
-            # Memory per sample: steps × N × 4 bytes (for masks and intermediates)
+            # Peak memory per sample per step per node:
+            #   d broadcast (float32=4) + r broadcast (float32=4) +
+            #   s_mask (bool=1) + i_mask (bool=1) + d+r temp (float32=4) +
+            #   comparison temps (~6 bytes) = ~20 bytes total
             # Target max memory: 512MB for SIR calculation
             MAX_SIR_MEMORY_BYTES = 512 * 1024 * 1024
-            bytes_per_sample = steps * self._N * 4
+            BYTES_PER_ELEMENT = 20
+            bytes_per_sample = steps * self._N * BYTES_PER_ELEMENT
             chunk_size = max(1, MAX_SIR_MEMORY_BYTES // bytes_per_sample)
 
             # If we can process all samples at once, use the fast path
@@ -684,6 +692,9 @@ try:
                 S_results.append(S_chunk)
                 I_results.append(I_chunk)
                 R_results.append(R_chunk)
+
+                # Free GPU memory between chunks
+                cp.get_default_memory_pool().free_all_blocks()
 
             return (
                 np.concatenate(S_results, axis=0),
@@ -718,12 +729,20 @@ try:
             # Vectorized computation across chunk samples AND time steps
             # Result shapes: (chunk_size, steps, N)
             s_mask = d > t  # Susceptible: not yet infected
-            i_mask = (d <= t) & (d + r > t)  # Infected: infected but not recovered
+            del d  # Free broadcast view early
 
-            # Sum across nodes (axis=2) and normalize
-            s_frac = cp.sum(s_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
-            i_frac = cp.sum(i_mask, axis=2, dtype=cp.float32) / self._N  # (chunk_size, steps)
-            r_frac = 1.0 - s_frac - i_frac  # (chunk_size, steps)
+            # Sum S across nodes immediately, then free mask
+            s_frac = cp.sum(s_mask, axis=2, dtype=cp.float32) / self._N
+            del s_mask
+
+            # Compute I mask using recovery_all broadcast
+            i_mask = (dist_gpu[:, cp.newaxis, :] <= t) & (dist_gpu[:, cp.newaxis, :] + r > t)
+            del r, t, dist_gpu  # Free all broadcast inputs
+
+            i_frac = cp.sum(i_mask, axis=2, dtype=cp.float32) / self._N
+            del i_mask
+
+            r_frac = 1.0 - s_frac - i_frac
 
             return s_frac.get(), i_frac.get(), r_frac.get()
 
