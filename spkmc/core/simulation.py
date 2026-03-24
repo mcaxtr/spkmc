@@ -345,7 +345,12 @@ class SPKMC:
         Returns:
             Tuple of (S_mean, I_mean, R_mean)
         """
-        from spkmc.utils.gpu_utils import BatchedGPUSimulator
+        from spkmc.utils.gpu_utils import (
+            BatchedGPUSimulator,
+            cleanup_gpu_memory,
+            get_gpu_sample_batch_size,
+            is_gpu_oom_error,
+        )
 
         # Build distribution parameters
         # Note: GammaDistribution uses 'lmbd', ExponentialDistribution uses 'lmbd'
@@ -359,17 +364,59 @@ class SPKMC:
             "lambda_val": getattr(self.distribution, "lmbd", 1.0),
         }
 
-        # Create callback wrapper for progress updates
-        def sample_callback(advance: int) -> None:
-            if progress_callback is not None:
-                progress_callback(advance, 0)
+        batch_size = get_gpu_sample_batch_size(samples)
+        S_total = np.zeros_like(time_steps, dtype=np.float64)
+        I_total = np.zeros_like(time_steps, dtype=np.float64)
+        R_total = np.zeros_like(time_steps, dtype=np.float64)
 
-        # Create batched simulator and run all samples
-        simulator = BatchedGPUSimulator(
-            N=N, edges=edges, time_steps=time_steps, progress_callback=sample_callback
-        )
+        for batch_start in range(0, samples, batch_size):
+            batch_samples = min(batch_size, samples - batch_start)
+            retried_with_direct_rmm = False
 
-        return simulator.run_samples(samples, sources, params)
+            while True:
+                completed_in_batch = 0
+
+                def sample_callback(advance: int) -> None:
+                    nonlocal completed_in_batch
+                    completed_in_batch += advance
+
+                simulator = BatchedGPUSimulator(
+                    N=N, edges=edges, time_steps=time_steps, progress_callback=sample_callback
+                )
+
+                error: Optional[Exception] = None
+                retry_with_direct_rmm = False
+
+                try:
+                    S_chunk, I_chunk, R_chunk = simulator.run_samples(
+                        batch_samples, sources, params
+                    )
+                except Exception as exc:
+                    error = exc
+                    retry_with_direct_rmm = not retried_with_direct_rmm and is_gpu_oom_error(exc)
+                finally:
+                    simulator.close()
+                    cleanup_gpu_memory(
+                        reset_rmm=(batch_start + batch_samples < samples)
+                        and not retry_with_direct_rmm
+                    )
+
+                if error is None:
+                    S_total += S_chunk * batch_samples
+                    I_total += I_chunk * batch_samples
+                    R_total += R_chunk * batch_samples
+                    if progress_callback is not None and completed_in_batch > 0:
+                        progress_callback(completed_in_batch, samples)
+                    break
+
+                if retry_with_direct_rmm:
+                    retried_with_direct_rmm = True
+                    cleanup_gpu_memory(reset_rmm=True, allocator_mode="direct")
+                    continue
+
+                raise error
+
+        return S_total / samples, I_total / samples, R_total / samples
 
     def _run_multiple_simulations_standard(
         self,

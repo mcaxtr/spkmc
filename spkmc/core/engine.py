@@ -328,6 +328,7 @@ def execute_scenario(
     from spkmc.core.distributions import create_distribution
     from spkmc.core.simulation import SPKMC
     from spkmc.io.data_manager import DataManager
+    from spkmc.utils.gpu_utils import cleanup_gpu_memory
     from spkmc.utils.parallel import get_worker_progress_callback
 
     # In parallel mode, get callback from the worker's global queue
@@ -359,53 +360,57 @@ def execute_scenario(
     # Ensure output directory exists
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
-    # Create distribution
-    distribution_params = scenario.to_distribution_params()
-    distribution = create_distribution(scenario.distribution, **distribution_params)
+    try:
+        # Create distribution
+        distribution_params = scenario.to_distribution_params()
+        distribution = create_distribution(scenario.distribution, **distribution_params)
 
-    # Create simulator
-    simulator = SPKMC(distribution, use_gpu=use_gpu)
+        # Create simulator
+        simulator = SPKMC(distribution, use_gpu=use_gpu)
 
-    # Create time steps
-    time_steps = np.linspace(0, scenario.t_max, scenario.steps)
+        # Create time steps
+        time_steps = np.linspace(0, scenario.t_max, scenario.steps)
 
-    # Simulation parameters
-    simulation_params = scenario.to_simulation_params()
-    simulation_params["show_progress"] = False
+        # Simulation parameters
+        simulation_params = scenario.to_simulation_params()
+        simulation_params["show_progress"] = False
 
-    # Execute simulation with progress callback
-    simulation_callback: Optional[Callable[[int, int], None]] = None
-    if progress_callback is not None:
+        # Execute simulation with progress callback
+        simulation_callback: Optional[Callable[[int, int], None]] = None
+        if progress_callback is not None:
 
-        def _wrapped_callback(completed: int, total: int) -> None:
-            if progress_callback is not None:
-                progress_callback(completed)
+            def _wrapped_callback(completed: int, total: int) -> None:
+                if progress_callback is not None:
+                    progress_callback(completed)
 
-        simulation_callback = _wrapped_callback
+            simulation_callback = _wrapped_callback
 
-    result = simulator.run_simulation(
-        scenario.network, time_steps, progress_callback=simulation_callback, **simulation_params
-    )
+        result = simulator.run_simulation(
+            scenario.network, time_steps, progress_callback=simulation_callback, **simulation_params
+        )
 
-    execution_time = time.time() - start_time
+        execution_time = time.time() - start_time
 
-    # Build metadata
-    metadata = scenario.to_metadata(experiment_name)
-    metadata["scenario_number"] = scenario_num
-    metadata["execution_time"] = execution_time
+        # Build metadata
+        metadata = scenario.to_metadata(experiment_name)
+        metadata["scenario_number"] = scenario_num
+        metadata["execution_time"] = execution_time
 
-    # Create SimulationResult
-    sim_result = SimulationResult.from_simulation_output(
-        result=result,
-        time_steps=time_steps,
-        scenario_label=scenario_label,
-        metadata=metadata,
-        execution_time=execution_time,
-        output_path=output_file,
-    )
+        # Create SimulationResult
+        sim_result = SimulationResult.from_simulation_output(
+            result=result,
+            time_steps=time_steps,
+            scenario_label=scenario_label,
+            metadata=metadata,
+            execution_time=execution_time,
+            output_path=output_file,
+        )
 
-    # Save result
-    output_data = sim_result.to_dict()
-    DataManager.save(output_data, output_file)
+        # Save result
+        output_data = sim_result.to_dict()
+        DataManager.save(output_data, output_file)
 
-    return sim_result
+        return sim_result
+    finally:
+        if use_gpu:
+            cleanup_gpu_memory(reset_rmm=True)

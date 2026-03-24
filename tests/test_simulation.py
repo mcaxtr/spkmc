@@ -475,3 +475,126 @@ def test_simulate_erdos_renyi_weibull(weibull_distribution, time_steps):
     assert I.shape == time_steps.shape
     assert R.shape == time_steps.shape
     assert np.isclose(S + I + R, 1.0).all()
+
+
+def test_batched_gpu_execution_chunks_samples(monkeypatch, gamma_distribution, time_steps):
+    """Batched GPU mode should split samples into cleanup-friendly chunks."""
+    import spkmc.utils.gpu_utils as gpu_utils
+
+    simulator = SPKMC(gamma_distribution, use_gpu=True)
+    simulator._gpu_available = True
+    simulator._use_batched_gpu = True
+
+    cleanup_calls = []
+
+    class FakeBatchedGPUSimulator:
+        def __init__(self, N, edges, time_steps, progress_callback=None):
+            self.progress_callback = progress_callback
+
+        def run_samples(self, samples, sources, params):
+            for _ in range(samples):
+                if self.progress_callback is not None:
+                    self.progress_callback(1)
+            return (
+                np.full(len(time_steps), samples, dtype=np.float64),
+                np.full(len(time_steps), samples * 2, dtype=np.float64),
+                np.full(len(time_steps), samples * 3, dtype=np.float64),
+            )
+
+        def close(self):
+            cleanup_calls.append("close")
+
+    monkeypatch.setattr(gpu_utils, "BatchedGPUSimulator", FakeBatchedGPUSimulator)
+    monkeypatch.setattr(gpu_utils, "get_gpu_sample_batch_size", lambda samples: 2)
+    monkeypatch.setattr(gpu_utils, "is_gpu_oom_error", lambda exc: False)
+    monkeypatch.setattr(
+        gpu_utils,
+        "cleanup_gpu_memory",
+        lambda reset_rmm=False, allocator_mode=None: cleanup_calls.append(
+            (reset_rmm, allocator_mode)
+        ),
+    )
+
+    progress_updates = []
+    S, I, R = simulator._run_multiple_simulations_batched_gpu(
+        N=10,
+        edges=np.array([[0, 1], [1, 2]], dtype=np.int32),
+        sources=np.array([0], dtype=np.int32),
+        time_steps=time_steps,
+        samples=5,
+        progress_callback=lambda completed, total: progress_updates.append((completed, total)),
+    )
+
+    expected_weighted_mean = (2 * 2 + 2 * 2 + 1 * 1) / 5
+    np.testing.assert_allclose(S, np.full(len(time_steps), expected_weighted_mean))
+    np.testing.assert_allclose(I, np.full(len(time_steps), expected_weighted_mean * 2))
+    np.testing.assert_allclose(R, np.full(len(time_steps), expected_weighted_mean * 3))
+    assert progress_updates == [(2, 5), (2, 5), (1, 5)]
+    assert cleanup_calls.count("close") == 3
+    assert cleanup_calls.count((True, None)) == 2
+
+
+def test_batched_gpu_execution_retries_oom_with_direct_rmm(
+    monkeypatch, gamma_distribution, time_steps
+):
+    """Batched GPU mode should retry fragmented OOMs with direct RMM allocation."""
+    import spkmc.utils.gpu_utils as gpu_utils
+
+    simulator = SPKMC(gamma_distribution, use_gpu=True)
+    simulator._gpu_available = True
+    simulator._use_batched_gpu = True
+
+    cleanup_calls = []
+    attempts = {"count": 0}
+
+    class FakeBatchedGPUSimulator:
+        def __init__(self, N, edges, time_steps, progress_callback=None):
+            self.progress_callback = progress_callback
+
+        def run_samples(self, samples, sources, params):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                if self.progress_callback is not None:
+                    self.progress_callback(1)
+                raise MemoryError("std::bad_alloc: out_of_memory: RMM failed to allocate")
+
+            for _ in range(samples):
+                if self.progress_callback is not None:
+                    self.progress_callback(1)
+            return (
+                np.ones(len(time_steps), dtype=np.float64),
+                np.ones(len(time_steps), dtype=np.float64) * 2,
+                np.ones(len(time_steps), dtype=np.float64) * 3,
+            )
+
+        def close(self):
+            cleanup_calls.append("close")
+
+    monkeypatch.setattr(gpu_utils, "BatchedGPUSimulator", FakeBatchedGPUSimulator)
+    monkeypatch.setattr(gpu_utils, "get_gpu_sample_batch_size", lambda samples: samples)
+    monkeypatch.setattr(gpu_utils, "is_gpu_oom_error", lambda exc: True)
+    monkeypatch.setattr(
+        gpu_utils,
+        "cleanup_gpu_memory",
+        lambda reset_rmm=False, allocator_mode=None: cleanup_calls.append(
+            (reset_rmm, allocator_mode)
+        ),
+    )
+
+    progress_updates = []
+    S, I, R = simulator._run_multiple_simulations_batched_gpu(
+        N=10,
+        edges=np.array([[0, 1], [1, 2]], dtype=np.int32),
+        sources=np.array([0], dtype=np.int32),
+        time_steps=time_steps,
+        samples=3,
+        progress_callback=lambda completed, total: progress_updates.append((completed, total)),
+    )
+
+    np.testing.assert_allclose(S, np.ones(len(time_steps)))
+    np.testing.assert_allclose(I, np.ones(len(time_steps)) * 2)
+    np.testing.assert_allclose(R, np.ones(len(time_steps)) * 3)
+    assert attempts["count"] == 2
+    assert progress_updates == [(3, 3)]
+    assert cleanup_calls.count("close") == 2
+    assert (True, "direct") in cleanup_calls

@@ -26,6 +26,8 @@ import numpy as np
 _GPU_AVAILABLE: Optional[bool] = None
 _GPU_CHECK_ERROR: Optional[str] = None
 _MEMORY_POOL_CONFIGURED: bool = False
+_RMM_CONFIGURED: bool = False
+_RMM_ALLOCATOR_MODE: str = "pool"
 _GPU_SUGGESTION_SHOWN: bool = False
 
 
@@ -71,11 +73,155 @@ def get_gpu_check_error() -> Optional[str]:
 
 def reset_gpu_cache() -> None:
     """Reset the GPU availability cache (useful for testing)."""
-    global _GPU_AVAILABLE, _GPU_CHECK_ERROR, _MEMORY_POOL_CONFIGURED, _GPU_SUGGESTION_SHOWN
+    global _GPU_AVAILABLE, _GPU_CHECK_ERROR, _MEMORY_POOL_CONFIGURED
+    global _RMM_CONFIGURED, _RMM_ALLOCATOR_MODE, _GPU_SUGGESTION_SHOWN
     _GPU_AVAILABLE = None
     _GPU_CHECK_ERROR = None
     _MEMORY_POOL_CONFIGURED = False
+    _RMM_CONFIGURED = False
+    _RMM_ALLOCATOR_MODE = "pool"
     _GPU_SUGGESTION_SHOWN = False
+
+
+def _normalize_rmm_allocator_mode(mode: Optional[str] = None) -> str:
+    """
+    Normalize the configured RMM allocator mode.
+
+    Supported modes:
+        - "pool": use RMM's pooling allocator
+        - "direct": disable pooling and allocate directly from CUDA
+    """
+    if mode is None:
+        if _RMM_CONFIGURED:
+            mode = _RMM_ALLOCATOR_MODE
+        else:
+            mode = os.environ.get("SPKMC_RMM_ALLOCATOR", "pool")
+
+    normalized = str(mode).strip().lower()
+    if normalized in {"cuda", "direct", "none", "off", "disabled"}:
+        return "direct"
+    return "pool"
+
+
+def get_gpu_sample_batch_size(samples: int) -> int:
+    """
+    Get the batched GPU sample chunk size.
+
+    Splitting large GPU runs into smaller chunks bounds allocator fragmentation
+    and gives the runtime a clean reset point between batches.
+
+    Environment:
+        SPKMC_GPU_SAMPLE_BATCH_SIZE: Positive integer batch size. Values <= 0
+        disable chunking and process all samples in one batch.
+    """
+    raw_value = os.environ.get("SPKMC_GPU_SAMPLE_BATCH_SIZE", "32")
+
+    try:
+        batch_size = int(raw_value)
+    except ValueError:
+        batch_size = 32
+
+    if batch_size <= 0:
+        return max(1, samples)
+
+    return max(1, min(samples, batch_size))
+
+
+def is_gpu_oom_error(error: BaseException) -> bool:
+    """
+    Return True if the exception looks like a GPU out-of-memory failure.
+    """
+    message = str(error).lower()
+    oom_markers = (
+        "out of memory",
+        "cudaerrormemoryallocation",
+        "std::bad_alloc",
+        "bad_alloc",
+        "failed to allocate",
+    )
+    return any(marker in message for marker in oom_markers)
+
+
+def _configure_rmm_allocator(force: bool = False, allocator_mode: Optional[str] = None) -> bool:
+    """
+    Configure the RMM allocator used by cuDF/cuGraph.
+
+    When forced, this reinitializes RMM to release any pooled memory back to CUDA.
+    """
+    global _RMM_CONFIGURED, _RMM_ALLOCATOR_MODE
+
+    mode = _normalize_rmm_allocator_mode(allocator_mode)
+    if _RMM_CONFIGURED and not force and mode == _RMM_ALLOCATOR_MODE:
+        return True
+
+    try:
+        import rmm
+    except Exception:
+        return False
+
+    kwargs: Dict[str, Any] = {"pool_allocator": mode == "pool"}
+
+    if kwargs["pool_allocator"]:
+        raw_fraction = os.environ.get("SPKMC_RMM_POOL_FRACTION")
+        if raw_fraction:
+            try:
+                import cupy as cp
+
+                _, total_bytes = cp.cuda.runtime.memGetInfo()
+                fraction = min(max(float(raw_fraction), 0.0), 1.0)
+                kwargs["maximum_pool_size"] = int(total_bytes * fraction)
+            except Exception:
+                pass
+
+    try:
+        rmm.reinitialize(**kwargs)
+    except TypeError:
+        # Older RMM versions may not accept maximum_pool_size.
+        kwargs.pop("maximum_pool_size", None)
+        try:
+            rmm.reinitialize(**kwargs)
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+    _RMM_CONFIGURED = True
+    _RMM_ALLOCATOR_MODE = mode
+    return True
+
+
+def cleanup_gpu_memory(reset_rmm: bool = False, allocator_mode: Optional[str] = None) -> None:
+    """
+    Best-effort GPU cleanup across CuPy and RMM.
+
+    Args:
+        reset_rmm: If True, reinitialize RMM to release pooled memory.
+        allocator_mode: Optional RMM allocator override for this reset.
+    """
+    import gc
+
+    gc.collect()
+
+    try:
+        import cupy as cp
+
+        try:
+            cp.cuda.runtime.deviceSynchronize()
+        except Exception:
+            pass
+
+        cp.get_default_memory_pool().free_all_blocks()
+        try:
+            cp.get_default_pinned_memory_pool().free_all_blocks()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    gc.collect()
+
+    if reset_rmm:
+        _configure_rmm_allocator(force=True, allocator_mode=allocator_mode)
 
 
 def _has_nvidia_gpu() -> bool:
@@ -150,10 +296,11 @@ def check_gpu_suggestion() -> None:
 
 def configure_gpu_memory_pool(fraction: float = 0.8) -> bool:
     """
-    Configure CuPy memory pool for better memory reuse.
+    Configure GPU allocators for repeated simulation workloads.
 
-    Memory pool caches allocations to avoid repeated cudaMalloc calls,
-    which significantly reduces overhead in repeated operations.
+    CuPy and RAPIDS maintain separate allocators. CuPy is configured with a
+    bounded pool, while RMM is initialized in the mode requested by
+    SPKMC_RMM_ALLOCATOR (default: pooled).
 
     Args:
         fraction: Fraction of GPU memory to allow (0.0-1.0)
@@ -171,6 +318,7 @@ def configure_gpu_memory_pool(fraction: float = 0.8) -> bool:
 
         mempool = cp.get_default_memory_pool()
         mempool.set_limit(fraction=fraction)
+        _configure_rmm_allocator()
         _MEMORY_POOL_CONFIGURED = True
         return True
     except Exception:
@@ -209,6 +357,8 @@ try:
 
         debug = os.environ.get("SPKMC_DEBUG") == "1"
         t_start = time_module.perf_counter()
+
+        configure_gpu_memory_pool()
 
         # Transfer edges to GPU
         edges_gpu = cp.asarray(edges, dtype=cp.int32)
@@ -389,8 +539,8 @@ try:
             configure_gpu_memory_pool()
 
             # Transfer edges ONCE, reuse for all samples
-            self._edges_gpu = cp.asarray(edges, dtype=cp.int32)
-            self._time_steps_gpu = cp.asarray(time_steps, dtype=cp.float32)
+            self._edges_gpu: Optional[Any] = cp.asarray(edges, dtype=cp.int32)
+            self._time_steps_gpu: Optional[Any] = cp.asarray(time_steps, dtype=cp.float32)
             self._N = N
             self._num_edges = len(edges)
             self._num_steps = len(time_steps)
@@ -402,8 +552,10 @@ try:
             self._graph_src: Optional[Any] = None
             self._graph_dst: Optional[Any] = None
             self._graph_weights: Optional[Any] = None  # Pre-allocated, updated each sample
+            self._edge_sources: Optional[Any] = None
             self._super_node: int = 0
             self._sources_prepared = False
+            self._closed = False
 
         def run_samples(
             self, samples: int, sources: np.ndarray, params: Dict[str, Any]
@@ -431,6 +583,7 @@ try:
             # Prepare graph structure once (reused across samples)
             sources_gpu = cp.asarray(sources, dtype=cp.int32)
             self._prepare_graph_structure(sources_gpu)
+            del sources_gpu
 
             # Run SSSP per-sample: generate RNG on GPU, run SSSP, store
             # distances on CPU.  Only one sample's worth of RNG + graph
@@ -463,8 +616,10 @@ try:
                     file=sys.stderr,
                 )
 
-            # Free graph structure before SIR phase
-            cp.get_default_memory_pool().free_all_blocks()
+            # Free graph structure before SIR phase so only the SIR tensors
+            # remain live on the CuPy side.
+            self._release_graph_structure()
+            cleanup_gpu_memory()
 
             # Batch SIR calculation in memory-safe chunks
             t_sir_start = time_module.perf_counter()
@@ -539,6 +694,8 @@ try:
             if self._sources_prepared:
                 return
 
+            assert self._edges_gpu is not None, "edge buffer has already been released"
+
             super_node = self._N
             num_sources = len(sources_gpu)
             total_edges = self._num_edges + num_sources
@@ -557,9 +714,32 @@ try:
             self._graph_weights = cp.empty(total_edges, dtype=cp.float32)
             # Super-node weights are always 0
             self._graph_weights[self._num_edges :] = 0.0
+            self._edge_sources = self._graph_src[: self._num_edges]
 
             self._super_node = super_node
             self._sources_prepared = True
+
+            # The original edge matrix is no longer needed after src/dst are expanded.
+            self._edges_gpu = None
+
+        def _release_graph_structure(self) -> None:
+            """Release the persistent SSSP graph buffers."""
+            self._graph_src = None
+            self._graph_dst = None
+            self._graph_weights = None
+            self._edge_sources = None
+            self._sources_prepared = False
+
+        def close(self) -> None:
+            """Release persistent CuPy allocations owned by this simulator."""
+            if self._closed:
+                return
+
+            self._release_graph_structure()
+            self._edges_gpu = None
+            self._time_steps_gpu = None
+            self._closed = True
+            cleanup_gpu_memory()
 
         def _run_sssp_optimized(
             self, recovery_times: cp.ndarray, edge_times: cp.ndarray
@@ -581,35 +761,42 @@ try:
             import gc
 
             assert self._graph_weights is not None, "_prepare_graph_structure must be called first"
-            u = self._edges_gpu[:, 0]
+            assert self._edge_sources is not None, "_prepare_graph_structure must be called first"
+            u = self._edge_sources
             self._graph_weights[: self._num_edges] = cp.where(
                 edge_times >= recovery_times[u], cp.float32(np.inf), edge_times
             )
 
-            # Build fresh DataFrame each call — cuDF column assignment
-            # leaks internal RMM buffers when reusing a DataFrame.
-            df = cudf.DataFrame(
-                {
-                    "src": self._graph_src,
-                    "dst": self._graph_dst,
-                    "weight": self._graph_weights,
-                }
-            )
+            df = None
+            G = None
+            result = None
 
-            G = cugraph.Graph(directed=True)
-            G.from_cudf_edgelist(
-                df, source="src", destination="dst", edge_attr="weight", renumber=False
-            )
+            try:
+                # Build fresh DataFrame each call — cuDF column assignment
+                # leaks internal RMM buffers when reusing a DataFrame.
+                df = cudf.DataFrame(
+                    {
+                        "src": self._graph_src,
+                        "dst": self._graph_dst,
+                        "weight": self._graph_weights,
+                    }
+                )
 
-            result = cugraph.sssp(G, source=self._super_node)
+                G = cugraph.Graph(directed=True)
+                G.from_cudf_edgelist(
+                    df, source="src", destination="dst", edge_attr="weight", renumber=False
+                )
 
-            # Extract to CPU immediately
-            vertices = result["vertex"].to_numpy()
-            dist_values = result["distance"].to_numpy()
+                result = cugraph.sssp(G, source=self._super_node)
 
-            # Explicitly free cuGraph/cuDF GPU objects before next iteration
-            del result, G, df
-            gc.collect()
+                # Extract to CPU immediately
+                vertices = result["vertex"].to_numpy()
+                dist_values = result["distance"].to_numpy()
+            finally:
+                # Explicitly free cuGraph/cuDF GPU objects before next iteration,
+                # including the exception path where cugraph raises OOM.
+                del result, G, df
+                gc.collect()
 
             # Map vertex IDs to distance array
             distances = np.full(self._N, np.inf, dtype=np.float32)
@@ -634,6 +821,8 @@ try:
             Returns:
                 Tuple of (S, I, R) arrays of shape (samples, steps)
             """
+            assert self._time_steps_gpu is not None, "time step buffer has already been released"
+
             samples = len(distances_all)
             steps = len(self._time_steps_gpu)
 
@@ -698,8 +887,10 @@ try:
             Returns:
                 Tuple of (S, I, R) arrays of shape (chunk_size, steps)
             """
+            assert self._time_steps_gpu is not None, "time step buffer has already been released"
+
             # Stack distances: (chunk_size, N) - transfer to GPU
-            dist_gpu = cp.stack([cp.asarray(d, dtype=cp.float32) for d in distances_all])
+            dist_gpu = cp.asarray(np.stack(distances_all), dtype=cp.float32)
 
             # Reshape for broadcasting:
             # dist_gpu: (chunk_size, N) -> (chunk_size, 1, N)
@@ -765,3 +956,7 @@ except Exception:
             raise ImportError(
                 "GPU dependencies not installed. Install with: pip install spkmc[gpu]"
             )
+
+        def close(self) -> None:
+            """Stub close method for interface compatibility."""
+            return None
