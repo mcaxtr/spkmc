@@ -21,6 +21,8 @@ class HardwareInfo:
     gpu_name: Optional[str] = None
     gpu_memory_mb: Optional[int] = None
     cuda_version: Optional[str] = None
+    gpu_device_count: int = 0
+    gpu_devices: Tuple[str, ...] = ()
 
 
 @dataclass
@@ -31,6 +33,7 @@ class ParallelizationStrategy:
     simulation_workers: int  # Level 2: joblib for samples/runs
     numba_threads: int  # Level 3: Numba OpenMP threads
     use_gpu: bool  # GPU acceleration flag
+    gpu_devices: Tuple[str, ...] = ()
 
     @classmethod
     def auto_configure(
@@ -55,15 +58,31 @@ class ParallelizationStrategy:
         """
         available_cores = hardware.cpu_count_physical
 
+        gpu_devices: Tuple[str, ...] = ()
+
         if hardware.gpu_available:
-            # GPU mode: limit parallel workers to avoid GPU memory contention
-            # Each process loads cupy/cudf/cugraph (~200-500MB GPU memory each)
-            # GPU driver handles time-slicing, but too many processes cause thrashing
-            max_gpu_workers = 4  # Conservative limit for GPU memory
-            if num_scenarios >= 2:
-                scenario_workers = min(num_scenarios, max_gpu_workers)
+            # GPU mode: use one scenario worker per visible GPU. Running
+            # multiple Python processes on the same GPU creates independent
+            # CuPy/RMM allocators and causes the exact contention pattern seen
+            # in large batched cuGraph workloads.
+            gpu_devices = hardware.gpu_devices or tuple(
+                str(i) for i in range(max(1, hardware.gpu_device_count))
+            )
+            if not gpu_devices:
+                gpu_devices = ("0",)
+
+            raw_gpu_workers = os.environ.get("SPKMC_GPU_SCENARIO_WORKERS")
+            if raw_gpu_workers is None:
+                requested_gpu_workers = len(gpu_devices)
             else:
-                scenario_workers = 1
+                try:
+                    requested_gpu_workers = int(raw_gpu_workers)
+                except ValueError:
+                    requested_gpu_workers = len(gpu_devices)
+
+            max_gpu_workers = len(gpu_devices)
+            scenario_workers = max(1, min(num_scenarios, requested_gpu_workers, max_gpu_workers))
+            gpu_devices = gpu_devices[:scenario_workers]
             # In GPU mode, most computation happens on GPU, so CPU threads are less critical
             # Give more threads per worker since they won't be the bottleneck
             numba_threads = max(4, min(available_cores // 2, 8))
@@ -92,7 +111,26 @@ class ParallelizationStrategy:
             simulation_workers=simulation_workers,
             numba_threads=numba_threads,
             use_gpu=hardware.gpu_available,
+            gpu_devices=gpu_devices,
         )
+
+
+def _get_visible_cuda_devices() -> Tuple[str, ...]:
+    """
+    Return the CUDA-visible device tokens for this process.
+
+    If CUDA_VISIBLE_DEVICES is unset, the caller should infer devices from the
+    runtime-reported device count instead.
+    """
+    raw_value = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if raw_value is None:
+        return ()
+
+    tokens = tuple(token.strip() for token in raw_value.split(",") if token.strip())
+    if not tokens or tokens == ("-1",):
+        return ()
+
+    return tokens
 
 
 def detect_cpu_cores() -> Tuple[int, int]:
@@ -141,11 +179,19 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
 
         # Try to access GPU (Device() verifies GPU is accessible)
         _ = cp.cuda.Device(0)
+        visible_devices = _get_visible_cuda_devices()
+        get_device_count = getattr(cp.cuda.runtime, "getDeviceCount", None)
+        device_count = int(get_device_count()) if callable(get_device_count) else 1
         props = cp.cuda.runtime.getDeviceProperties(0)
 
         runtime_ver = cp.cuda.runtime.runtimeGetVersion()
         cuda_major = runtime_ver // 1000
         cuda_minor = (runtime_ver % 1000) // 10
+        gpu_devices = (
+            visible_devices[:device_count]
+            if visible_devices and len(visible_devices) >= device_count
+            else tuple(str(i) for i in range(device_count))
+        )
         gpu_info = {
             "name": (
                 props["name"].decode("utf-8") if isinstance(props["name"], bytes) else props["name"]
@@ -153,6 +199,8 @@ def detect_gpu() -> Tuple[bool, Optional[Dict[str, Any]]]:
             "memory_mb": props["totalGlobalMem"] // (1024 * 1024),
             "cuda_version": f"{cuda_major}.{cuda_minor}",
             "compute_capability": f"{props['major']}.{props['minor']}",
+            "device_count": device_count,
+            "devices": gpu_devices,
         }
         libs_available.append("cupy")
 
@@ -222,6 +270,8 @@ def get_hardware_info() -> HardwareInfo:
         gpu_name=gpu_info.get("name") if gpu_info else None,
         gpu_memory_mb=gpu_info.get("memory_mb") if gpu_info else None,
         cuda_version=gpu_info.get("cuda_version") if gpu_info else None,
+        gpu_device_count=gpu_info.get("device_count", 0) if gpu_info else 0,
+        gpu_devices=tuple(gpu_info.get("devices", ())) if gpu_info else (),
     )
 
 
@@ -293,7 +343,8 @@ def format_hardware_box(
             if info.gpu_memory_mb and info.gpu_memory_mb >= 1024
             else f"{info.gpu_memory_mb}MB"
         )
-        gpu_line = f"  GPU: {info.gpu_name} ({memory_str}) → CUDA acceleration"
+        gpu_count_str = f" x{info.gpu_device_count}" if info.gpu_device_count > 1 else ""
+        gpu_line = f"  GPU: {info.gpu_name} ({memory_str}){gpu_count_str} → CUDA acceleration"
 
         # Show available/missing RAPIDS libraries if provided
         if gpu_details:

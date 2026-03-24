@@ -47,9 +47,42 @@ def _get_mp_context() -> mp.context.BaseContext:
 
 # Global reference to progress queue (set by _init_worker in child processes)
 _worker_progress_queue = None
+_worker_assigned_gpu = None
 
 
-def _init_worker(numba_threads: int, progress_queue: Optional[Any] = None) -> None:
+def _create_gpu_device_queue(
+    mp_context: mp.context.BaseContext, gpu_devices: Tuple[str, ...]
+) -> Optional[Any]:
+    """
+    Build a queue of GPU devices so each worker can claim one at startup.
+    """
+    if not gpu_devices:
+        return None
+
+    gpu_device_queue = mp_context.Queue()
+    for gpu_device in gpu_devices:
+        gpu_device_queue.put(gpu_device)
+
+    return gpu_device_queue
+
+
+def _close_queue(queue: Optional[Any]) -> None:
+    """Best-effort close for multiprocessing queues."""
+    if queue is None:
+        return
+
+    try:
+        queue.close()
+        queue.join_thread()
+    except Exception:
+        pass
+
+
+def _init_worker(
+    numba_threads: int,
+    progress_queue: Optional[Any] = None,
+    gpu_device_queue: Optional[Any] = None,
+) -> None:
     """
     Initialize worker process with proper Numba configuration.
 
@@ -59,8 +92,22 @@ def _init_worker(numba_threads: int, progress_queue: Optional[Any] = None) -> No
     Args:
         numba_threads: Number of threads for Numba to use
         progress_queue: Optional Queue for progress updates (inherited from parent)
+        gpu_device_queue: Optional Queue of GPU devices to pin workers to
     """
-    global _worker_progress_queue
+    global _worker_progress_queue, _worker_assigned_gpu
+
+    if gpu_device_queue is not None and not any(
+        module in sys.modules for module in ("cupy", "cudf", "cugraph", "rmm")
+    ):
+        try:
+            gpu_device = gpu_device_queue.get_nowait()
+        except Exception:
+            gpu_device = None
+
+        if gpu_device is not None:
+            _worker_assigned_gpu = str(gpu_device)
+            os.environ["CUDA_VISIBLE_DEVICES"] = _worker_assigned_gpu
+            os.environ["SPKMC_WORKER_GPU_DEVICE"] = _worker_assigned_gpu
 
     # Only set thread env vars if Numba hasn't been imported yet
     # This avoids "Cannot set NUMBA_NUM_THREADS" errors
@@ -99,6 +146,11 @@ def get_worker_progress_callback() -> Optional[Callable[[int], None]]:
     if _worker_progress_queue is not None:
         return worker_progress_callback
     return None
+
+
+def get_worker_gpu_device() -> Optional[str]:
+    """Return the GPU token assigned to this worker, if any."""
+    return _worker_assigned_gpu
 
 
 @dataclass
@@ -145,38 +197,79 @@ def run_scenarios_parallel(
                 progress_callback(i + 1, num_scenarios, label)
         return results
 
+    return _run_scenarios_parallel_with_fallback(scenarios, execute_fn, strategy, progress_callback)
+
+
+def _run_scenarios_parallel_with_fallback(
+    scenarios: List[Dict[str, Any]],
+    execute_fn: Callable[[Dict[str, Any], int], ScenarioResult],
+    strategy: ParallelizationStrategy,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> List[ScenarioResult]:
+    """
+    Execute scenarios in parallel, falling back to sequential mode if
+    multiprocessing is unavailable on the current host.
+    """
+    num_scenarios = len(scenarios)
+
+    if strategy.scenario_workers <= 1 or num_scenarios <= 1:
+        # Sequential execution
+        results: List[ScenarioResult] = []
+        for i, scenario in enumerate(scenarios):
+            result = execute_fn(scenario, i)
+            results.append(result)
+            if progress_callback:
+                label = scenario.get("label", f"scenario_{i+1}")
+                progress_callback(i + 1, num_scenarios, label)
+        return results
+
     # Parallel execution using ProcessPoolExecutor with spawn context
     parallel_results: List[Optional[ScenarioResult]] = [None] * num_scenarios
     completed = 0
     mp_context = _get_mp_context()
+    gpu_device_queue = _create_gpu_device_queue(mp_context, strategy.gpu_devices)
 
-    with ProcessPoolExecutor(
-        max_workers=strategy.scenario_workers,
-        mp_context=mp_context,
-        initializer=_init_worker,
-        initargs=(strategy.numba_threads,),
-    ) as executor:
-        # Submit all scenarios
-        future_to_index = {
-            executor.submit(execute_fn, scenario, i): i for i, scenario in enumerate(scenarios)
-        }
+    try:
+        try:
+            with ProcessPoolExecutor(
+                max_workers=strategy.scenario_workers,
+                mp_context=mp_context,
+                initializer=_init_worker,
+                initargs=(strategy.numba_threads, None, gpu_device_queue),
+            ) as executor:
+                # Submit all scenarios
+                future_to_index = {
+                    executor.submit(execute_fn, scenario, i): i
+                    for i, scenario in enumerate(scenarios)
+                }
 
-        # Collect results as they complete
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            scenario = scenarios[index]
-            label = scenario.get("label", f"scenario_{index+1}")
+                # Collect results as they complete
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    scenario = scenarios[index]
+                    label = scenario.get("label", f"scenario_{index+1}")
 
-            try:
-                parallel_results[index] = future.result()
-            except Exception as e:
-                parallel_results[index] = ScenarioResult(
-                    scenario_index=index, label=label, success=False, error=str(e)
-                )
+                    try:
+                        parallel_results[index] = future.result()
+                    except Exception as e:
+                        parallel_results[index] = ScenarioResult(
+                            scenario_index=index, label=label, success=False, error=str(e)
+                        )
 
-            completed += 1
-            if progress_callback:
-                progress_callback(completed, num_scenarios, label)
+                    completed += 1
+                    if progress_callback:
+                        progress_callback(completed, num_scenarios, label)
+        except (NotImplementedError, OSError):
+            results = []
+            for i, scenario in enumerate(scenarios):
+                result = execute_fn(scenario, i)
+                results.append(result)
+                if progress_callback:
+                    label = scenario.get("label", f"scenario_{i+1}")
+                    progress_callback(i + 1, num_scenarios, label)
+            return results
+    finally:
+        _close_queue(gpu_device_queue)
 
     return [r for r in parallel_results if r is not None]
 
@@ -254,34 +347,54 @@ class ParallelBatchExecutor:
                 return scenario_executor(scenario, index, self.strategy)
 
             mp_context = _get_mp_context()
-            with ProcessPoolExecutor(
-                max_workers=self.strategy.scenario_workers,
-                mp_context=mp_context,
-                initializer=_init_worker,
-                initargs=(self.strategy.numba_threads,),
-            ) as executor:
-                future_to_index = {
-                    executor.submit(wrapped_executor, scenario, i): i
-                    for i, scenario in enumerate(scenarios)
-                }
+            gpu_device_queue = _create_gpu_device_queue(mp_context, self.strategy.gpu_devices)
+            try:
+                try:
+                    with ProcessPoolExecutor(
+                        max_workers=self.strategy.scenario_workers,
+                        mp_context=mp_context,
+                        initializer=_init_worker,
+                        initargs=(self.strategy.numba_threads, None, gpu_device_queue),
+                    ) as executor:
+                        future_to_index = {
+                            executor.submit(wrapped_executor, scenario, i): i
+                            for i, scenario in enumerate(scenarios)
+                        }
 
-                for future in as_completed(future_to_index):
-                    index = future_to_index[future]
-                    scenario = scenarios[index]
-                    label = scenario.get("label", f"scenario_{index+1}")
+                        for future in as_completed(future_to_index):
+                            index = future_to_index[future]
+                            scenario = scenarios[index]
+                            label = scenario.get("label", f"scenario_{index+1}")
 
-                    try:
-                        self._results[index] = future.result()
-                    except Exception as e:
-                        if on_error:
-                            on_error(index, label, e)
-                        self._results[index] = ScenarioResult(
-                            scenario_index=index, label=label, success=False, error=str(e)
-                        )
+                            try:
+                                self._results[index] = future.result()
+                            except Exception as e:
+                                if on_error:
+                                    on_error(index, label, e)
+                                self._results[index] = ScenarioResult(
+                                    scenario_index=index, label=label, success=False, error=str(e)
+                                )
 
-                    self._completed += 1
-                    if on_progress:
-                        on_progress(self._completed, self._total, label)
+                            self._completed += 1
+                            if on_progress:
+                                on_progress(self._completed, self._total, label)
+                except (NotImplementedError, OSError):
+                    for i, scenario in enumerate(scenarios):
+                        label = scenario.get("label", f"scenario_{i+1}")
+                        try:
+                            self._results[i] = scenario_executor(scenario, i, self.strategy)
+                        except Exception as e:
+                            if on_error:
+                                on_error(i, label, e)
+                            self._results[i] = ScenarioResult(
+                                scenario_index=i, label=label, success=False, error=str(e)
+                            )
+
+                        self._completed += 1
+                        if on_progress:
+                            on_progress(self._completed, self._total, label)
+            finally:
+                _close_queue(gpu_device_queue)
 
         return [r for r in self._results if r is not None]
 

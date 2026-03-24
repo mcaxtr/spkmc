@@ -154,6 +154,54 @@ class TestParallelizationStrategy:
         # Numba should have at least 2 threads reserved
         assert strategy.numba_threads >= 2
 
+    def test_auto_configure_gpu_defaults_to_single_scenario_worker(self):
+        """GPU mode should avoid parallel scenarios on a single GPU by default."""
+        hardware = HardwareInfo(
+            cpu_count=16,
+            cpu_count_physical=8,
+            numba_threads=8,
+            gpu_available=True,
+            gpu_device_count=1,
+            gpu_devices=("0",),
+        )
+
+        strategy = ParallelizationStrategy.auto_configure(hardware, num_scenarios=10)
+
+        assert strategy.use_gpu is True
+        assert strategy.scenario_workers == 1
+
+    def test_auto_configure_gpu_uses_all_visible_devices(self):
+        """GPU mode should use one worker per visible GPU by default."""
+        hardware = HardwareInfo(
+            cpu_count=16,
+            cpu_count_physical=8,
+            numba_threads=8,
+            gpu_available=True,
+            gpu_device_count=2,
+            gpu_devices=("0", "1"),
+        )
+
+        strategy = ParallelizationStrategy.auto_configure(hardware, num_scenarios=10)
+
+        assert strategy.scenario_workers == 2
+        assert strategy.gpu_devices == ("0", "1")
+
+    def test_auto_configure_gpu_honors_worker_override(self):
+        """GPU scenario worker override should be explicit and clamped to devices."""
+        hardware = HardwareInfo(
+            cpu_count=16,
+            cpu_count_physical=8,
+            numba_threads=8,
+            gpu_available=True,
+            gpu_device_count=2,
+            gpu_devices=("0", "1"),
+        )
+
+        with patch.dict("os.environ", {"SPKMC_GPU_SCENARIO_WORKERS": "4"}):
+            strategy = ParallelizationStrategy.auto_configure(hardware, num_scenarios=10)
+
+        assert strategy.scenario_workers == 2
+
 
 class TestConfigureNumbaThreads:
     """Tests for Numba thread configuration."""

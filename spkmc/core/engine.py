@@ -189,12 +189,18 @@ class ExecutionEngine:
         """
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        from spkmc.utils.parallel import _get_mp_context, _init_worker
+        from spkmc.utils.parallel import (
+            _close_queue,
+            _create_gpu_device_queue,
+            _get_mp_context,
+            _init_worker,
+        )
 
         num_scenarios = len(context.scenarios)
         results: List[Optional[SimulationResult]] = [None] * num_scenarios
 
         mp_context = _get_mp_context()
+        gpu_device_queue = _create_gpu_device_queue(mp_context, strategy.gpu_devices)
 
         # Create a Queue for progress updates from workers
         progress_queue = mp_context.Queue()
@@ -221,7 +227,7 @@ class ExecutionEngine:
                 max_workers=strategy.scenario_workers,
                 mp_context=mp_context,
                 initializer=_init_worker,
-                initargs=(strategy.numba_threads, progress_queue),
+                initargs=(strategy.numba_threads, progress_queue, gpu_device_queue),
             ) as executor:
                 future_to_index = {}
 
@@ -288,11 +294,8 @@ class ExecutionEngine:
             consumer_thread.join(timeout=1.0)
 
             # Properly close the multiprocessing queue to avoid semaphore leak
-            try:
-                progress_queue.close()
-                progress_queue.join_thread()
-            except Exception:
-                pass
+            _close_queue(progress_queue)
+            _close_queue(gpu_device_queue)
 
         # Filter out None results (shouldn't happen, but be safe)
         return [r for r in results if r is not None]

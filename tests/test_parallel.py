@@ -2,13 +2,22 @@
 Tests for parallel execution utilities.
 """
 
+import multiprocessing as mp
+import os
 import time
 from typing import Any, Dict
 
 import pytest
 
 from spkmc.utils.hardware import ParallelizationStrategy
-from spkmc.utils.parallel import ParallelBatchExecutor, ScenarioResult, run_scenarios_parallel
+from spkmc.utils.parallel import (
+    ParallelBatchExecutor,
+    ScenarioResult,
+    _create_gpu_device_queue,
+    _init_worker,
+    get_worker_gpu_device,
+    run_scenarios_parallel,
+)
 
 
 def simple_scenario_executor(scenario: Dict[str, Any], index: int) -> ScenarioResult:
@@ -118,6 +127,28 @@ class TestRunScenariosParallel:
 
         assert len(progress_calls) == 3
         assert progress_calls[-1][0] == 3  # Last call should show all completed
+
+
+class TestWorkerGpuAssignment:
+    """Tests for GPU assignment in worker initialization."""
+
+    def test_init_worker_claims_one_gpu_device(self, monkeypatch):
+        """Worker init should set CUDA_VISIBLE_DEVICES from the shared queue."""
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        monkeypatch.delenv("SPKMC_WORKER_GPU_DEVICE", raising=False)
+
+        mp_context = mp.get_context()
+        gpu_device_queue = _create_gpu_device_queue(mp_context, ("3", "7"))
+
+        try:
+            _init_worker(numba_threads=1, gpu_device_queue=gpu_device_queue)
+            assert os.environ["CUDA_VISIBLE_DEVICES"] == "3"
+            assert os.environ["SPKMC_WORKER_GPU_DEVICE"] == "3"
+            assert get_worker_gpu_device() == "3"
+        finally:
+            if gpu_device_queue is not None:
+                gpu_device_queue.close()
+                gpu_device_queue.join_thread()
 
 
 class TestParallelBatchExecutor:
