@@ -343,3 +343,63 @@ class TestExperimentFromConfig:
         assert experiment.scenarios[0].samples == 50  # From global
         assert experiment.scenarios[1].nodes == 2000  # Overridden
         assert experiment.scenarios[1].k_avg == 10  # From global
+
+
+class TestScenarioMicroscopic:
+    """Test microscopic field on Scenario and ScenarioOverride."""
+
+    @pytest.fixture
+    def base_scenario_data(self):
+        return {
+            "label": "test_micro",
+            "network": "er",
+            "distribution": "gamma",
+            "nodes": 100,
+            "samples": 10,
+            "k_avg": 5.0,
+            "shape": 2.0,
+            "scale": 1.0,
+            "lambda": 0.5,
+            "t_max": 10.0,
+            "steps": 50,
+            "initial_perc": 0.01,
+        }
+
+    def test_microscopic_defaults_false(self, base_scenario_data):
+        """Microscopic should default to False."""
+        scenario = Scenario(**base_scenario_data)
+        assert scenario.microscopic is False
+
+    def test_microscopic_set_true(self, base_scenario_data):
+        """Microscopic can be set to True."""
+        base_scenario_data["microscopic"] = True
+        scenario = Scenario(**base_scenario_data)
+        assert scenario.microscopic is True
+
+    def test_microscopic_override(self):
+        """ScenarioOverride supports microscopic field."""
+        override = ScenarioOverride(label="test", microscopic=True)
+        assert override.microscopic is True
+
+    def test_microscopic_override_none_default(self):
+        """ScenarioOverride microscopic defaults to None."""
+        override = ScenarioOverride(label="test")
+        assert override.microscopic is None
+
+    def test_microscopic_from_cli_args(self):
+        """from_cli_args passes microscopic through."""
+        scenario = Scenario.from_cli_args(
+            network_type="er",
+            distribution="gamma",
+            nodes=100,
+            samples=10,
+            k_avg=5.0,
+            shape=2.0,
+            scale=1.0,
+            lambda_param=0.5,
+            t_max=10.0,
+            steps=50,
+            initial_perc=0.01,
+            microscopic=True,
+        )
+        assert scenario.microscopic is True

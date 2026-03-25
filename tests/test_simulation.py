@@ -598,3 +598,152 @@ def test_batched_gpu_execution_retries_oom_with_direct_rmm(
     assert progress_updates == [(3, 3)]
     assert cleanup_calls.count("close") == 2
     assert (True, "direct") in cleanup_calls
+
+
+# --- Microscopic data tests ---
+
+
+def test_run_single_simulation_microscopic(gamma_distribution, small_network, time_steps):
+    """Test run_single_simulation returns microscopic data when requested."""
+    simulator = SPKMC(gamma_distribution)
+    edges = np.array(small_network.edges())
+    N = small_network.number_of_nodes()
+    sources = np.array([0])
+
+    # Without microscopic - returns 3-tuple
+    result = simulator.run_single_simulation(N, edges, sources, time_steps)
+    assert len(result) == 3
+
+    # With microscopic - returns 5-tuple
+    result = simulator.run_single_simulation(N, edges, sources, time_steps, return_microscopic=True)
+    assert len(result) == 5
+    S, I, R, time_to_infect, recovery_times = result
+    assert S.shape == time_steps.shape
+    assert time_to_infect.shape == (N,)
+    assert recovery_times.shape == (N,)
+
+
+def test_multiple_simulations_standard_microscopic(gamma_distribution, time_steps):
+    """Test _run_multiple_simulations_standard captures first sample's microscopic data."""
+    simulator = SPKMC(gamma_distribution)
+    N = 20
+    G = nx.erdos_renyi_graph(N, 0.3, directed=True)
+    edges = np.array(G.edges())
+    sources = np.array([0])
+
+    # Without microscopic - returns 3-tuple
+    result = simulator._run_multiple_simulations_standard(
+        N,
+        edges,
+        sources,
+        time_steps,
+        samples=3,
+        show_progress=False,
+    )
+    assert len(result) == 3
+
+    # With microscopic - returns 4-tuple
+    result = simulator._run_multiple_simulations_standard(
+        N,
+        edges,
+        sources,
+        time_steps,
+        samples=3,
+        show_progress=False,
+        microscopic=True,
+    )
+    assert len(result) == 4
+    S_mean, I_mean, R_mean, micro_data = result
+    assert S_mean.shape == time_steps.shape
+    assert "time_to_infect" in micro_data
+    assert "recovery_times" in micro_data
+    assert micro_data["time_to_infect"].shape == (N,)
+    assert micro_data["recovery_times"].shape == (N,)
+
+
+def test_simulate_erdos_renyi_microscopic(gamma_distribution, time_steps):
+    """Test simulate_erdos_renyi returns microscopic data per run."""
+    simulator = SPKMC(gamma_distribution)
+
+    # Without microscopic - returns 6-tuple
+    result = simulator.simulate_erdos_renyi(
+        num_runs=2,
+        time_steps=time_steps,
+        N=50,
+        k_avg=5,
+        samples=3,
+        initial_perc=0.1,
+        show_progress=False,
+    )
+    assert len(result) == 6
+
+    # With microscopic - returns 7-tuple
+    result = simulator.simulate_erdos_renyi(
+        num_runs=2,
+        time_steps=time_steps,
+        N=50,
+        k_avg=5,
+        samples=3,
+        initial_perc=0.1,
+        show_progress=False,
+        microscopic=True,
+    )
+    assert len(result) == 7
+    S, I, R, S_err, I_err, R_err, micro_runs = result
+    assert len(micro_runs) == 2  # one per run
+    for run_data in micro_runs:
+        assert "time_to_infect" in run_data
+        assert "recovery_times" in run_data
+        assert "generation" in run_data
+        assert "sources" in run_data
+        assert run_data["time_to_infect"].shape == (50,)
+        assert run_data["recovery_times"].shape == (50,)
+        assert run_data["generation"].shape == (50,)
+
+
+def test_run_simulation_microscopic(gamma_distribution, time_steps):
+    """Test run_simulation includes microscopic data in result dict."""
+    simulator = SPKMC(gamma_distribution)
+
+    # Without microscopic
+    result = simulator.run_simulation(
+        "er",
+        time_steps,
+        N=50,
+        k_avg=5,
+        samples=3,
+        num_runs=1,
+        initial_perc=0.1,
+        show_progress=False,
+    )
+    assert "microscopic" not in result
+
+    # With microscopic
+    result = simulator.run_simulation(
+        "er",
+        time_steps,
+        N=50,
+        k_avg=5,
+        samples=3,
+        num_runs=1,
+        initial_perc=0.1,
+        show_progress=False,
+        microscopic=True,
+    )
+    assert "microscopic" in result
+    assert len(result["microscopic"]) == 1  # 1 run
+
+
+def test_bfs_generations():
+    """Test _compute_bfs_generations computes correct hop distances."""
+    from spkmc.core.simulation import _compute_bfs_generations
+
+    # Simple chain: 0->1->2->3->4
+    edges = np.array([[0, 1], [1, 2], [2, 3], [3, 4]])
+    sources = np.array([0])
+    gen = _compute_bfs_generations(5, edges, sources)
+    np.testing.assert_array_equal(gen, [0, 1, 2, 3, 4])
+
+    # Two sources
+    gen = _compute_bfs_generations(5, edges, np.array([0, 2]))
+    np.testing.assert_array_equal(gen, [0, 1, 0, 1, 2])

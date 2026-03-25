@@ -35,6 +35,7 @@ class ScenarioOverride(BaseModel):
     t_max: Optional[float] = Field(gt=0, default=None)
     steps: Optional[int] = Field(gt=0, default=None)
     initial_perc: Optional[float] = Field(gt=0, le=1, default=None)
+    microscopic: Optional[bool] = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -78,6 +79,7 @@ class Scenario(BaseModel):
     # Context fields (for execution engine)
     experiment_name: Optional[str] = None
     output_path: Optional[str] = None
+    microscopic: bool = False
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -147,6 +149,7 @@ class Scenario(BaseModel):
         initial_perc: float = 0.01,
         experiment_name: Optional[str] = None,
         output_path: Optional[str] = None,
+        microscopic: bool = False,
         **kwargs: Any,
     ) -> "Scenario":
         """
@@ -210,6 +213,8 @@ class Scenario(BaseModel):
             scenario_kwargs["experiment_name"] = experiment_name
         if output_path is not None:
             scenario_kwargs["output_path"] = output_path
+        if microscopic:
+            scenario_kwargs["microscopic"] = microscopic
 
         return cls(**scenario_kwargs)
 

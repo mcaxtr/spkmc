@@ -7,7 +7,7 @@ algorithm for simulating epidemic spread on networks using the SIR model
 """
 
 import os
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import networkx as nx
 import numpy as np
@@ -61,6 +61,33 @@ class _DummyProgress:
 
     def update(self, task_id: TaskID, advance: int = 1) -> None:
         pass
+
+
+def _compute_bfs_generations(N: int, edges: np.ndarray, sources: np.ndarray) -> np.ndarray:
+    """
+    Compute BFS generation distances from source nodes on the unweighted graph.
+
+    Each node's generation is its shortest hop distance from any source node.
+    Nodes unreachable from all sources get generation = -1.
+
+    Args:
+        N: Number of nodes
+        edges: Edge array of shape (E, 2)
+        sources: Initially infected node indices
+
+    Returns:
+        Array of shape (N,) with integer BFS distances
+    """
+    G_unweighted = nx.DiGraph()
+    G_unweighted.add_nodes_from(range(N))
+    G_unweighted.add_edges_from(edges)
+    bfs_distances = np.full(N, -1, dtype=np.int32)
+    for src in sources:
+        lengths = nx.single_source_shortest_path_length(G_unweighted, int(src))
+        for node, dist in lengths.items():
+            if bfs_distances[node] == -1 or dist < bfs_distances[node]:
+                bfs_distances[node] = dist
+    return bfs_distances
 
 
 class SPKMC:
@@ -204,8 +231,13 @@ class SPKMC:
         return dist, recovery_weights
 
     def run_single_simulation(
-        self, N: int, edges: np.ndarray, sources: np.ndarray, time_steps: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        self,
+        N: int,
+        edges: np.ndarray,
+        sources: np.ndarray,
+        time_steps: np.ndarray,
+        return_microscopic: bool = False,
+    ) -> Any:
         """
         Run a single SPKMC simulation.
 
@@ -214,9 +246,11 @@ class SPKMC:
             edges: Graph edges as a matrix (u, v)
             sources: Source nodes
             time_steps: Array of time steps
+            return_microscopic: If True, also return raw per-node arrays
 
         Returns:
-            Tuple (S, I, R) with the proportion of individuals in each state
+            Tuple (S, I, R) with the proportion of individuals in each state.
+            If return_microscopic=True, returns (S, I, R, time_to_infect, recovery_times).
         """
         # Calculate infection and recovery times
         time_to_infect, recovery_times = self.get_dist_sparse(N, edges, sources)
@@ -231,7 +265,10 @@ class SPKMC:
             try:
                 from spkmc.utils.gpu_utils import calculate_gpu
 
-                return calculate_gpu(N, time_to_infect, recovery_times, time_steps)
+                S, I, R = calculate_gpu(N, time_to_infect, recovery_times, time_steps)
+                if return_microscopic:
+                    return S, I, R, time_to_infect.copy(), recovery_times.copy()
+                return S, I, R
             except Exception as e:
                 import sys
 
@@ -244,7 +281,10 @@ class SPKMC:
 
         steps = time_steps.shape[0]
         result = calculate(N, time_to_infect, recovery_times, time_steps, steps)
-        return (np.asarray(result[0]), np.asarray(result[1]), np.asarray(result[2]))
+        S, I, R = np.asarray(result[0]), np.asarray(result[1]), np.asarray(result[2])
+        if return_microscopic:
+            return S, I, R, time_to_infect.copy(), recovery_times.copy()
+        return S, I, R
 
     def run_multiple_simulations(
         self,
@@ -275,9 +315,12 @@ class SPKMC:
         edges = np.array(G.edges())
         N = G.number_of_nodes()
 
-        return self.run_multiple_simulations_from_edges(
+        result = self.run_multiple_simulations_from_edges(
             N, edges, sources, time_steps, samples, show_progress, progress_callback
         )
+        # microscopic=False by default, so always returns 3-tuple
+        S, I, R = result[0], result[1], result[2]
+        return S, I, R
 
     def run_multiple_simulations_from_edges(
         self,
@@ -288,7 +331,8 @@ class SPKMC:
         samples: int,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Run multiple simulations from edge array directly (no NetworkX graph).
 
@@ -302,19 +346,29 @@ class SPKMC:
             samples: Number of Monte Carlo samples
             show_progress: Show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture first sample's per-node data
 
         Returns:
-            Tuple of (S_mean, I_mean, R_mean)
+            Tuple of (S_mean, I_mean, R_mean).
+            If microscopic=True, returns (S_mean, I_mean, R_mean, microscopic_dict).
         """
         # Use batched GPU mode if available and beneficial
-        if self._should_use_batched_gpu(N):
+        # Microscopic mode is CPU-only — force standard path
+        if not microscopic and self._should_use_batched_gpu(N):
             return self._run_multiple_simulations_batched_gpu(
                 N, edges, sources, time_steps, samples, progress_callback
             )
 
         # Standard per-sample execution (CPU or non-batched GPU)
         return self._run_multiple_simulations_standard(
-            N, edges, sources, time_steps, samples, show_progress, progress_callback
+            N,
+            edges,
+            sources,
+            time_steps,
+            samples,
+            show_progress,
+            progress_callback,
+            microscopic=microscopic,
         )
 
     def _run_multiple_simulations_batched_gpu(
@@ -427,7 +481,8 @@ class SPKMC:
         samples: int,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Run multiple simulations using standard per-sample execution.
 
@@ -441,21 +496,33 @@ class SPKMC:
             samples: Number of Monte Carlo samples
             show_progress: Show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture first sample's per-node data
 
         Returns:
-            Tuple of (S_mean, I_mean, R_mean)
+            Tuple of (S_mean, I_mean, R_mean).
+            If microscopic=True, returns (S_mean, I_mean, R_mean, microscopic_dict).
         """
         steps = time_steps.shape[0]
 
         S_values = np.zeros((samples, steps))
         I_values = np.zeros((samples, steps))
         R_values = np.zeros((samples, steps))
+        micro_data: Optional[Dict[str, Any]] = None
 
         # Run simulations
         with _create_progress("Samples", samples, show_progress) as progress:
             task = progress.add_task("Samples", total=samples)
             for sample in range(samples):
-                S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
+                if microscopic and sample == 0:
+                    S, I, R, tti, rec = self.run_single_simulation(
+                        N, edges, sources, time_steps, return_microscopic=True
+                    )
+                    micro_data = {
+                        "time_to_infect": tti,
+                        "recovery_times": rec,
+                    }
+                else:
+                    S, I, R = self.run_single_simulation(N, edges, sources, time_steps)
                 S_values[sample, :] = S
                 I_values[sample, :] = I
                 R_values[sample, :] = R
@@ -469,6 +536,8 @@ class SPKMC:
         I_mean = np.mean(I_values, axis=0)
         R_mean = np.mean(R_values, axis=0)
 
+        if microscopic and micro_data is not None:
+            return S_mean, I_mean, R_mean, micro_data
         return S_mean, I_mean, R_mean
 
     def simulate_erdos_renyi(
@@ -481,7 +550,8 @@ class SPKMC:
         initial_perc: float = 0.01,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Simulate spread on multiple Erdos-Renyi networks.
 
@@ -494,11 +564,14 @@ class SPKMC:
             initial_perc: Initial percentage of infected
             show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture per-node infection data per run
 
         Returns:
-            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err).
+            If microscopic=True, returns 7th element: list of per-run microscopic dicts.
         """
         S_list, I_list, R_list = [], [], []
+        microscopic_runs: List[Dict[str, Any]] = [] if microscopic else []
 
         # Run simulations
         import time as time_module
@@ -528,7 +601,7 @@ class SPKMC:
 
                 # Run the simulation
                 t_sim_start = time_module.perf_counter()
-                S, I, R = self.run_multiple_simulations_from_edges(
+                sim_result = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
                     sources,
@@ -536,8 +609,22 @@ class SPKMC:
                     samples,
                     show_progress=False,
                     progress_callback=progress_callback,
+                    microscopic=microscopic,
                 )
                 t_sim_end = time_module.perf_counter()
+
+                if microscopic and len(sim_result) == 4:
+                    S, I, R, micro_data = sim_result
+                    # Compute BFS generation distances
+                    generation = _compute_bfs_generations(N, edges, sources)
+                    micro_data["generation"] = generation
+                    micro_data["sources"] = sources.copy()
+                    microscopic_runs.append(micro_data)
+                else:
+                    if isinstance(sim_result, tuple) and len(sim_result) == 3:
+                        S, I, R = sim_result
+                    else:
+                        S, I, R = sim_result
 
                 if debug:
                     import sys
@@ -565,6 +652,8 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
+        if microscopic and microscopic_runs:
+            return S_avg, I_avg, R_avg, S_err, I_err, R_err, microscopic_runs
         return S_avg, I_avg, R_avg, S_err, I_err, R_err
 
     def simulate_scale_free_network(
@@ -578,7 +667,8 @@ class SPKMC:
         initial_perc: float = 0.01,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Simulate spread on multiple scale-free networks.
 
@@ -592,11 +682,14 @@ class SPKMC:
             initial_perc: Initial percentage of infected
             show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture per-node infection data per run
 
         Returns:
-            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err).
+            If microscopic=True, returns 7th element: list of per-run microscopic dicts.
         """
         S_list, I_list, R_list = [], [], []
+        microscopic_runs: List[Dict[str, Any]] = [] if microscopic else []
 
         # Run simulations
         # Use fast edge generators for GPU workflows
@@ -619,7 +712,7 @@ class SPKMC:
                 sources = np.random.randint(0, N, init_infect)
 
                 # Run the simulation
-                S, I, R = self.run_multiple_simulations_from_edges(
+                sim_result = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
                     sources,
@@ -627,7 +720,17 @@ class SPKMC:
                     samples,
                     show_progress=False,
                     progress_callback=progress_callback,
+                    microscopic=microscopic,
                 )
+
+                if microscopic and len(sim_result) == 4:
+                    S, I, R, micro_data = sim_result
+                    generation = _compute_bfs_generations(N, edges, sources)
+                    micro_data["generation"] = generation
+                    micro_data["sources"] = sources.copy()
+                    microscopic_runs.append(micro_data)
+                else:
+                    S, I, R = sim_result[:3]
 
                 S_list.append(S)
                 I_list.append(I)
@@ -643,6 +746,8 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
+        if microscopic and microscopic_runs:
+            return S_avg, I_avg, R_avg, S_err, I_err, R_err, microscopic_runs
         return S_avg, I_avg, R_avg, S_err, I_err, R_err
 
     def simulate_complete_graph(
@@ -654,7 +759,8 @@ class SPKMC:
         initial_perc: float = 0.01,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Simulate spread on multiple complete graphs.
 
@@ -666,11 +772,14 @@ class SPKMC:
             initial_perc: Initial percentage of infected
             show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture per-node infection data per run
 
         Returns:
-            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err).
+            If microscopic=True, returns 7th element: list of per-run microscopic dicts.
         """
         S_list, I_list, R_list = [], [], []
+        microscopic_runs: List[Dict[str, Any]] = [] if microscopic else []
 
         # Run simulations
         import time as time_module
@@ -707,7 +816,7 @@ class SPKMC:
 
                 # Run the simulation
                 t_sim_start = time_module.perf_counter()
-                S, I, R = self.run_multiple_simulations_from_edges(
+                sim_result = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
                     sources,
@@ -715,8 +824,18 @@ class SPKMC:
                     samples,
                     show_progress=False,
                     progress_callback=progress_callback,
+                    microscopic=microscopic,
                 )
                 t_sim_end = time_module.perf_counter()
+
+                if microscopic and len(sim_result) == 4:
+                    S, I, R, micro_data = sim_result
+                    generation = _compute_bfs_generations(N, edges, sources)
+                    micro_data["generation"] = generation
+                    micro_data["sources"] = sources.copy()
+                    microscopic_runs.append(micro_data)
+                else:
+                    S, I, R = sim_result[:3]
 
                 if debug:
                     import sys
@@ -741,6 +860,8 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
+        if microscopic and microscopic_runs:
+            return S_avg, I_avg, R_avg, S_err, I_err, R_err, microscopic_runs
         return S_avg, I_avg, R_avg, S_err, I_err, R_err
 
     def run_simulation(
@@ -757,7 +878,7 @@ class SPKMC:
             network_type: Network type ('er', 'sf', 'cg', 'rrn')
             time_steps: Time steps array
             progress_callback: Optional callback for granular progress updates
-            **kwargs: Additional simulation parameters
+            **kwargs: Additional simulation parameters (including microscopic=bool)
 
         Returns:
             Dictionary with simulation results
@@ -772,23 +893,17 @@ class SPKMC:
         samples = kwargs.get("samples", 50)
         initial_perc = kwargs.get("initial_perc", 0.01)
         show_progress = kwargs.get("show_progress", True)
+        microscopic = kwargs.get("microscopic", False)
 
-        if network_type == "er":
-            k_avg = kwargs.get("k_avg", 10)
-            num_runs = kwargs.get("num_runs", 2)
+        def _build_result(sim_output: Any) -> Dict[str, Any]:
+            """Build result dict from simulate_* output, handling microscopic data."""
+            if microscopic and isinstance(sim_output, tuple) and len(sim_output) == 7:
+                S, I, R, S_err, I_err, R_err, micro_runs = sim_output
+            else:
+                S, I, R, S_err, I_err, R_err = sim_output[:6]
+                micro_runs = None
 
-            S, I, R, S_err, I_err, R_err = self.simulate_erdos_renyi(
-                num_runs=num_runs,
-                time_steps=time_steps,
-                N=N,
-                k_avg=k_avg,
-                samples=samples,
-                initial_perc=initial_perc,
-                show_progress=show_progress,
-                progress_callback=progress_callback,
-            )
-
-            return {
+            result: Dict[str, Any] = {
                 "S_val": S,
                 "I_val": I,
                 "R_val": R,
@@ -798,13 +913,33 @@ class SPKMC:
                 "time": time_steps,
                 "has_error": True,
             }
+            if micro_runs is not None:
+                result["microscopic"] = micro_runs
+            return result
+
+        if network_type == "er":
+            k_avg = kwargs.get("k_avg", 10)
+            num_runs = kwargs.get("num_runs", 2)
+
+            sim_output = self.simulate_erdos_renyi(
+                num_runs=num_runs,
+                time_steps=time_steps,
+                N=N,
+                k_avg=k_avg,
+                samples=samples,
+                initial_perc=initial_perc,
+                show_progress=show_progress,
+                progress_callback=progress_callback,
+                microscopic=microscopic,
+            )
+            return _build_result(sim_output)
 
         elif network_type == "sf":
             k_avg = kwargs.get("k_avg", 10)
             exponent = kwargs.get("exponent", 2.5)
             num_runs = kwargs.get("num_runs", 2)
 
-            S, I, R, S_err, I_err, R_err = self.simulate_scale_free_network(
+            sim_output = self.simulate_scale_free_network(
                 num_runs=num_runs,
                 exponent=exponent,
                 time_steps=time_steps,
@@ -814,23 +949,14 @@ class SPKMC:
                 initial_perc=initial_perc,
                 show_progress=show_progress,
                 progress_callback=progress_callback,
+                microscopic=microscopic,
             )
-
-            return {
-                "S_val": S,
-                "I_val": I,
-                "R_val": R,
-                "S_err": S_err,
-                "I_err": I_err,
-                "R_err": R_err,
-                "time": time_steps,
-                "has_error": True,
-            }
+            return _build_result(sim_output)
 
         elif network_type == "cg":
             num_runs = kwargs.get("num_runs", 2)
 
-            S, I, R, S_err, I_err, R_err = self.simulate_complete_graph(
+            sim_output = self.simulate_complete_graph(
                 num_runs=num_runs,
                 time_steps=time_steps,
                 N=N,
@@ -838,24 +964,15 @@ class SPKMC:
                 initial_perc=initial_perc,
                 show_progress=show_progress,
                 progress_callback=progress_callback,
+                microscopic=microscopic,
             )
-
-            return {
-                "S_val": S,
-                "I_val": I,
-                "R_val": R,
-                "S_err": S_err,
-                "I_err": I_err,
-                "R_err": R_err,
-                "time": time_steps,
-                "has_error": True,
-            }
+            return _build_result(sim_output)
 
         elif network_type == "rrn":
             k_avg = kwargs.get("k_avg", 10)
             num_runs = kwargs.get("num_runs", 2)
 
-            S, I, R, S_err, I_err, R_err = self.simulate_random_regular_network(
+            sim_output = self.simulate_random_regular_network(
                 num_runs=num_runs,
                 time_steps=time_steps,
                 N=N,
@@ -864,18 +981,9 @@ class SPKMC:
                 initial_perc=initial_perc,
                 show_progress=show_progress,
                 progress_callback=progress_callback,
+                microscopic=microscopic,
             )
-
-            return {
-                "S_val": S,
-                "I_val": I,
-                "R_val": R,
-                "S_err": S_err,
-                "I_err": I_err,
-                "R_err": R_err,
-                "time": time_steps,
-                "has_error": True,
-            }
+            return _build_result(sim_output)
 
         else:
             raise ValueError(f"Unknown network type: {network_type}")
@@ -890,7 +998,8 @@ class SPKMC:
         initial_perc: float = 0.01,
         show_progress: bool = True,
         progress_callback: ProgressCallback = None,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        microscopic: bool = False,
+    ) -> Any:
         """
         Simulate spread on multiple random regular networks.
 
@@ -903,11 +1012,14 @@ class SPKMC:
             initial_perc: Initial percentage of infected
             show_progress: If True, show progress bar
             progress_callback: Optional callback for progress updates
+            microscopic: If True, capture per-node infection data per run
 
         Returns:
-            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err)
+            Tuple (S_avg, I_avg, R_avg, S_err, I_err, R_err).
+            If microscopic=True, returns 7th element: list of per-run microscopic dicts.
         """
         S_list, I_list, R_list = [], [], []
+        microscopic_runs: List[Dict[str, Any]] = [] if microscopic else []
 
         # Run simulations
         # Use fast edge generators for GPU workflows
@@ -930,7 +1042,7 @@ class SPKMC:
                 sources = np.random.randint(0, N, init_infect)
 
                 # Run the simulation
-                S, I, R = self.run_multiple_simulations_from_edges(
+                sim_result = self.run_multiple_simulations_from_edges(
                     N,
                     edges,
                     sources,
@@ -938,7 +1050,17 @@ class SPKMC:
                     samples,
                     show_progress=False,
                     progress_callback=progress_callback,
+                    microscopic=microscopic,
                 )
+
+                if microscopic and len(sim_result) == 4:
+                    S, I, R, micro_data = sim_result
+                    generation = _compute_bfs_generations(N, edges, sources)
+                    micro_data["generation"] = generation
+                    micro_data["sources"] = sources.copy()
+                    microscopic_runs.append(micro_data)
+                else:
+                    S, I, R = sim_result[:3]
 
                 S_list.append(S)
                 I_list.append(I)
@@ -954,4 +1076,6 @@ class SPKMC:
         I_err = np.std(np.array(I_list) / np.sqrt(N), axis=0)
         R_err = np.std(np.array(R_list) / np.sqrt(N), axis=0)
 
+        if microscopic and microscopic_runs:
+            return S_avg, I_avg, R_avg, S_err, I_err, R_err, microscopic_runs
         return S_avg, I_avg, R_avg, S_err, I_err, R_err

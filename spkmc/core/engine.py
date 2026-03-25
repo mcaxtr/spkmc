@@ -377,6 +377,7 @@ def execute_scenario(
         # Simulation parameters
         simulation_params = scenario.to_simulation_params()
         simulation_params["show_progress"] = False
+        simulation_params["microscopic"] = scenario.microscopic
 
         # Execute simulation with progress callback
         simulation_callback: Optional[Callable[[int, int], None]] = None
@@ -412,6 +413,18 @@ def execute_scenario(
         # Save result
         output_data = sim_result.to_dict()
         DataManager.save(output_data, output_file)
+
+        # Save microscopic data to separate .npz file if present
+        if sim_result.microscopic_data:
+            npz_path = str(Path(output_file).with_suffix("")) + "_microscopic.npz"
+            arrays = {}
+            for i, run_data in enumerate(sim_result.microscopic_data):
+                arrays[f"run_{i}_time_to_infect"] = run_data["time_to_infect"]
+                arrays[f"run_{i}_recovery_times"] = run_data["recovery_times"]
+                arrays[f"run_{i}_generation"] = run_data["generation"]
+                arrays[f"run_{i}_sources"] = run_data["sources"]
+            np.savez_compressed(npz_path, **arrays)
+            logger.info("Microscopic data saved to %s", npz_path)
 
         return sim_result
     finally:

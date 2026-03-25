@@ -783,6 +783,7 @@ def _run_experiment_with_engine(
     force_rerun: bool = False,
     run_analysis: bool = False,
     export_format: str = "json",
+    microscopic: bool = False,
 ) -> List[str]:
     """
     Run all scenarios in an experiment using the unified ExecutionEngine.
@@ -794,6 +795,7 @@ def _run_experiment_with_engine(
         force_rerun: Force re-run even if cached results exist
         run_analysis: Run AI analysis on results (requires OPENAI_API_KEY)
         export_format: Format for saving results (json, csv, excel, md, html)
+        microscopic: Save per-node infection/recovery data to .npz files
 
     Returns:
         List of generated result file paths
@@ -853,6 +855,11 @@ def _run_experiment_with_engine(
             "for per-scenario values.[/yellow]"
         )
         raise click.Abort()
+
+    # Apply CLI-level microscopic flag to all scenarios
+    if microscopic:
+        for scenario in scenarios:
+            scenario.microscopic = True
 
     # Filter out scenarios with existing results if not force_rerun
     ext_map = {"json": ".json", "csv": ".csv", "excel": ".xlsx", "md": ".md", "html": ".html"}
@@ -1164,6 +1171,12 @@ def cli(ctx: click.Context, verbose: bool, analyze: bool) -> None:
 )
 @click.option("--no-plot", is_flag=True, default=False, help="Do not display the results plot")
 @click.option("--override", is_flag=True, default=False, help="Overwrite existing results")
+@click.option(
+    "--microscopic",
+    is_flag=True,
+    default=False,
+    help="Save per-node infection/recovery times to a separate .npz file",
+)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -1185,6 +1198,7 @@ def run(
     export: str,
     no_plot: bool,
     override: bool,
+    microscopic: bool,
 ) -> None:
     """Run an SPKMC simulation with the specified parameters."""
     # Lazy imports
@@ -1252,14 +1266,15 @@ def run(
             num_runs=num_runs,
             k_avg=k_avg if network_type in ["er", "sf", "rrn"] else None,
             exponent=exponent if network_type == "sf" else None,
-            shape=shape if dist_type == "gamma" else None,
-            scale=scale if dist_type == "gamma" else None,
+            shape=shape if dist_type in ["gamma", "weibull"] else None,
+            scale=scale if dist_type in ["gamma", "weibull"] else None,
             mu=mu if dist_type == "exponential" else None,
             lambda_param=lambda_val,
             t_max=t_max,
             steps=steps,
             initial_perc=initial_perc,
             output_path=output_path,
+            microscopic=microscopic,
         )
     except Exception as e:
         log_error(f"Error creating scenario: {e}")
@@ -2427,6 +2442,12 @@ def _run_doctor(experiments_dir: str = "experiments") -> None:
     default=False,
     help="Scan and fix legacy key names in data.json files",
 )
+@click.option(
+    "--microscopic",
+    is_flag=True,
+    default=False,
+    help="Save per-node infection/recovery times to separate .npz files",
+)
 @click.pass_context
 def experiment(
     ctx: click.Context,
@@ -2439,6 +2460,7 @@ def experiment(
     clear_cache: bool,
     analyze: bool,
     doctor: bool,
+    microscopic: bool,
 ) -> None:
     """
     Run or create experiments from the experiments directory.
@@ -2585,6 +2607,7 @@ def experiment(
                 force_rerun=force_rerun,
                 run_analysis=analyze_enabled,
                 export_format=export,
+                microscopic=microscopic,
             )
 
             # Experiment summary

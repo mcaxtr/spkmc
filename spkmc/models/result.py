@@ -6,7 +6,7 @@ and working with simulation output data.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -36,6 +36,9 @@ class SimulationResult:
     scenario_label: str = ""
     output_path: Optional[str] = None
     execution_time: float = 0.0
+
+    # Microscopic data (per-node infection/recovery times, saved separately as .npz)
+    microscopic_data: Optional[List[Dict[str, Any]]] = None
 
     @property
     def has_error(self) -> bool:
@@ -192,6 +195,9 @@ class SimulationResult:
         I_err = result.get("I_err") if has_error else None
         R_err = result.get("R_err") if has_error else None
 
+        # Extract microscopic data if present (not serialized to JSON)
+        microscopic_runs = result.get("microscopic")
+
         return cls(
             S_val=np.array(result["S_val"]),
             I_val=np.array(result["I_val"]),
@@ -204,6 +210,7 @@ class SimulationResult:
             scenario_label=scenario_label,
             execution_time=execution_time,
             output_path=output_path,
+            microscopic_data=microscopic_runs,
         )
 
     def get_statistics(self) -> Dict[str, float]:
