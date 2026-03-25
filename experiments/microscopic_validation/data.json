@@ -1,0 +1,37 @@
+{
+  "name": "Microscopic Validation",
+  "description": "Quick validation that --microscopic flag produces .npz files. Uses 3 Group C scenarios with small network to run in minutes.",
+  "parameters": {
+    "network": "er",
+    "nodes": 1000,
+    "k_avg": 10,
+    "t_max": 40,
+    "steps": 200,
+    "samples": 10,
+    "num_runs": 2,
+    "initial_perc": 0.01
+  },
+  "scenarios": [
+    {
+      "distribution": "gamma",
+      "shape": 25.0,
+      "scale": 0.04,
+      "lambda": 0.384162,
+      "label": "C_gamma_CV020"
+    },
+    {
+      "distribution": "gamma",
+      "shape": 1.0,
+      "scale": 1.0,
+      "lambda": 0.464100,
+      "label": "C_gamma_CV100"
+    },
+    {
+      "distribution": "weibull",
+      "shape": 5.7974,
+      "scale": 1.079975,
+      "lambda": 0.384220,
+      "label": "C_weibull_CV020"
+    }
+  ]
+}

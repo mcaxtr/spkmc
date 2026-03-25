@@ -353,11 +353,27 @@ class SPKMC:
             If microscopic=True, returns (S_mean, I_mean, R_mean, microscopic_dict).
         """
         # Use batched GPU mode if available and beneficial
-        # Microscopic mode is CPU-only — force standard path
-        if not microscopic and self._should_use_batched_gpu(N):
-            return self._run_multiple_simulations_batched_gpu(
+        if self._should_use_batched_gpu(N):
+            result = self._run_multiple_simulations_batched_gpu(
                 N, edges, sources, time_steps, samples, progress_callback
             )
+            if microscopic:
+                # Run one extra CPU-only sample to capture per-node arrays.
+                # Temporarily disable GPU so get_dist_sparse uses scipy Dijkstra.
+                saved_gpu = self.use_gpu
+                self.use_gpu = False
+                try:
+                    _, _, _, tti, rec = self.run_single_simulation(
+                        N, edges, sources, time_steps, return_microscopic=True
+                    )
+                finally:
+                    self.use_gpu = saved_gpu
+                micro_data: Dict[str, Any] = {
+                    "time_to_infect": tti,
+                    "recovery_times": rec,
+                }
+                return result[0], result[1], result[2], micro_data
+            return result
 
         # Standard per-sample execution (CPU or non-batched GPU)
         return self._run_multiple_simulations_standard(
