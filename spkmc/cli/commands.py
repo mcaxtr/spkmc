@@ -2791,6 +2791,7 @@ def experiment(
         force_rerun=force_rerun,
         run_analysis=analyze_enabled,
         export_format=export,
+        microscopic=microscopic,
     )
 
     # Summary
